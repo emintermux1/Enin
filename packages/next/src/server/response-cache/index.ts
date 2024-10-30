@@ -41,12 +41,14 @@ export default class ResponseCache implements ResponseCacheBase {
   }
 
   private minimalMode?: boolean
+  private disableBackroundRevalidation?: boolean
 
-  constructor(minimalMode: boolean) {
+  constructor(minimalMode: boolean, disableBackroundRevalidation: boolean) {
     // this is a hack to avoid Webpack knowing this is equal to this.minimalMode
     // because we replace this.minimalMode to true in production bundles.
     const minimalModeKey = 'minimalMode'
     this[minimalModeKey] = minimalMode
+    this.disableBackroundRevalidation = disableBackroundRevalidation
   }
 
   public async get(
@@ -114,7 +116,11 @@ export default class ResponseCache implements ResponseCacheBase {
             })
             resolved = true
 
-            if (!cachedResponse.isStale || context.isPrefetch) {
+            if (
+              !cachedResponse.isStale ||
+              context.isPrefetch ||
+              this.disableBackroundRevalidation
+            ) {
               // The cached value is still valid, so we don't need
               // to update it yet.
               return null
