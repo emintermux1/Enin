@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use turbo_rcstr::RcStr;
-use turbo_tasks::{ResolvedVc, TryJoinIterExt, Vc};
+use turbo_tasks::{vdbg, ResolvedVc, TryJoinIterExt, ValueToString, Vc};
 use turbo_tasks_fs::glob::Glob;
 use turbopack_core::{
     asset::{Asset, AssetContent},
@@ -129,6 +129,8 @@ impl EcmascriptModulePartAsset {
             return Ok(Vc::upcast(module));
         };
 
+        vdbg!(module.ident().with_part(*part).to_string());
+
         // We follow reexports here
         if let ModulePart::Export(export) = part {
             // If a local binding or reexport with the same name exists, we stop here.
@@ -188,6 +190,11 @@ impl EcmascriptModulePartAsset {
                     .await?,
                 )
             };
+            vdbg!(final_module.ident().to_string());
+
+            for side_effect in side_effects.iter() {
+                vdbg!(side_effect.ident().to_string());
+            }
 
             if side_effects.is_empty() {
                 return Ok(*ResolvedVc::upcast(final_module));
@@ -293,64 +300,9 @@ impl Module for EcmascriptModulePartAsset {
 
     #[turbo_tasks::function]
     async fn references(&self) -> Result<Vc<ModuleReferences>> {
-        let split_data = split_module(*self.full_module).await?;
+        let analyze = analyze(*self.full_module, *self.part).await?;
 
-        let analyze = analyze(*self.full_module, self.part.clone());
-
-        let deps = match &*split_data {
-            SplitResult::Ok { deps, .. } => deps,
-            SplitResult::Failed { .. } => return Ok(analyze.references()),
-        };
-
-        let part_dep = |part: ModulePart| -> Vc<Box<dyn ModuleReference>> {
-            Vc::upcast(SingleModuleReference::new(
-                Vc::upcast(EcmascriptModulePartAsset::new(*self.full_module, part)),
-                Vc::cell("ecmascript module part".into()),
-            ))
-        };
-
-        let mut references = analyze.references().owned().await?;
-
-        // Facade depends on evaluation and re-exports
-        if self.part == ModulePart::Facade {
-            references.push(part_dep(ModulePart::evaluation()).to_resolved().await?);
-            references.push(part_dep(ModulePart::exports()).to_resolved().await?);
-            return Ok(Vc::cell(references));
-        }
-
-        let deps = {
-            let part_id = get_part_id(&split_data, &self.part)
-                .await
-                .with_context(|| format!("part {:?} is not found in the module", self.part))?;
-
-            match deps.get(&part_id) {
-                Some(v) => &**v,
-                None => &[],
-            }
-        };
-
-        references.extend(
-            deps.iter()
-                .filter_map(|part_id| {
-                    Some(part_dep(match part_id {
-                        // This is an internal part that is not for evaluation, so we don't need to
-                        // force-add it.
-                        PartId::Internal(.., false) => return None,
-                        PartId::Internal(part_id, true) => {
-                            ModulePart::internal_evaluation(*part_id)
-                        }
-                        PartId::Export(name) => ModulePart::export(name.clone()),
-                        _ => unreachable!(
-                            "PartId other than Internal and Export should not be used here"
-                        ),
-                    }))
-                })
-                .map(|v| async move { v.to_resolved().await })
-                .try_join()
-                .await?,
-        );
-
-        Ok(Vc::cell(references))
+        Ok(*analyze.references)
     }
 }
 
