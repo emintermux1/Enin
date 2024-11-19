@@ -124,7 +124,7 @@ impl EcmascriptModulePartAsset {
     pub async fn select_part(
         module: Vc<EcmascriptModuleAsset>,
         part: ModulePart,
-    ) -> Result<Vc<Box<dyn Module>>> {
+    ) -> Result<Vc<Box<dyn EcmascriptChunkPlaceable>>> {
         let SplitResult::Ok { entrypoints, .. } = &*split_module(module).await? else {
             return Ok(Vc::upcast(module));
         };
@@ -143,7 +143,7 @@ impl EcmascriptModulePartAsset {
             let side_effect_free_packages = module.asset_context().side_effect_free_packages();
 
             // Exclude local bindings by using exports module part.
-            let source_module = Vc::upcast(EcmascriptModulePartAsset::new(module, *part));
+            let source_module = Vc::upcast(EcmascriptModulePartAsset::new(module, part));
 
             let FollowExportsWithSideEffectsResult {
                 side_effects,
