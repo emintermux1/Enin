@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use turbo_rcstr::RcStr;
 use turbo_tasks::{vdbg, ResolvedVc, TryJoinIterExt, ValueToString, Vc};
 use turbo_tasks_fs::glob::Glob;
@@ -14,8 +14,7 @@ use turbopack_core::{
 };
 
 use super::{
-    chunk_item::EcmascriptModulePartChunkItem, get_part_id, part_of_module, split, split_module,
-    PartId, SplitResult,
+    chunk_item::EcmascriptModulePartChunkItem, part_of_module, split, split_module, SplitResult,
 };
 use crate::{
     chunk::{EcmascriptChunkPlaceable, EcmascriptExports},
@@ -24,7 +23,7 @@ use crate::{
         analyse_ecmascript_module, esm::FoundExportType, follow_reexports, FollowExportsResult,
     },
     side_effect_optimization::facade::module::EcmascriptModuleFacadeModule,
-    tree_shake::{side_effect_module::SideEffectsModule, Key},
+    tree_shake::side_effect_module::SideEffectsModule,
     AnalyzeEcmascriptModuleResult, EcmascriptAnalyzable, EcmascriptModuleAsset,
     EcmascriptModuleAssetType, EcmascriptModuleContent, EcmascriptParsable,
 };
