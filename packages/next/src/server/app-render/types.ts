@@ -248,7 +248,7 @@ export interface RenderOptsPartial {
 
   isStaticGeneration?: boolean
 
-  isISRRevalidationRequest?: boolean
+  isStaleRevalidationRequest?: boolean
 }
 
 export type RenderOpts = LoadComponentsReturnType<AppPageModule> &
