@@ -9,8 +9,7 @@ import type { PagesManifest } from '../../../build/webpack/plugins/pages-manifes
 import { pathToRegexp } from 'next/dist/compiled/path-to-regexp'
 import type { ActionManifest } from '../../../build/webpack/plugins/flight-client-entry-plugin'
 import type { NextFontManifest } from '../../../build/webpack/plugins/next-font-manifest-plugin'
-import type {
-  REACT_LOADABLE_MANIFEST} from '../../../shared/lib/constants';
+import type { LoadableManifest } from '../../load-components'
 import {
   APP_BUILD_MANIFEST,
   APP_PATHS_MANIFEST,
@@ -18,8 +17,10 @@ import {
   INTERCEPTION_ROUTE_REWRITE_MANIFEST,
   MIDDLEWARE_BUILD_MANIFEST,
   MIDDLEWARE_MANIFEST,
+  MIDDLEWARE_REACT_LOADABLE_MANIFEST,
   NEXT_FONT_MANIFEST,
   PAGES_MANIFEST,
+  REACT_LOADABLE_MANIFEST,
   SERVER_REFERENCE_MANIFEST,
   TURBOPACK_CLIENT_MIDDLEWARE_MANIFEST,
   WEBPACK_STATS,
@@ -107,6 +108,7 @@ export class TurbopackManifestLoader {
   private appPathsManifests: Map<EntryKey, PagesManifest> = new Map()
   private buildManifests: Map<EntryKey, BuildManifest> = new Map()
   private fontManifests: Map<EntryKey, NextFontManifest> = new Map()
+  private loadableManifests: Map<EntryKey, LoadableManifest> = new Map()
   private middlewareManifests: Map<EntryKey, TurbopackMiddlewareManifest> =
     new Map()
   private pagesManifests: Map<string, PagesManifest> = new Map()
@@ -136,6 +138,7 @@ export class TurbopackManifestLoader {
     this.appPathsManifests.delete(key)
     this.buildManifests.delete(key)
     this.fontManifests.delete(key)
+    this.loadableManifests.delete(key)
     this.middlewareManifests.delete(key)
     this.pagesManifests.delete(key)
     this.webpackStats.delete(key)
@@ -564,6 +567,51 @@ export class TurbopackManifestLoader {
     )
   }
 
+  async loadLoadableManifest(
+    pageName: string,
+    type: 'app' | 'pages' = 'pages'
+  ): Promise<void> {
+    this.loadableManifests.set(
+      getEntryKey(type, 'server', pageName),
+      await readPartialManifest(
+        this.distDir,
+        REACT_LOADABLE_MANIFEST,
+        pageName,
+        type
+      )
+    )
+  }
+
+  private mergeLoadableManifests(manifests: Iterable<LoadableManifest>) {
+    const manifest: LoadableManifest = {}
+    for (const m of manifests) {
+      Object.assign(manifest, m)
+    }
+    return manifest
+  }
+
+  private async writeLoadableManifest(): Promise<void> {
+    const loadableManifest = this.mergeLoadableManifests(
+      this.loadableManifests.values()
+    )
+    const loadableManifestPath = join(this.distDir, REACT_LOADABLE_MANIFEST)
+    const middlewareloadableManifestPath = join(
+      this.distDir,
+      'server',
+      `${MIDDLEWARE_REACT_LOADABLE_MANIFEST}.js`
+    )
+
+    const json = JSON.stringify(loadableManifest, null, 2)
+
+    deleteCache(loadableManifestPath)
+    deleteCache(middlewareloadableManifestPath)
+    await writeFileAtomic(loadableManifestPath, json)
+    await writeFileAtomic(
+      middlewareloadableManifestPath,
+      `self.__REACT_LOADABLE_MANIFEST=${JSON.stringify(json)}`
+    )
+  }
+
   async loadMiddlewareManifest(
     pageName: string,
     type: 'pages' | 'app' | 'middleware' | 'instrumentation'
@@ -711,6 +759,7 @@ export class TurbopackManifestLoader {
     await this.writeAppPathsManifest()
     await this.writeBuildManifest(entrypoints, devRewrites, productionRewrites)
     await this.writeFallbackBuildManifest()
+    await this.writeLoadableManifest()
     await this.writeMiddlewareManifest()
     await this.writeClientMiddlewareManifest()
     await this.writeNextFontManifest()

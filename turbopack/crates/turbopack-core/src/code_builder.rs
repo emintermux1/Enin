@@ -6,7 +6,7 @@ use std::{
 
 use anyhow::{Context, Result};
 use indexmap::{IndexMap, IndexSet};
-use turbo_tasks::{ResolvedVc, Vc};
+use turbo_tasks::Vc;
 use turbo_tasks_fs::{
     rope::{Rope, RopeBuilder},
     util::uri_from_file,
@@ -21,13 +21,14 @@ use crate::{
 };
 
 /// A mapping of byte-offset in the code string to an associated source map.
-pub type Mapping = (usize, Option<ResolvedVc<Box<dyn GenerateSourceMap>>>);
+pub type Mapping = (usize, Option<Vc<Box<dyn GenerateSourceMap>>>);
 
 /// Code stores combined output code and the source map of that output code.
-#[turbo_tasks::value(shared)]
+#[turbo_tasks::value(shared, local)]
 #[derive(Debug, Clone)]
 pub struct Code {
     code: Rope,
+
     mappings: Vec<Mapping>,
 }
 
@@ -35,6 +36,7 @@ pub struct Code {
 #[derive(Default)]
 pub struct CodeBuilder {
     code: RopeBuilder,
+
     mappings: Vec<Mapping>,
 }
 
@@ -61,11 +63,7 @@ impl CodeBuilder {
     /// Pushes original user code with an optional source map if one is
     /// available. If it's not, this is no different than pushing Synthetic
     /// code.
-    pub fn push_source(
-        &mut self,
-        code: &Rope,
-        map: Option<ResolvedVc<Box<dyn GenerateSourceMap>>>,
-    ) {
+    pub fn push_source(&mut self, code: &Rope, map: Option<Vc<Box<dyn GenerateSourceMap>>>) {
         self.push_map(map);
         self.code += code;
     }
@@ -100,7 +98,7 @@ impl CodeBuilder {
     /// original code section. By inserting an empty source map when reaching a
     /// synthetic section directly after an original section, we tell Chrome
     /// that the previous map ended at this point.
-    fn push_map(&mut self, map: Option<ResolvedVc<Box<dyn GenerateSourceMap>>>) {
+    fn push_map(&mut self, map: Option<Vc<Box<dyn GenerateSourceMap>>>) {
         if map.is_none() && matches!(self.mappings.last(), None | Some((_, None))) {
             // No reason to push an empty map directly after an empty map
             return;

@@ -97,7 +97,7 @@ describe('middleware - development errors', () => {
               "\n  2 |       import { NextResponse } from 'next/server'"
           : '\n ⨯ unhandledRejection:  Error: async boom!' +
               '\n    at throwError (middleware.js:4:14)' +
-              '\n    at default (middleware.js:7:8)' +
+              '\n    at throwError (middleware.js:7:8)' +
               "\n  2 |       import { NextResponse } from 'next/server'"
       )
       expect(stripAnsi(next.cliOutput)).toContain(
@@ -154,7 +154,8 @@ describe('middleware - development errors', () => {
               // TODO(veil): Redundant and not clickable
               '\n    at eval (file://webpack-internal:///(middleware)/./middleware.js)' +
               '\n    at eval (middleware.js:4:8)' +
-              '\n    at default (middleware.js:4:8)' +
+              // TODO(veil): Redundant
+              '\n    at eval (middleware.js:4:8)' +
               "\n  2 |       import { NextResponse } from 'next/server'"
       )
       expect(stripAnsi(next.cliOutput)).toContain(
@@ -165,7 +166,7 @@ describe('middleware - development errors', () => {
               '\n    at __TURBOPACK__default__export__ ('
           : "\n ⚠ DynamicCodeEvaluationWarning: Dynamic Code Evaluation (e. g. 'eval', 'new Function') not allowed in Edge Runtime" +
               '\nLearn More: https://nextjs.org/docs/messages/edge-dynamic-code-evaluation' +
-              '\n    at default (middleware.js:4:8)' +
+              '\n    at eval (middleware.js:4:8)' +
               "\n  2 |       import { NextResponse } from 'next/server'"
       )
     })

@@ -21,9 +21,10 @@ import {
 } from './generate/opengraph'
 import { IconsMetadata } from './generate/icons'
 import {
+  resolveMetadataItems,
+  accumulateMetadata,
+  accumulateViewport,
   type MetadataErrorType,
-  resolveMetadata,
-  resolveViewport,
 } from './resolve-metadata'
 import { MetaFilter } from './generate/meta'
 import type {
@@ -195,14 +196,24 @@ async function getResolvedMetadataImpl(
   errorType?: MetadataErrorType | 'redirect'
 ): Promise<React.ReactNode> {
   const errorConvention = errorType === 'redirect' ? undefined : errorType
-  return renderMetadata(
+
+  const metadataItems = await resolveMetadataItems(
     tree,
     searchParams,
+    errorConvention,
     getDynamicParamFromSegment,
-    metadataContext,
     createServerParamsForMetadata,
-    workStore,
-    errorConvention
+    workStore
+  )
+  const elements: Array<React.ReactNode> = createMetadataElements(
+    await accumulateMetadata(metadataItems, metadataContext)
+  )
+  return (
+    <>
+      {elements.map((el, index) => {
+        return cloneElement(el as React.ReactElement, { key: index })
+      })}
+    </>
   )
 }
 
@@ -216,14 +227,24 @@ async function getNotFoundMetadataImpl(
   workStore: WorkStore
 ): Promise<React.ReactNode> {
   const notFoundErrorConvention = 'not-found'
-  return renderMetadata(
+  const notFoundMetadataItems = await resolveMetadataItems(
     tree,
     searchParams,
+    notFoundErrorConvention,
     getDynamicParamFromSegment,
-    metadataContext,
     createServerParamsForMetadata,
-    workStore,
-    notFoundErrorConvention
+    workStore
+  )
+
+  const elements: Array<React.ReactNode> = createMetadataElements(
+    await accumulateMetadata(notFoundMetadataItems, metadataContext)
+  )
+  return (
+    <>
+      {elements.map((el, index) => {
+        return cloneElement(el as React.ReactElement, { key: index })
+      })}
+    </>
   )
 }
 
@@ -237,13 +258,24 @@ async function getResolvedViewportImpl(
   errorType?: MetadataErrorType | 'redirect'
 ): Promise<React.ReactNode> {
   const errorConvention = errorType === 'redirect' ? undefined : errorType
-  return renderViewport(
+
+  const metadataItems = await resolveMetadataItems(
     tree,
     searchParams,
+    errorConvention,
     getDynamicParamFromSegment,
     createServerParamsForMetadata,
-    workStore,
-    errorConvention
+    workStore
+  )
+  const elements: Array<React.ReactNode> = createViewportElements(
+    await accumulateViewport(metadataItems)
+  )
+  return (
+    <>
+      {elements.map((el, index) => {
+        return cloneElement(el as React.ReactElement, { key: index })
+      })}
+    </>
   )
 }
 
@@ -256,64 +288,17 @@ async function getNotFoundViewportImpl(
   workStore: WorkStore
 ): Promise<React.ReactNode> {
   const notFoundErrorConvention = 'not-found'
-  return renderViewport(
+  const notFoundMetadataItems = await resolveMetadataItems(
     tree,
     searchParams,
-    getDynamicParamFromSegment,
-    createServerParamsForMetadata,
-    workStore,
-    notFoundErrorConvention
-  )
-}
-
-async function renderMetadata(
-  tree: LoaderTree,
-  searchParams: Promise<ParsedUrlQuery>,
-  getDynamicParamFromSegment: GetDynamicParamFromSegment,
-  metadataContext: MetadataContext,
-  createServerParamsForMetadata: CreateServerParamsForMetadata,
-  workStore: WorkStore,
-  errorConvention?: MetadataErrorType
-) {
-  const resolvedMetadata = await resolveMetadata(
-    tree,
-    searchParams,
-    errorConvention,
-    getDynamicParamFromSegment,
-    createServerParamsForMetadata,
-    workStore,
-    metadataContext
-  )
-  const elements: Array<React.ReactNode> =
-    createMetadataElements(resolvedMetadata)
-  return (
-    <>
-      {elements.map((el, index) => {
-        return cloneElement(el as React.ReactElement, { key: index })
-      })}
-    </>
-  )
-}
-
-async function renderViewport(
-  tree: LoaderTree,
-  searchParams: Promise<ParsedUrlQuery>,
-  getDynamicParamFromSegment: GetDynamicParamFromSegment,
-  createServerParamsForMetadata: CreateServerParamsForMetadata,
-  workStore: WorkStore,
-  errorConvention?: MetadataErrorType
-) {
-  const notFoundResolvedViewport = await resolveViewport(
-    tree,
-    searchParams,
-    errorConvention,
+    notFoundErrorConvention,
     getDynamicParamFromSegment,
     createServerParamsForMetadata,
     workStore
   )
 
   const elements: Array<React.ReactNode> = createViewportElements(
-    notFoundResolvedViewport
+    await accumulateViewport(notFoundMetadataItems)
   )
   return (
     <>

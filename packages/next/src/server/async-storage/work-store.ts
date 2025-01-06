@@ -60,14 +60,10 @@ export type WorkStoreContext = {
     | 'nextExport'
     | 'isDraftMode'
     | 'isDebugDynamicAccesses'
+    | 'buildId'
   > &
     RequestLifecycleOpts &
     Partial<Pick<RenderOpts, 'reactLoadableManifest'>>
-
-  /**
-   * The build ID of the current build.
-   */
-  buildId: string
 }
 
 export function createWorkStore({
@@ -76,7 +72,6 @@ export function createWorkStore({
   renderOpts,
   requestEndedState,
   isPrefetchRequest,
-  buildId,
 }: WorkStoreContext): WorkStore {
   /**
    * Rules of Static & Dynamic HTML:
@@ -121,7 +116,7 @@ export function createWorkStore({
 
     requestEndedState,
     isPrefetchRequest,
-    buildId,
+    buildId: renderOpts.buildId,
     reactLoadableManifest: renderOpts?.reactLoadableManifest || {},
     assetPrefix: renderOpts?.assetPrefix || '',
 

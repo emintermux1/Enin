@@ -188,7 +188,14 @@ function performWorkUntilDeadline() {
         try {
           b: {
             advanceTimers(currentTime);
-            for (currentTask = peek(taskQueue); null !== currentTask; ) {
+            for (
+              currentTask = peek(taskQueue);
+              null !== currentTask &&
+              !(
+                currentTask.expirationTime > currentTime && shouldYieldToHost()
+              );
+
+            ) {
               var callback = currentTask.callback;
               if ("function" === typeof callback) {
                 currentTask.callback = null;
@@ -207,11 +214,6 @@ function performWorkUntilDeadline() {
                 advanceTimers(currentTime);
               } else pop(taskQueue);
               currentTask = peek(taskQueue);
-              if (
-                null === currentTask ||
-                currentTask.expirationTime > currentTime
-              )
-                break;
             }
             if (null !== currentTask) hasMoreWork = !0;
             else {
@@ -313,10 +315,13 @@ exports.unstable_NormalPriority = unstable_NormalPriority;
 exports.unstable_Profiling = null;
 exports.unstable_UserBlockingPriority = unstable_UserBlockingPriority;
 exports.unstable_cancelCallback = unstable_cancelCallback;
+exports.unstable_continueExecution = throwNotImplemented;
 exports.unstable_forceFrameRate = throwNotImplemented;
 exports.unstable_getCurrentPriorityLevel = unstable_getCurrentPriorityLevel;
+exports.unstable_getFirstCallbackNode = throwNotImplemented;
 exports.unstable_next = throwNotImplemented;
 exports.unstable_now = unstable_now;
+exports.unstable_pauseExecution = throwNotImplemented;
 exports.unstable_requestPaint = unstable_requestPaint;
 exports.unstable_runWithPriority = throwNotImplemented;
 exports.unstable_scheduleCallback = unstable_scheduleCallback;

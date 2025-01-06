@@ -1,4 +1,4 @@
 const RUNTIME_PUBLIC_PATH = "output/[turbopack]_runtime.js";
-const RELATIVE_ROOT_PATH = "../../../../../../..";
+const OUTPUT_ROOT = "turbopack/crates/turbopack-tests/tests/snapshot/basic/async_chunk_build";
 const ASSET_PREFIX = "/";
 // Dummy runtime

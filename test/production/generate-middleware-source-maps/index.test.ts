@@ -35,12 +35,7 @@ describe('Middleware source maps', () => {
       )) {
         const filePath = path.join(next.testDir, '.next', file)
         expect(await fs.pathExists(filePath)).toEqual(true)
-        if (
-          filePath.endsWith('.js') &&
-          !filePath.endsWith('/react-loadable-manifest.js')
-        ) {
-          expect(await fs.pathExists(`${filePath}.map`)).toEqual(true)
-        }
+        expect(await fs.pathExists(`${filePath}.map`)).toEqual(true)
       }
     }
   })

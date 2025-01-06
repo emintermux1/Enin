@@ -574,9 +574,6 @@ function readChunk(chunk) {
 function createPendingChunk(response) {
   return new ReactPromise("pending", null, null, response);
 }
-function createErrorChunk(response, error) {
-  return new ReactPromise("rejected", null, error, response);
-}
 function wakeChunk(listeners, value) {
   for (var i = 0; i < listeners.length; i++) (0, listeners[i])(value);
 }
@@ -693,8 +690,6 @@ function initializeModuleChunk(chunk) {
   }
 }
 function reportGlobalError(response, error) {
-  response._closed = !0;
-  response._closedReason = error;
   response._chunks.forEach(function (chunk) {
     "pending" === chunk.status && triggerErrorOnChunk(chunk, error);
   });
@@ -705,11 +700,7 @@ function createLazyChunkWrapper(chunk) {
 function getChunk(response, id) {
   var chunks = response._chunks,
     chunk = chunks.get(id);
-  chunk ||
-    ((chunk = response._closed
-      ? createErrorChunk(response, response._closedReason)
-      : createPendingChunk(response)),
-    chunks.set(id, chunk));
+  chunk || ((chunk = createPendingChunk(response)), chunks.set(id, chunk));
   return chunk;
 }
 function waitForReference(
@@ -1038,8 +1029,6 @@ function ResponseInstance(
   this._fromJSON = null;
   this._rowLength = this._rowTag = this._rowID = this._rowState = 0;
   this._buffer = [];
-  this._closed = !1;
-  this._closedReason = null;
   this._tempRefs = temporaryReferences;
   this._fromJSON = createFromJSONCallback(this);
 }
@@ -1411,7 +1400,7 @@ function processFullBinaryRow(response, id, tag, buffer, chunk) {
       tag = response._chunks;
       (chunk = tag.get(id))
         ? triggerErrorOnChunk(chunk, buffer)
-        : tag.set(id, createErrorChunk(response, buffer));
+        : tag.set(id, new ReactPromise("rejected", null, buffer, response));
       break;
     case 84:
       tag = response._chunks;
@@ -1419,7 +1408,6 @@ function processFullBinaryRow(response, id, tag, buffer, chunk) {
         ? chunk.reason.enqueueValue(buffer)
         : tag.set(id, new ReactPromise("fulfilled", buffer, null, response));
       break;
-    case 78:
     case 68:
     case 87:
       throw Error(
@@ -1451,7 +1439,7 @@ function processFullBinaryRow(response, id, tag, buffer, chunk) {
       tag = response._chunks;
       (chunk = tag.get(id))
         ? triggerErrorOnChunk(chunk, buffer)
-        : tag.set(id, createErrorChunk(response, buffer));
+        : tag.set(id, new ReactPromise("rejected", null, buffer, response));
       break;
     default:
       (tag = response._chunks),
@@ -1484,7 +1472,7 @@ function createFromJSONCallback(response) {
             (initializingHandler = value.parent),
             value.errored)
           )
-            (key = createErrorChunk(response, value.value)),
+            (key = new ReactPromise("rejected", null, value.value, response)),
               (key = createLazyChunkWrapper(key));
           else if (0 < value.deps) {
             var blockedChunk = new ReactPromise(

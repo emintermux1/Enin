@@ -8,11 +8,7 @@ import type {
 } from '../../../types'
 import type { PagesRouteDefinition } from '../../route-definitions/pages-route-definition'
 import type { NextParsedUrlQuery } from '../../request-meta'
-import type {
-  PagesRenderContext,
-  PagesSharedContext,
-  RenderOpts,
-} from '../../render'
+import type { RenderOpts } from '../../render'
 import type RenderResult from '../../render-result'
 import type { AppType, DocumentType } from '../../../shared/lib/utils'
 
@@ -102,18 +98,6 @@ export interface PagesRouteHandlerContext extends RouteModuleHandleContext {
   query: NextParsedUrlQuery
 
   /**
-   * The shared context used for all page renders.
-   */
-  sharedContext: PagesSharedContext
-
-  /**
-   * The context for the given request.
-   */
-  renderContext: PagesRenderContext
-
-  /**
-   * The arguments for the given request.
-  /**
    * The RenderOpts for the given request which include the specific modules to
    * use for rendering.
    */
@@ -147,9 +131,7 @@ export class PagesRouteModule extends RouteModule<
       {
         App: this.components.App,
         Document: this.components.Document,
-      },
-      context.sharedContext,
-      context.renderContext
+      }
     )
   }
 }

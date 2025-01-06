@@ -6,7 +6,7 @@ use tokio::sync::mpsc::Sender;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::Instrument;
 use turbo_rcstr::RcStr;
-use turbo_tasks::{IntoTraitRef, OperationVc, ReadRef, ResolvedVc, TransientInstance, Vc};
+use turbo_tasks::{IntoTraitRef, ReadRef, ResolvedVc, TransientInstance, Vc};
 use turbo_tasks_fs::{FileSystem, FileSystemPath};
 use turbopack_core::{
     error::PrettyPrintError,
@@ -23,9 +23,9 @@ use turbopack_core::{
 
 use crate::source::{resolve::ResolveSourceRequestResult, ProxyResult};
 
-type GetContentFn = Box<dyn Fn() -> OperationVc<ResolveSourceRequestResult> + Send + Sync>;
+type GetContentFn = Box<dyn Fn() -> Vc<ResolveSourceRequestResult> + Send + Sync>;
 
-async fn peek_issues<T: Send>(source: OperationVc<T>) -> Result<Vec<ReadRef<PlainIssue>>> {
+async fn peek_issues<T: Send>(source: Vc<T>) -> Result<Vec<ReadRef<PlainIssue>>> {
     let captured = source.peek_issues_with_path().await?;
 
     captured.get_plain_issues().await
@@ -41,26 +41,17 @@ fn extend_issues(issues: &mut Vec<ReadRef<PlainIssue>>, new_issues: Vec<ReadRef<
     }
 }
 
-#[turbo_tasks::function(operation)]
-fn versioned_content_update_operation(
-    content: ResolvedVc<Box<dyn VersionedContent>>,
-    from: ResolvedVc<Box<dyn Version>>,
-) -> Vc<Update> {
-    content.update(*from)
-}
-
 #[turbo_tasks::function]
 async fn get_update_stream_item(
     resource: RcStr,
     from: Vc<VersionState>,
     get_content: TransientInstance<GetContentFn>,
 ) -> Result<Vc<UpdateStreamItem>> {
-    let content_op = get_content();
-    let content_vc = content_op.connect();
-    let content_result = content_vc.strongly_consistent().await;
-    let mut plain_issues = peek_issues(content_op).await?;
+    let content = get_content();
+    let _ = content.resolve_strongly_consistent().await?;
+    let mut plain_issues = peek_issues(content).await?;
 
-    let content_value = match content_result {
+    let content_value = match content.await {
         Ok(content) => content,
         Err(e) => {
             plain_issues.push(
@@ -98,26 +89,27 @@ async fn get_update_stream_item(
             }
 
             let resolved_content = static_content.content;
-            let from = from.get().to_resolved().await?;
-            let update_op = versioned_content_update_operation(resolved_content, from);
+            let from = from.get();
+            let update = resolved_content.update(from);
 
-            extend_issues(&mut plain_issues, peek_issues(update_op).await?);
+            extend_issues(&mut plain_issues, peek_issues(update).await?);
+
+            let update = update.await?;
 
             Ok(UpdateStreamItem::Found {
-                update: update_op.connect().await?,
+                update,
                 issues: plain_issues,
             }
             .cell())
         }
-        ResolveSourceRequestResult::HttpProxy(proxy_result_op) => {
-            let proxy_result_vc = proxy_result_op.connect();
-            let proxy_result_value = proxy_result_vc.await?;
+        ResolveSourceRequestResult::HttpProxy(proxy_result) => {
+            let proxy_result_value = proxy_result.await?;
 
             if proxy_result_value.status == 404 {
                 return Ok(UpdateStreamItem::NotFound.cell());
             }
 
-            extend_issues(&mut plain_issues, peek_issues(proxy_result_op).await?);
+            extend_issues(&mut plain_issues, peek_issues(proxy_result).await?);
 
             let from = from.get();
             if let Some(from) = Vc::try_resolve_downcast_type::<ProxyResult>(from).await? {
@@ -132,7 +124,7 @@ async fn get_update_stream_item(
 
             Ok(UpdateStreamItem::Found {
                 update: Update::Total(TotalUpdate {
-                    to: Vc::upcast::<Box<dyn Version>>(proxy_result_vc)
+                    to: Vc::upcast::<Box<dyn Version>>(proxy_result)
                         .into_trait_ref()
                         .await?,
                 })
@@ -199,13 +191,11 @@ impl UpdateStream {
         let content = get_content();
         // We can ignore issues reported in content here since [compute_update_stream]
         // will handle them
-        let version = match *content.connect().await? {
+        let version = match *content.await? {
             ResolveSourceRequestResult::Static(static_content, _) => {
                 static_content.await?.content.version()
             }
-            ResolveSourceRequestResult::HttpProxy(proxy_result) => {
-                Vc::upcast(proxy_result.connect())
-            }
+            ResolveSourceRequestResult::HttpProxy(proxy_result) => Vc::upcast(proxy_result),
             _ => Vc::upcast(NotFoundVersion::new()),
         };
         let version_state = VersionState::new(version.into_trait_ref().await?).await?;

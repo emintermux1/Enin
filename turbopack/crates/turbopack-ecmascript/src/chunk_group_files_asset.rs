@@ -15,7 +15,9 @@ use turbopack_core::{
     },
     module::Module,
     output::{OutputAsset, OutputAssets},
-    reference::{ModuleReference, ModuleReferences, SingleModuleReference},
+    reference::{
+        ModuleReference, ModuleReferences, SingleModuleReference, SingleOutputAssetReference,
+    },
 };
 
 use crate::{
@@ -207,8 +209,27 @@ impl ChunkItem for ChunkGroupFilesChunkItem {
     }
 
     #[turbo_tasks::function]
-    fn references(self: Vc<Self>) -> Vc<OutputAssets> {
-        self.chunks()
+    async fn references(self: Vc<Self>) -> Result<Vc<ModuleReferences>> {
+        let chunks = self.chunks();
+
+        Ok(Vc::cell(
+            chunks
+                .await?
+                .iter()
+                .copied()
+                .map(|chunk| async move {
+                    Ok(ResolvedVc::upcast(
+                        SingleOutputAssetReference::new(
+                            *chunk,
+                            chunk_group_chunk_reference_description(),
+                        )
+                        .to_resolved()
+                        .await?,
+                    ))
+                })
+                .try_join()
+                .await?,
+        ))
     }
 
     #[turbo_tasks::function]

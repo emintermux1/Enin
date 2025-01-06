@@ -40,6 +40,3 @@ rule:
                     kind: attribute
                     regex: '^turbo_tasks::value(\(.*\))?$'
 fix: ResolvedVc<$A>
-
-ignores:
-  - turbopack/crates/turbo-tasks-macros-tests/**/*.rs

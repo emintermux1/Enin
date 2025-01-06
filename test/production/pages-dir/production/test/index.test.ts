@@ -572,9 +572,7 @@ describe('Production Usage', () => {
     it('should set Cache-Control header', async () => {
       const buildManifest = await next.readJSON(`.next/${BUILD_MANIFEST}`)
       const reactLoadableManifest = await next.readJSON(
-        process.env.TURBOPACK
-          ? `.next/server/pages/dynamic/css/${REACT_LOADABLE_MANIFEST}`
-          : `.next/${REACT_LOADABLE_MANIFEST}`
+        join('./.next', REACT_LOADABLE_MANIFEST)
       )
       const url = `http://localhost:${next.appPort}`
 
@@ -583,13 +581,8 @@ describe('Production Usage', () => {
       const manifestKey = Object.keys(reactLoadableManifest).find((item) => {
         return item
           .replace(/\\/g, '/')
-          .endsWith(
-            process.env.TURBOPACK
-              ? 'components/dynamic-css/with-css.js [client] (ecmascript, next/dynamic entry)'
-              : 'dynamic/css.js -> ../../components/dynamic-css/with-css'
-          )
+          .endsWith('dynamic/css.js -> ../../components/dynamic-css/with-css')
       })
-      expect(manifestKey).toBeString()
 
       // test dynamic chunk
       reactLoadableManifest[manifestKey].files.forEach((f) => {

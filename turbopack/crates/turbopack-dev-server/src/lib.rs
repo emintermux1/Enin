@@ -34,7 +34,7 @@ use tokio::task::JoinHandle;
 use tracing::{event, info_span, Instrument, Level, Span};
 use turbo_tasks::{
     apply_effects, run_once_with_reason, trace::TraceRawVcs, util::FormatDuration, NonLocalValue,
-    OperationVc, TurboTasksApi, Vc,
+    TurboTasksApi, Vc,
 };
 use turbopack_core::{
     error::PrettyPrintError,
@@ -49,14 +49,14 @@ use crate::{
 
 pub trait SourceProvider: Send + Clone + 'static {
     /// must call a turbo-tasks function internally
-    fn get_source(&self) -> OperationVc<Box<dyn ContentSource>>;
+    fn get_source(&self) -> Vc<Box<dyn ContentSource>>;
 }
 
 impl<T> SourceProvider for T
 where
-    T: Fn() -> OperationVc<Box<dyn ContentSource>> + Send + Clone + 'static,
+    T: Fn() -> Vc<Box<dyn ContentSource>> + Send + Clone + 'static,
 {
-    fn get_source(&self) -> OperationVc<Box<dyn ContentSource>> {
+    fn get_source(&self) -> Vc<Box<dyn ContentSource>> {
         self()
     }
 }
@@ -211,8 +211,7 @@ impl DevServerBuilder {
                             let uri = request.uri();
                             let path = uri.path().to_string();
                             let source = source_provider.get_source();
-                            // HACK: Resolve `source` now so that we can get any issues on it
-                            let _ = source.connect().resolve_strongly_consistent().await?;
+                            let resolved_source = source.resolve_strongly_consistent().await?;
                             apply_effects(source).await?;
                             handle_issues(
                                 source,
@@ -224,14 +223,7 @@ impl DevServerBuilder {
                             .await?;
                             let (response, side_effects) =
                                 http::process_request_with_content_source(
-                                    // HACK: pass `source` here (instead of `resolved_source`
-                                    // because the underlying API wants to do it's own
-                                    // `resolve_strongly_consistent` call.
-                                    //
-                                    // It's unlikely (the calls happen one-after-another), but this
-                                    // could cause inconsistency between the reported issues and
-                                    // the generated HTTP response.
-                                    source,
+                                    resolved_source,
                                     request,
                                     issue_reporter,
                                 )

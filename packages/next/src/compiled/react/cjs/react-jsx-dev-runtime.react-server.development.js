@@ -332,7 +332,7 @@
       if ("object" === typeof type)
         switch (type.$$typeof) {
           case REACT_FORWARD_REF_TYPE:
-            return describeNativeComponentFrame(type.render, !1);
+            return (type = describeNativeComponentFrame(type.render, !1)), type;
           case REACT_MEMO_TYPE:
             return describeUnknownElementTypeFrameInDEV(type.type);
           case REACT_LAZY_TYPE:

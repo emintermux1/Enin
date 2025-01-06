@@ -4,10 +4,7 @@ import type { RenderOpts } from '../../app-render/types'
 import type { NextParsedUrlQuery } from '../../request-meta'
 import type { LoaderTree } from '../../lib/app-dir-module'
 
-import {
-  renderToHTMLOrFlight,
-  type AppSharedContext,
-} from '../../app-render/app-render'
+import { renderToHTMLOrFlight } from '../../app-render/app-render'
 import {
   RouteModule,
   type RouteModuleOptions,
@@ -46,7 +43,6 @@ export interface AppPageRouteHandlerContext extends RouteModuleHandleContext {
   fallbackRouteParams: FallbackRouteParams | null
   renderOpts: RenderOpts
   serverComponentsHmrCache?: ServerComponentsHmrCache
-  sharedContext: AppSharedContext
 }
 
 export type AppPageRouteModuleOptions = RouteModuleOptions<
@@ -71,8 +67,7 @@ export class AppPageRouteModule extends RouteModule<
       context.fallbackRouteParams,
       context.renderOpts,
       context.serverComponentsHmrCache,
-      false,
-      context.sharedContext
+      false
     )
   }
 
@@ -89,8 +84,7 @@ export class AppPageRouteModule extends RouteModule<
       context.fallbackRouteParams,
       context.renderOpts,
       context.serverComponentsHmrCache,
-      true,
-      context.sharedContext
+      true
     )
   }
 }

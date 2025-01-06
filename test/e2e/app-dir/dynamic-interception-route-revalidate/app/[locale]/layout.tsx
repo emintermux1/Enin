@@ -16,8 +16,3 @@ export default function Root({
     </html>
   )
 }
-
-export const revalidate = 0
-export async function generateStaticParams() {
-  return [{ locale: 'en' }]
-}

@@ -3,7 +3,7 @@ import { connection } from 'next/server'
 
 async function Content() {
   await connection()
-  return <div id="page-content">Page content</div>
+  return 'Dynamic Content'
 }
 
 export default function PPRDisabled() {

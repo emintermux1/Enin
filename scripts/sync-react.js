@@ -21,7 +21,6 @@ const pullRequestReviewers = ['eps1lon']
  */
 const pagesRouterReact = '^19.0.0'
 
-const defaultLatestChannel = 'canary'
 const filesReferencingReactPeerDependencyVersion = [
   'run-tests.js',
   'packages/create-next-app/templates/index.ts',
@@ -39,24 +38,6 @@ const appManifestsInstallingNextjsPeerDependencies = [
   'test/e2e/next-test/first-time-setup-ts/package.json',
 ]
 
-async function getSchedulerVersion(reactVersion) {
-  const url = `https://registry.npmjs.org/react-dom/${reactVersion}`
-  const response = await fetch(url, {
-    headers: {
-      Accept: 'application/json',
-    },
-  })
-  if (!response.ok) {
-    throw new Error(
-      `${url}: ${response.status} ${response.statusText}\n${await response.text()}`
-    )
-  }
-
-  const manifest = await response.json()
-
-  return manifest.dependencies['scheduler']
-}
-
 // Use this script to update Next's vendored copy of React and related packages:
 //
 // Basic usage (defaults to most recent React canary version):
@@ -65,7 +46,13 @@ async function getSchedulerVersion(reactVersion) {
 // Update package.json but skip installing the dependencies automatically:
 //   pnpm run sync-react --no-install
 
-async function sync({ channel, newVersionStr, noInstall }) {
+async function sync({
+  channel,
+  newVersionStr,
+  newSha,
+  newDateString,
+  noInstall,
+}) {
   const useExperimental = channel === 'experimental'
   const cwd = process.cwd()
   const pkgJson = JSON.parse(
@@ -77,35 +64,38 @@ async function sync({ channel, newVersionStr, noInstall }) {
     useExperimental ? 'react-experimental-builtin' : 'react-builtin'
   ].replace(/^npm:react@/, '')
 
-  console.log(`Updating "react@${channel}" to ${newVersionStr}...`)
-  if (newVersionStr === baseVersionStr) {
+  const baseVersionInfo = extractInfoFromReactVersion(baseVersionStr)
+  if (!baseVersionInfo) {
+    throw new Error(
+      'Base react version does not match expected format: ' + baseVersionStr
+    )
+  }
+
+  const {
+    sha: baseSha,
+    releaseLabel: baseReleaseLabel,
+    dateString: baseDateString,
+  } = baseVersionInfo
+
+  console.log(`Updating "react@${channel}" to ${newSha}...\n`)
+  if (newSha === baseSha) {
     console.log('Already up to date.')
     return
   }
 
-  const baseSchedulerVersionStr = devDependencies[
-    useExperimental ? 'scheduler-experimental-builtin' : 'scheduler-builtin'
-  ].replace(/^npm:scheduler@/, '')
-  const newSchedulerVersionStr = await getSchedulerVersion(newVersionStr)
-  console.log(`Updating "scheduler@${channel}" to ${newSchedulerVersionStr}...`)
-
   for (const [dep, version] of Object.entries(devDependencies)) {
-    if (version.endsWith(baseVersionStr)) {
-      devDependencies[dep] = version.replace(baseVersionStr, newVersionStr)
-    } else if (version.endsWith(baseSchedulerVersionStr)) {
+    if (version.endsWith(`${baseReleaseLabel}-${baseSha}-${baseDateString}`)) {
       devDependencies[dep] = version.replace(
-        baseSchedulerVersionStr,
-        newSchedulerVersionStr
+        `${baseReleaseLabel}-${baseSha}-${baseDateString}`,
+        `${channel}-${newSha}-${newDateString}`
       )
     }
   }
   for (const [dep, version] of Object.entries(pnpmOverrides)) {
-    if (version.endsWith(baseVersionStr)) {
-      pnpmOverrides[dep] = version.replace(baseVersionStr, newVersionStr)
-    } else if (version.endsWith(baseSchedulerVersionStr)) {
+    if (version.endsWith(`${baseReleaseLabel}-${baseSha}-${baseDateString}`)) {
       pnpmOverrides[dep] = version.replace(
-        baseSchedulerVersionStr,
-        newSchedulerVersionStr
+        `${baseReleaseLabel}-${baseSha}-${baseDateString}`,
+        `${channel}-${newSha}-${newDateString}`
       )
     }
   }
@@ -234,7 +224,7 @@ async function main() {
   ) {
     const { stdout, stderr } = await execa(
       'npm',
-      ['--silent', 'view', `react@${defaultLatestChannel}`, 'version'],
+      ['--silent', 'view', 'react@canary', 'version'],
       {
         // Avoid "Usage Error: This project is configured to use pnpm".
         cwd: '/tmp',
@@ -246,7 +236,7 @@ async function main() {
     }
     newVersionStr = stdout.trim()
     console.log(
-      `--version was not provided. Using react@${defaultLatestChannel}: ${newVersionStr}`
+      `--version was not provided. Using react@canary: ${newVersionStr}`
     )
   }
 
@@ -263,7 +253,7 @@ Or, run this command with no arguments to use the most recently published versio
   }
   const { sha: newSha, dateString: newDateString } = newVersionInfo
 
-  const branchName = `update/react/${newVersionStr}`
+  const branchName = `update/react/${newSha}-${newDateString}`
   if (createPull) {
     const { exitCode, all, command } = await execa(
       'git',
@@ -302,7 +292,9 @@ Or, run this command with no arguments to use the most recently published versio
   )
 
   await sync({
-    newVersionStr: `0.0.0-experimental-${newSha}-${newDateString}`,
+    newDateString,
+    newSha,
+    newVersionStr,
     noInstall: !install,
     channel: 'experimental',
   })
@@ -310,12 +302,14 @@ Or, run this command with no arguments to use the most recently published versio
     await commitEverything('Update `react@experimental`')
   }
   await sync({
+    newDateString,
+    newSha,
     newVersionStr,
     noInstall: !install,
-    channel: '<framework-stable>',
+    channel: 'rc',
   })
   if (commit) {
-    await commitEverything('Update `react`')
+    await commitEverything('Update `react@rc`')
   }
 
   const baseVersionInfo = extractInfoFromReactVersion(baseVersionStr)
@@ -400,9 +394,9 @@ Or, run this command with no arguments to use the most recently published versio
 
   // Install the updated dependencies and build the vendored React files.
   if (!install) {
-    console.log('Skipping install step because --no-install flag was passed.')
+    console.log('Skipping install step because --no-install flag was passed.\n')
   } else {
-    console.log('Installing dependencies...')
+    console.log('Installing dependencies...\n')
 
     const installSubprocess = execa('pnpm', [
       'install',

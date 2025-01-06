@@ -226,7 +226,7 @@ impl TurbopackDevServerBuilder {
     }
 }
 
-#[turbo_tasks::function(operation)]
+#[turbo_tasks::function]
 async fn source(
     root_dir: RcStr,
     project_dir: RcStr,
@@ -242,28 +242,19 @@ async fn source(
         .into();
 
     let output_fs = output_fs(project_dir);
-    let fs: Vc<Box<dyn FileSystem>> = project_fs(root_dir);
-    let root_path = fs.root().to_resolved().await?;
-    let project_path = root_path.join(project_relative).to_resolved().await?;
+    let fs = project_fs(root_dir);
+    let project_path = fs.root().join(project_relative).to_resolved().await?;
 
-    let env = load_env(*root_path);
+    let env = load_env(*project_path);
     let build_output_root = output_fs
         .root()
         .join(".turbopack/build".into())
         .to_resolved()
         .await?;
 
-    let build_output_root_to_root_path = project_path
-        .join(".turbopack/build".into())
-        .await?
-        .get_relative_path_to(&*root_path.await?)
-        .context("Project path is in root path")?;
-    let build_output_root_to_root_path = ResolvedVc::cell(build_output_root_to_root_path);
-
     let build_chunking_context = NodeJsChunkingContext::builder(
-        root_path,
+        project_path,
         build_output_root,
-        build_output_root_to_root_path,
         build_output_root,
         build_output_root
             .join("chunks".into())
@@ -279,7 +270,7 @@ async fn source(
     .build();
 
     let execution_context =
-        ExecutionContext::new(*root_path, Vc::upcast(build_chunking_context), env);
+        ExecutionContext::new(*project_path, Vc::upcast(build_chunking_context), env);
 
     let server_fs = Vc::upcast::<Box<dyn FileSystem>>(ServerFileSystem::new());
     let server_root = server_fs.root();
@@ -301,12 +292,11 @@ async fn source(
         })
         .collect();
 
-    let web_source: ResolvedVc<Box<dyn ContentSource>> = create_web_entry_source(
-        *root_path,
+    let web_source = create_web_entry_source(
+        *project_path,
         execution_context,
         entry_requests,
         server_root,
-        Vc::cell("/ROOT".into()),
         env,
         eager_compile,
         NodeEnv::Development.cell(),

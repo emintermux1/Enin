@@ -169,14 +169,8 @@ impl AppPageLoaderTreeBuilder {
     ) -> Result<()> {
         match item {
             MetadataWithAltItem::Static { path, alt_path } => {
-                self.write_static_metadata_item(
-                    app_page,
-                    name,
-                    item,
-                    **path,
-                    alt_path.as_deref().copied(),
-                )
-                .await?;
+                self.write_static_metadata_item(app_page, name, item, *path, *alt_path)
+                    .await?;
             }
             MetadataWithAltItem::Dynamic { path, .. } => {
                 let i = self.base.unique_number();
@@ -189,7 +183,7 @@ impl AppPageLoaderTreeBuilder {
 
                 let source = dynamic_image_metadata_source(
                     Vc::upcast(self.base.module_asset_context),
-                    **path,
+                    *path,
                     name.into(),
                     app_page.clone(),
                 );

@@ -4,15 +4,11 @@ use turbo_tasks::{fxindexmap, ResolvedVc, Value, Vc};
 use turbo_tasks_fs::FileSystemPath;
 use turbopack_core::{
     asset::{Asset, AssetContent},
-    chunk::{
-        chunk_group::references_to_output_assets, AsyncModuleInfo, ChunkItem, ChunkType,
-        ChunkableModule, ChunkingContext,
-    },
+    chunk::{AsyncModuleInfo, ChunkItem, ChunkType, ChunkableModule, ChunkingContext},
     context::AssetContext,
     ident::AssetIdent,
     module::{Module, OptionModule},
-    output::OutputAssets,
-    reference::{ModuleReferences, SingleChunkableModuleReference},
+    reference::ModuleReferences,
     reference_type::ReferenceType,
     resolve::{origin::ResolveOrigin, parse::Request},
     source::Source,
@@ -108,18 +104,6 @@ impl WebAssemblyModuleAsset {
 
         Ok(esm_asset)
     }
-
-    #[turbo_tasks::function]
-    async fn references(self: Vc<Self>) -> Result<Vc<ModuleReferences>> {
-        Ok(Vc::cell(vec![ResolvedVc::upcast(
-            SingleChunkableModuleReference::new(
-                Vc::upcast(self.loader()),
-                Vc::cell("wasm loader".into()),
-            )
-            .to_resolved()
-            .await?,
-        )]))
-    }
 }
 
 #[turbo_tasks::value_impl]
@@ -208,9 +192,13 @@ impl ChunkItem for ModuleChunkItem {
     }
 
     #[turbo_tasks::function]
-    async fn references(&self) -> Result<Vc<OutputAssets>> {
-        let loader_references = self.module.loader().references().await?;
-        references_to_output_assets(loader_references.iter().map(|r| **r).collect::<_>()).await
+    fn references(&self) -> Vc<ModuleReferences> {
+        let loader = self
+            .module
+            .loader()
+            .as_chunk_item(Vc::upcast(*self.chunking_context));
+
+        loader.references()
     }
 
     #[turbo_tasks::function]

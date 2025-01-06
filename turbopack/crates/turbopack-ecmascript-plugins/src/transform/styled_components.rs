@@ -9,7 +9,7 @@ use swc_core::{
 use turbo_tasks::{ValueDefault, Vc};
 use turbopack_ecmascript::{CustomTransformer, TransformContext};
 
-#[turbo_tasks::value(shared, operation)]
+#[turbo_tasks::value(shared)]
 #[derive(Clone, Debug)]
 #[serde(default, rename_all = "camelCase")]
 pub struct StyledComponentsTransformConfig {

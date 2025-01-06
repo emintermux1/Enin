@@ -420,8 +420,7 @@ export default class DevServer extends Server {
       if (
         request.url.includes('/_next/static') ||
         request.url.includes('/__nextjs_original-stack-frame') ||
-        request.url.includes('/__nextjs_source-map') ||
-        request.url.includes('/__nextjs_error_feedback')
+        request.url.includes('/__nextjs_source-map')
       ) {
         return { finished: false }
       }
@@ -775,9 +774,8 @@ export default class DevServer extends Server {
           isrFlushToDisk: this.nextConfig.experimental.isrFlushToDisk,
           maxMemoryCacheSize: this.nextConfig.cacheMaxMemorySize,
           nextConfigOutput: this.nextConfig.output,
-          buildId: this.buildId,
-          authInterrupts: Boolean(this.nextConfig.experimental.authInterrupts),
-          sriEnabled: Boolean(this.nextConfig.experimental.sri?.algorithm),
+          buildId: this.renderOpts.buildId,
+          authInterrupts: !!this.nextConfig.experimental.authInterrupts,
         })
         return pathsResult
       } finally {
@@ -810,7 +808,7 @@ export default class DevServer extends Server {
           staticPaths: string[] | undefined
           fallbackMode: FallbackMode | undefined
         } = {
-          staticPaths: staticPaths?.map((route) => route.pathname),
+          staticPaths: staticPaths?.map((route) => route.path),
           fallbackMode: fallback,
         }
         this.staticPathsCache.set(pathname, value)
@@ -840,7 +838,6 @@ export default class DevServer extends Server {
   }
 
   protected async findPageComponents({
-    locale,
     page,
     query,
     params,
@@ -849,7 +846,6 @@ export default class DevServer extends Server {
     shouldEnsure,
     url,
   }: {
-    locale: string | undefined
     page: string
     query: NextParsedUrlQuery
     params: Params
@@ -867,7 +863,7 @@ export default class DevServer extends Server {
       throw new WrappedBuildError(compilationErr)
     }
     try {
-      if (shouldEnsure || this.serverOptions.customServer) {
+      if (shouldEnsure || this.renderOpts.customServer) {
         await this.ensurePage({
           page,
           appPaths,
@@ -880,7 +876,6 @@ export default class DevServer extends Server {
       this.nextFontManifest = super.getNextFontManifest()
 
       return await super.findPageComponents({
-        locale,
         page,
         query,
         params,

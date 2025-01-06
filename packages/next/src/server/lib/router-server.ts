@@ -246,7 +246,7 @@ export async function initialize(opts: {
       if (
         config.i18n &&
         removePathPrefix(invokePath, config.basePath).startsWith(
-          `/${getRequestMeta(req, 'locale')}/api`
+          `/${parsedUrl.query.__nextLocale}/api`
         )
       ) {
         invokePath = fsChecker.handleLocale(

@@ -107,9 +107,9 @@ export type NEXT_DATA = {
   gip?: boolean
   appGip?: boolean
   locale?: string
-  locales?: readonly string[]
+  locales?: string[]
   defaultLocale?: string
-  domainLocales?: readonly DomainLocale[]
+  domainLocales?: DomainLocale[]
   scriptLoader?: any[]
   isPreview?: boolean
   notFoundSrcPage?: string
@@ -150,7 +150,7 @@ export interface NextPageContext {
   /**
    * All configured locales
    */
-  locales?: readonly string[]
+  locales?: string[]
   /**
    * The configured default locale
    */

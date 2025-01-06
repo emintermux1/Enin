@@ -27,7 +27,6 @@ import type { WorkStore } from '../../server/app-render/work-async-storage.exter
 import type { FallbackRouteParams } from '../../server/request/fallback-params'
 import { AfterRunner } from '../../server/after/run-with-after'
 import type { RequestLifecycleOpts } from '../../server/base-server'
-import type { AppSharedContext } from '../../server/app-render/app-render'
 
 export const enum ExportedAppPageFiles {
   HTML = 'HTML',
@@ -45,8 +44,7 @@ export async function prospectiveRenderAppPage(
   pathname: string,
   query: NextParsedUrlQuery,
   fallbackRouteParams: FallbackRouteParams | null,
-  partialRenderOpts: Omit<RenderOpts, keyof RequestLifecycleOpts>,
-  sharedContext: AppSharedContext
+  partialRenderOpts: Omit<RenderOpts, keyof RequestLifecycleOpts>
 ): Promise<undefined> {
   const afterRunner = new AfterRunner()
 
@@ -70,8 +68,7 @@ export async function prospectiveRenderAppPage(
         onAfterTaskError: afterRunner.context.onTaskError,
       },
       undefined,
-      false,
-      sharedContext
+      false
     )
 
     // TODO(after): if we abort a prerender because of an error in an after-callback
@@ -105,8 +102,7 @@ export async function exportAppPage(
   htmlFilepath: string,
   debugOutput: boolean,
   isDynamicError: boolean,
-  fileWriter: FileWriter,
-  sharedContext: AppSharedContext
+  fileWriter: FileWriter
 ): Promise<ExportRouteResult> {
   const afterRunner = new AfterRunner()
 
@@ -134,8 +130,7 @@ export async function exportAppPage(
       fallbackRouteParams,
       renderOpts,
       undefined,
-      false,
-      sharedContext
+      false
     )
 
     const html = result.toUnchunkedString()

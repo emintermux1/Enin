@@ -13,7 +13,7 @@ use turbopack_core::chunk::ChunkingContext;
 use crate::{
     code_gen::{CodeGenerateable, CodeGeneration},
     create_visitor, magic_identifier,
-    references::AstPath,
+    references::{as_abs_path, AstPath},
 };
 
 /// Responsible for initializing the `import.meta` object binding, so that it
@@ -40,13 +40,9 @@ impl CodeGenerateable for ImportMetaBinding {
     #[turbo_tasks::function]
     async fn code_generation(
         &self,
-        chunking_context: Vc<Box<dyn ChunkingContext>>,
+        _context: Vc<Box<dyn ChunkingContext>>,
     ) -> Result<Vc<CodeGeneration>> {
-        let rel_path = chunking_context
-            .root_path()
-            .await?
-            .get_relative_path_to(&*self.path.await?);
-        let path = rel_path.map_or_else(
+        let path = as_abs_path(*self.path).await?.as_str().map_or_else(
             || {
                 quote!(
                     "(() => { throw new Error('could not convert import.meta.url to filepath') })()"
@@ -54,7 +50,7 @@ impl CodeGenerateable for ImportMetaBinding {
                 )
             },
             |path| {
-                let formatted = encode_path(path.trim_start_matches("./")).to_string();
+                let formatted = encode_path(path).trim_start_matches("/ROOT/").to_string();
                 quote!(
                     "`file://${__turbopack_resolve_absolute_path__($formatted)}`" as Expr,
                     formatted: Expr = formatted.into()

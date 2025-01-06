@@ -1,22 +1,5 @@
-import type {
-  NextRouter,
-  PrivateRouteInfo,
-} from '../../shared/lib/router/router'
 import connect from '../components/react-dev-overlay/pages/hot-reloader-client'
 import { sendMessage } from '../components/react-dev-overlay/pages/websocket'
-
-// Define a local type for the window.next object
-interface NextWindow {
-  next?: {
-    router?: NextRouter & {
-      components: { [pathname: string]: PrivateRouteInfo }
-    }
-  }
-  __nextDevClientId?: string
-  location: Location
-}
-
-declare const window: NextWindow
 
 let reloading = false
 
@@ -25,13 +8,11 @@ export default (mode: 'webpack' | 'turbopack') => {
 
   devClient.subscribeToHmrEvent((obj: any) => {
     if (reloading) return
-
-    // Retrieve the router if it's available
-    const router = window.next?.router
-
-    // Determine if we're on an error page or the router is not initialized
+    // if we're on an error/404 page, we can't reliably tell if the newly added/removed page
+    // matches the current path. In that case, assume any added/removed entries should trigger a reload of the current page
     const isOnErrorPage =
-      !router || router.pathname === '/404' || router.pathname === '/_error'
+      window.next.router.pathname === '/404' ||
+      window.next.router.pathname === '/_error'
 
     switch (obj.action) {
       case 'reloadPage': {
@@ -46,13 +27,7 @@ export default (mode: 'webpack' | 'turbopack') => {
       }
       case 'removedPage': {
         const [page] = obj.data
-
-        // Check if the removed page is the current page
-        const isCurrentPage = page === router?.pathname
-
-        // We enter here if the removed page is currently being viewed
-        // or if we happen to be on an error page.
-        if (isCurrentPage || isOnErrorPage) {
+        if (page === window.next.router.pathname || isOnErrorPage) {
           sendMessage(
             JSON.stringify({
               event: 'client-removed-page',
@@ -66,17 +41,11 @@ export default (mode: 'webpack' | 'turbopack') => {
       }
       case 'addedPage': {
         const [page] = obj.data
-
-        // Check if the added page is the current page
-        const isCurrentPage = page === router?.pathname
-
-        // Check if the page component is not yet loaded
-        const isPageNotLoaded =
-          typeof router?.components?.[page] === 'undefined'
-
-        // We enter this block if the newly added page is the one currently being viewed
-        // but hasn't been loaded yet, or if we're on an error page.
-        if ((isCurrentPage && isPageNotLoaded) || isOnErrorPage) {
+        if (
+          (page === window.next.router.pathname &&
+            typeof window.next.router.components[page] === 'undefined') ||
+          isOnErrorPage
+        ) {
           sendMessage(
             JSON.stringify({
               event: 'client-added-page',

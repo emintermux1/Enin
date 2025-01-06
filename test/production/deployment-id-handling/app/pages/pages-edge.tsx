@@ -1,10 +1,10 @@
 import testImage from '../public/test.jpg'
 import Image from 'next/image'
 
-export default function Page({ data }: { data: string }) {
+export default function Page() {
   return (
     <>
-      <h1>{data}</h1>
+      <p>hello pages edge</p>
       <Image src={testImage} alt="test image" />
       <p id="deploymentId">{process.env.NEXT_DEPLOYMENT_ID}</p>
 
@@ -24,12 +24,4 @@ export default function Page({ data }: { data: string }) {
 
 export const config = {
   runtime: 'experimental-edge',
-}
-
-export function getServerSideProps() {
-  return {
-    props: {
-      data: 'hello pages edge',
-    },
-  }
 }

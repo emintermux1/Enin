@@ -1,7 +1,7 @@
 import type { DomainLocale } from '../../../server/config-shared'
 
 export function detectDomainLocale(
-  domainItems?: readonly DomainLocale[],
+  domainItems?: DomainLocale[],
   hostname?: string,
   detectedLocale?: string
 ) {

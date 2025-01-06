@@ -17,14 +17,15 @@ pub mod output_asset;
 
 use anyhow::Result;
 use turbo_rcstr::RcStr;
-use turbo_tasks::{ResolvedVc, Vc};
+use turbo_tasks::{ResolvedVc, ValueToString, Vc};
 use turbopack_core::{
     asset::{Asset, AssetContent},
     chunk::{ChunkItem, ChunkType, ChunkableModule, ChunkingContext},
     context::AssetContext,
     ident::AssetIdent,
     module::Module,
-    output::{OutputAsset, OutputAssets},
+    output::OutputAsset,
+    reference::{ModuleReferences, SingleOutputAssetReference},
     source::Source,
 };
 use turbopack_css::embed::CssEmbed;
@@ -132,8 +133,21 @@ impl ChunkItem for ModuleChunkItem {
     }
 
     #[turbo_tasks::function]
-    fn references(&self) -> Vc<OutputAssets> {
-        Vc::cell(vec![ResolvedVc::upcast(self.static_asset)])
+    async fn references(&self) -> Result<Vc<ModuleReferences>> {
+        Ok(Vc::cell(vec![ResolvedVc::upcast(
+            SingleOutputAssetReference::new(
+                *ResolvedVc::upcast(self.static_asset),
+                Vc::cell(
+                    format!(
+                        "static(url) {}",
+                        self.static_asset.ident().to_string().await?
+                    )
+                    .into(),
+                ),
+            )
+            .to_resolved()
+            .await?,
+        )]))
     }
 
     #[turbo_tasks::function]

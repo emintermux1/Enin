@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     get_invalidator, mark_session_dependent, mark_stateful, trace::TraceRawVcs, Invalidator,
-    OperationValue, SerializationInvalidator,
+    SerializationInvalidator,
 };
 
 #[derive(Serialize, Deserialize)]
@@ -135,7 +135,7 @@ impl<T: TraceRawVcs> TraceRawVcs for State<T> {
     }
 }
 
-impl<T: Default + OperationValue> Default for State<T> {
+impl<T: Default> Default for State<T> {
     fn default() -> Self {
         // Need to be explicit to ensure marking as stateful.
         Self::new(Default::default())
@@ -150,10 +150,7 @@ impl<T> PartialEq for State<T> {
 impl<T> Eq for State<T> {}
 
 impl<T> State<T> {
-    pub fn new(value: T) -> Self
-    where
-        T: OperationValue,
-    {
+    pub fn new(value: T) -> Self {
         Self {
             serialization_invalidator: mark_stateful(),
             inner: Mutex::new(StateInner::new(value)),

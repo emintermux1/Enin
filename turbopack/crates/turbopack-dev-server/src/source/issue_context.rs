@@ -55,10 +55,11 @@ impl ContentSource for IssueFilePathContentSource {
     #[turbo_tasks::function]
     async fn get_routes(self: ResolvedVc<Self>) -> Result<Vc<RouteTree>> {
         let this = self.await?;
-        let routes = content_source_get_routes_operation(this.source)
+        let routes = this
+            .source
+            .get_routes()
             .issue_file_path(this.file_path.map(|v| *v), &*this.description)
-            .await?
-            .connect();
+            .await?;
         Ok(routes.map_routes(Vc::upcast(
             IssueContextContentSourceMapper { source: self }.cell(),
         )))
@@ -68,13 +69,6 @@ impl ContentSource for IssueFilePathContentSource {
     fn get_children(&self) -> Vc<ContentSources> {
         Vc::cell(vec![self.source])
     }
-}
-
-#[turbo_tasks::function(operation)]
-fn content_source_get_routes_operation(
-    source: ResolvedVc<Box<dyn ContentSource>>,
-) -> Vc<RouteTree> {
-    source.get_routes()
 }
 
 #[turbo_tasks::value]
@@ -110,10 +104,12 @@ impl GetContentSourceContent for IssueContextGetContentSourceContent {
     #[turbo_tasks::function]
     async fn vary(&self) -> Result<Vc<ContentSourceDataVary>> {
         let source = self.source.await?;
-        Ok(get_content_source_vary_operation(self.get_content)
+        let result = self
+            .get_content
+            .vary()
             .issue_file_path(source.file_path.map(|v| *v), &*source.description)
-            .await?
-            .connect())
+            .await?;
+        Ok(result)
     }
 
     #[turbo_tasks::function]
@@ -123,29 +119,13 @@ impl GetContentSourceContent for IssueContextGetContentSourceContent {
         data: Value<ContentSourceData>,
     ) -> Result<Vc<ContentSourceContent>> {
         let source = self.source.await?;
-        Ok(
-            get_content_source_get_operation(self.get_content, path, data)
-                .issue_file_path(source.file_path.map(|v| *v), &*source.description)
-                .await?
-                .connect(),
-        )
+        let result = self
+            .get_content
+            .get(path, data)
+            .issue_file_path(source.file_path.map(|v| *v), &*source.description)
+            .await?;
+        Ok(result)
     }
-}
-
-#[turbo_tasks::function(operation)]
-fn get_content_source_vary_operation(
-    get_content: ResolvedVc<Box<dyn GetContentSourceContent>>,
-) -> Vc<ContentSourceDataVary> {
-    get_content.vary()
-}
-
-#[turbo_tasks::function(operation)]
-fn get_content_source_get_operation(
-    get_content: ResolvedVc<Box<dyn GetContentSourceContent>>,
-    path: RcStr,
-    data: Value<ContentSourceData>,
-) -> Vc<ContentSourceContent> {
-    get_content.get(path, data)
 }
 
 #[turbo_tasks::value_impl]

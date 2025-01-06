@@ -1,9 +1,5 @@
 import type { ExportRouteResult, FileWriter } from '../types'
-import type {
-  PagesRenderContext,
-  PagesSharedContext,
-  RenderOpts,
-} from '../../server/render'
+import type { RenderOpts } from '../../server/render'
 import type { LoadComponentsReturnType } from '../../server/load-components'
 import type { AmpValidation } from '../types'
 import type { NextParsedUrlQuery } from '../../server/request-meta'
@@ -51,8 +47,6 @@ export async function exportPagesPage(
   pagesDataDir: string,
   buildExport: boolean,
   isDynamic: boolean,
-  sharedContext: PagesSharedContext,
-  renderContext: PagesRenderContext,
   hasOrigQueryValues: boolean,
   renderOpts: RenderOpts,
   components: LoadComponentsReturnType,
@@ -123,9 +117,7 @@ export async function exportPagesPage(
         res,
         page,
         searchAndDynamicParams,
-        renderOpts,
-        sharedContext,
-        renderContext
+        renderOpts
       )
     } catch (err) {
       if (!isBailoutToCSRError(err)) throw err
@@ -181,9 +173,7 @@ export async function exportPagesPage(
           res,
           page,
           { ...searchAndDynamicParams, amp: '1' },
-          renderOpts,
-          sharedContext,
-          renderContext
+          renderOpts
         )
       } catch (err) {
         if (!isBailoutToCSRError(err)) throw err

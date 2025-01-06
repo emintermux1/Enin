@@ -109,14 +109,13 @@ function getImageConfig(
     'process.env.__NEXT_IMAGE_OPTS': {
       deviceSizes: config.images.deviceSizes,
       imageSizes: config.images.imageSizes,
-      qualities: config.images.qualities,
       path: config.images.path,
       loader: config.images.loader,
       dangerouslyAllowSVG: config.images.dangerouslyAllowSVG,
       unoptimized: config?.images?.unoptimized,
       ...(dev
         ? {
-            // additional config in dev to allow validating on the client
+            // pass domains in development to allow validating on the client
             domains: config.images.domains,
             remotePatterns: config.images?.remotePatterns,
             localPatterns: config.images?.localPatterns,

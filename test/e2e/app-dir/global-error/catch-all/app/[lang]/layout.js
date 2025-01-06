@@ -7,6 +7,3 @@ export default async function RootLayout({ children }) {
 }
 
 export const dynamic = 'force-dynamic'
-export async function generateStaticParams() {
-  return [{ lang: 'en' }]
-}

@@ -174,6 +174,10 @@ async function createNextInstall({
           .traceAsyncFn(() => installDependencies(installDir, tmpDir))
       }
 
+      if (!keepRepoDir && tmpRepoDir) {
+        await fs.remove(tmpRepoDir)
+      }
+
       return {
         installDir,
         pkgPaths,

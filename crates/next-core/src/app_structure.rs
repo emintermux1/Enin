@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 use tracing::Instrument;
 use turbo_rcstr::RcStr;
 use turbo_tasks::{
-    debug::ValueDebugFormat, fxindexmap, trace::TraceRawVcs, FxIndexMap, NonLocalValue, ResolvedVc,
-    TaskInput, TryJoinIterExt, ValueDefault, ValueToString, Vc,
+    debug::ValueDebugFormat, fxindexmap, trace::TraceRawVcs, FxIndexMap, ResolvedVc, TaskInput,
+    TryJoinIterExt, ValueDefault, ValueToString, Vc,
 };
 use turbo_tasks_fs::{DirectoryContent, DirectoryEntry, FileSystemEntryType, FileSystemPath};
 use turbopack_core::issue::{
@@ -27,7 +27,7 @@ use crate::{
 };
 
 /// A final route in the app directory.
-#[turbo_tasks::value]
+#[turbo_tasks::value(local)]
 #[derive(Default, Debug, Clone)]
 pub struct AppDirModules {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -76,34 +76,24 @@ impl AppDirModules {
 }
 
 /// A single metadata file plus an optional "alt" text file.
-#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq, TraceRawVcs, NonLocalValue)]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq, TraceRawVcs)]
 pub enum MetadataWithAltItem {
     Static {
-        path: ResolvedVc<FileSystemPath>,
-        alt_path: Option<ResolvedVc<FileSystemPath>>,
+        path: Vc<FileSystemPath>,
+        alt_path: Option<Vc<FileSystemPath>>,
     },
     Dynamic {
-        path: ResolvedVc<FileSystemPath>,
+        path: Vc<FileSystemPath>,
     },
 }
 
 /// A single metadata file.
 #[derive(
-    Copy,
-    Clone,
-    Debug,
-    Hash,
-    Serialize,
-    Deserialize,
-    PartialEq,
-    Eq,
-    TaskInput,
-    TraceRawVcs,
-    NonLocalValue,
+    Copy, Clone, Debug, Hash, Serialize, Deserialize, PartialEq, Eq, TaskInput, TraceRawVcs,
 )]
 pub enum MetadataItem {
-    Static { path: ResolvedVc<FileSystemPath> },
-    Dynamic { path: ResolvedVc<FileSystemPath> },
+    Static { path: Vc<FileSystemPath> },
+    Dynamic { path: Vc<FileSystemPath> },
 }
 
 #[turbo_tasks::function]
@@ -130,7 +120,7 @@ pub async fn get_metadata_route_name(meta: MetadataItem) -> Result<Vc<RcStr>> {
 }
 
 impl MetadataItem {
-    pub fn into_path(self) -> ResolvedVc<FileSystemPath> {
+    pub fn into_path(self) -> Vc<FileSystemPath> {
         match self {
             MetadataItem::Static { path } => path,
             MetadataItem::Dynamic { path } => path,
@@ -148,9 +138,7 @@ impl From<MetadataWithAltItem> for MetadataItem {
 }
 
 /// Metadata file that can be placed in any segment of the app directory.
-#[derive(
-    Default, Clone, Debug, Serialize, Deserialize, PartialEq, Eq, TraceRawVcs, NonLocalValue,
-)]
+#[derive(Default, Clone, Debug, Serialize, Deserialize, PartialEq, Eq, TraceRawVcs)]
 pub struct Metadata {
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub icon: Vec<MetadataWithAltItem>,
@@ -192,7 +180,7 @@ impl Metadata {
 }
 
 /// Metadata files that can be placed in the root of the app directory.
-#[turbo_tasks::value]
+#[turbo_tasks::value(local)]
 #[derive(Default, Clone, Debug)]
 pub struct GlobalMetadata {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -214,7 +202,7 @@ impl GlobalMetadata {
     }
 }
 
-#[turbo_tasks::value]
+#[turbo_tasks::value(local)]
 #[derive(Debug)]
 pub struct DirectoryTree {
     /// key is e.g. "dashboard", "(dashboard)", "@slot"
@@ -222,7 +210,7 @@ pub struct DirectoryTree {
     pub modules: AppDirModules,
 }
 
-#[turbo_tasks::value]
+#[turbo_tasks::value(local)]
 #[derive(Clone, Debug)]
 struct PlainDirectoryTree {
     /// key is e.g. "dashboard", "(dashboard)", "@slot"
@@ -350,9 +338,9 @@ async fn get_directory_tree_internal(
                     "opengraph-image" => &mut metadata_open_graph,
                     "sitemap" => {
                         if dynamic {
-                            modules.metadata.sitemap = Some(MetadataItem::Dynamic { path: file });
+                            modules.metadata.sitemap = Some(MetadataItem::Dynamic { path: *file });
                         } else {
-                            modules.metadata.sitemap = Some(MetadataItem::Static { path: file });
+                            modules.metadata.sitemap = Some(MetadataItem::Static { path: *file });
                         }
                         continue;
                     }
@@ -360,7 +348,7 @@ async fn get_directory_tree_internal(
                 };
 
                 if dynamic {
-                    entry.push((number, MetadataWithAltItem::Dynamic { path: file }));
+                    entry.push((number, MetadataWithAltItem::Dynamic { path: *file }));
                     continue;
                 }
 
@@ -369,18 +357,14 @@ async fn get_directory_tree_internal(
                 let basename = file_name
                     .rsplit_once('.')
                     .map_or(file_name, |(basename, _)| basename);
-                let alt_path = file
-                    .parent()
-                    .join(format!("{}.alt.txt", basename).into())
-                    .to_resolved()
-                    .await?;
+                let alt_path = file.parent().join(format!("{}.alt.txt", basename).into());
                 let alt_path = matches!(&*alt_path.get_type().await?, FileSystemEntryType::File)
                     .then_some(alt_path);
 
                 entry.push((
                     number,
                     MetadataWithAltItem::Static {
-                        path: file,
+                        path: *file,
                         alt_path,
                     },
                 ));
@@ -416,7 +400,7 @@ async fn get_directory_tree_internal(
     .cell())
 }
 
-#[turbo_tasks::value]
+#[turbo_tasks::value(local)]
 #[derive(Debug, Clone)]
 pub struct AppPageLoaderTree {
     pub page: AppPage,
@@ -512,7 +496,6 @@ impl ValueDefault for FileSystemPathVec {
     ValueDebugFormat,
     Debug,
     TaskInput,
-    NonLocalValue,
 )]
 pub enum Entrypoint {
     AppPage {
@@ -540,7 +523,7 @@ impl Entrypoint {
     }
 }
 
-#[turbo_tasks::value(transparent)]
+#[turbo_tasks::value(transparent, local)]
 pub struct Entrypoints(FxIndexMap<AppPath, Entrypoint>);
 
 fn is_parallel_route(name: &str) -> bool {
@@ -556,7 +539,7 @@ fn match_parallel_route(name: &str) -> Option<&str> {
 }
 
 fn conflict_issue(
-    app_dir: ResolvedVc<FileSystemPath>,
+    app_dir: Vc<FileSystemPath>,
     e: &'_ OccupiedEntry<'_, AppPath, Entrypoint>,
     a: &str,
     b: &str,
@@ -587,7 +570,7 @@ fn conflict_issue(
 }
 
 fn add_app_page(
-    app_dir: ResolvedVc<FileSystemPath>,
+    app_dir: Vc<FileSystemPath>,
     result: &mut FxIndexMap<AppPath, Entrypoint>,
     page: AppPage,
     loader_tree: ResolvedVc<AppPageLoaderTree>,
@@ -646,7 +629,7 @@ fn add_app_page(
 }
 
 fn add_app_route(
-    app_dir: ResolvedVc<FileSystemPath>,
+    app_dir: Vc<FileSystemPath>,
     result: &mut FxIndexMap<AppPath, Entrypoint>,
     page: AppPage,
     path: ResolvedVc<FileSystemPath>,
@@ -689,7 +672,7 @@ fn add_app_route(
 }
 
 fn add_app_metadata_route(
-    app_dir: ResolvedVc<FileSystemPath>,
+    app_dir: Vc<FileSystemPath>,
     result: &mut FxIndexMap<AppPath, Entrypoint>,
     page: AppPage,
     metadata: MetadataItem,
@@ -1122,7 +1105,7 @@ async fn default_route_tree(
 
 #[turbo_tasks::function]
 async fn directory_tree_to_entrypoints_internal(
-    app_dir: ResolvedVc<FileSystemPath>,
+    app_dir: Vc<FileSystemPath>,
     global_metadata: Vc<GlobalMetadata>,
     directory_name: RcStr,
     directory_tree: Vc<DirectoryTree>,
@@ -1143,7 +1126,7 @@ async fn directory_tree_to_entrypoints_internal(
 }
 
 async fn directory_tree_to_entrypoints_internal_untraced(
-    app_dir: ResolvedVc<FileSystemPath>,
+    app_dir: Vc<FileSystemPath>,
     global_metadata: Vc<GlobalMetadata>,
     directory_name: RcStr,
     directory_tree: Vc<DirectoryTree>,
@@ -1172,7 +1155,7 @@ async fn directory_tree_to_entrypoints_internal_untraced(
         let app_path = AppPath::from(app_page.clone());
 
         let loader_tree = *directory_tree_to_loader_tree(
-            *app_dir,
+            app_dir,
             global_metadata,
             directory_name.clone(),
             directory_tree_vc,
@@ -1262,7 +1245,7 @@ async fn directory_tree_to_entrypoints_internal_untraced(
                             modules: AppDirModules {
                                 page: match modules.not_found {
                                     Some(v) => Some(v),
-                                    None => Some(get_next_package(*app_dir)
+                                    None => Some(get_next_package(app_dir)
                                         .join("dist/client/components/not-found-error.js".into())
                                         .to_resolved()
                                         .await?),
@@ -1306,7 +1289,7 @@ async fn directory_tree_to_entrypoints_internal_untraced(
             }
 
             let map = directory_tree_to_entrypoints_internal(
-                *app_dir,
+                app_dir,
                 global_metadata,
                 subdir_name.clone(),
                 *subdirectory,
@@ -1333,7 +1316,7 @@ async fn directory_tree_to_entrypoints_internal_untraced(
                         let app_path = AppPath::from(page.clone());
 
                         let loader_tree = directory_tree_to_loader_tree(
-                            *app_dir,
+                            app_dir,
                             global_metadata,
                             directory_name.clone(),
                             directory_tree_vc,
@@ -1418,9 +1401,9 @@ pub async fn get_global_metadata(
         };
 
         if dynamic {
-            *entry = Some(MetadataItem::Dynamic { path: file });
+            *entry = Some(MetadataItem::Dynamic { path: *file });
         } else {
-            *entry = Some(MetadataItem::Static { path: file });
+            *entry = Some(MetadataItem::Static { path: *file });
         }
         // TODO(WEB-952) handle symlinks in app dir
     }
@@ -1428,10 +1411,11 @@ pub async fn get_global_metadata(
     Ok(metadata.cell())
 }
 
-#[turbo_tasks::value(shared)]
+#[turbo_tasks::value(shared, local)]
 struct DirectoryTreeIssue {
     pub severity: ResolvedVc<IssueSeverity>,
-    pub app_dir: ResolvedVc<FileSystemPath>,
+    // no-resolved-vc(kdy1): I'll resolve this later because it's a complex case.
+    pub app_dir: Vc<FileSystemPath>,
     pub message: ResolvedVc<StyledString>,
 }
 
@@ -1454,7 +1438,7 @@ impl Issue for DirectoryTreeIssue {
 
     #[turbo_tasks::function]
     fn file_path(&self) -> Vc<FileSystemPath> {
-        *self.app_dir
+        self.app_dir
     }
 
     #[turbo_tasks::function]

@@ -62,12 +62,9 @@ export function runTests(ctx) {
       cwd: join(ctx.appDir, '.next/static'),
     })
 
-    // Only use a subset of the locales to speed up the test
-    for (const locale of [
-      ...nonDomainLocales.slice(0, 2),
-      ...domainLocales.slice(0, 2),
-    ]) {
+    for (const locale of locales) {
       for (const asset of assets) {
+        require('console').log({ locale, asset })
         // _next/static asset
         const res = await fetchViaHTTP(
           ctx.appPort,

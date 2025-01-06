@@ -1,19 +1,10 @@
 import dynamic from 'next/dynamic';
-const DynamicComponent1 = dynamic(()=>handleImport(import('./components/hello1')), {
+const DynamicComponent = dynamic(()=>handleImport(import('./components/hello')), {
     loadableGenerated: {
         modules: [
-            "src/some-file.js -> " + "./components/hello1"
+            "src/some-file.js -> " + "./components/hello"
         ]
     },
     loading: ()=>null,
     ssr: false
-});
-const DynamicComponent2 = dynamic(()=>import('./components/hello2').then((mod)=>{
-        return mod.Button;
-    }), {
-    loadableGenerated: {
-        modules: [
-            "src/some-file.js -> " + "./components/hello2"
-        ]
-    }
 });

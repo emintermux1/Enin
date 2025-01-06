@@ -746,14 +746,9 @@ function bindingToApi(
     }
 
     traceSource(
-      stackFrame: TurbopackStackFrame,
-      currentDirectoryFileUrl: string
+      stackFrame: TurbopackStackFrame
     ): Promise<TurbopackStackFrame | null> {
-      return binding.projectTraceSource(
-        this._nativeProject,
-        stackFrame,
-        currentDirectoryFileUrl
-      )
+      return binding.projectTraceSource(this._nativeProject, stackFrame)
     }
 
     getSourceForAsset(filePath: string): Promise<string | null> {

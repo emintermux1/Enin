@@ -56,8 +56,8 @@ type ModuleFactory = (
   context: TurbopackNodeBuildContext
 ) => undefined;
 
-const url = require("url") as typeof import('url');
-const fs = require("fs/promises") as typeof import('fs/promises');
+const url = require("url");
+const fs = require("fs/promises");
 
 const moduleFactories: ModuleFactories = Object.create(null);
 const moduleCache: ModuleCache<ModuleWithDirection> = Object.create(null);
@@ -77,11 +77,12 @@ function createResolvePathFromModule(
 
     const strippedAssetPrefix = exportedPath.slice(ASSET_PREFIX.length);
     const resolved = path.resolve(
-      RUNTIME_ROOT,
+      ABSOLUTE_ROOT,
+      OUTPUT_ROOT,
       strippedAssetPrefix
     );
 
-    return url.pathToFileURL(resolved).href;
+    return url.pathToFileURL(resolved);
   };
 }
 

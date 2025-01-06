@@ -28,7 +28,15 @@
             try {
               b: {
                 advanceTimers(currentTime);
-                for (currentTask = peek(taskQueue); null !== currentTask; ) {
+                for (
+                  currentTask = peek(taskQueue);
+                  null !== currentTask &&
+                  !(
+                    currentTask.expirationTime > currentTime &&
+                    shouldYieldToHost()
+                  );
+
+                ) {
                   var callback = currentTask.callback;
                   if ("function" === typeof callback) {
                     currentTask.callback = null;
@@ -47,11 +55,6 @@
                     advanceTimers(currentTime);
                   } else pop(taskQueue);
                   currentTask = peek(taskQueue);
-                  if (
-                    null === currentTask ||
-                    currentTask.expirationTime > currentTime
-                  )
-                    break;
                 }
                 if (null !== currentTask) hasMoreWork = !0;
                 else {
@@ -219,7 +222,7 @@
       return currentPriorityLevel;
     }
     function shouldYieldToHost() {
-      return 5 > getCurrentTime() - startTime ? !1 : !0;
+      return getCurrentTime() - startTime < frameInterval ? !1 : !0;
     }
     function requestPaint() {}
     function requestHostTimeout(callback, ms) {
@@ -260,6 +263,7 @@
         "undefined" !== typeof setImmediate ? setImmediate : null,
       isMessageLoopRunning = !1,
       taskTimeoutID = -1,
+      frameInterval = 5,
       startTime = -1;
     if ("function" === typeof localSetImmediate)
       var schedulePerformWorkUntilDeadline = function () {
@@ -326,10 +330,13 @@
     exports.unstable_Profiling = null;
     exports.unstable_UserBlockingPriority = channel;
     exports.unstable_cancelCallback = unstable_cancelCallback;
+    exports.unstable_continueExecution = throwNotImplemented;
     exports.unstable_forceFrameRate = throwNotImplemented;
     exports.unstable_getCurrentPriorityLevel = unstable_getCurrentPriorityLevel;
+    exports.unstable_getFirstCallbackNode = throwNotImplemented;
     exports.unstable_next = throwNotImplemented;
     exports.unstable_now = unstable_now;
+    exports.unstable_pauseExecution = throwNotImplemented;
     exports.unstable_requestPaint = unstable_requestPaint;
     exports.unstable_runWithPriority = throwNotImplemented;
     exports.unstable_scheduleCallback = unstable_scheduleCallback;

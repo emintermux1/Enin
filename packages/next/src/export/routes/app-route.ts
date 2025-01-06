@@ -87,8 +87,6 @@ export async function exportAppRoute(
       onClose: afterRunner.context.onClose,
       onAfterTaskError: afterRunner.context.onTaskError,
       cacheLifeProfiles,
-    },
-    sharedContext: {
       buildId,
     },
   }

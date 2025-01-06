@@ -4,6 +4,7 @@ use turbopack_core::{
     chunk::{AsyncModuleInfo, ChunkItem, ChunkType, ChunkingContext},
     ident::AssetIdent,
     module::Module,
+    reference::ModuleReferences,
 };
 
 use super::module::EcmascriptModuleLocalsModule;
@@ -76,6 +77,11 @@ impl EcmascriptChunkItem for EcmascriptModuleLocalsChunkItem {
 
 #[turbo_tasks::value_impl]
 impl ChunkItem for EcmascriptModuleLocalsChunkItem {
+    #[turbo_tasks::function]
+    fn references(&self) -> Vc<ModuleReferences> {
+        self.module.references()
+    }
+
     #[turbo_tasks::function]
     fn asset_ident(&self) -> Vc<AssetIdent> {
         self.module.ident()

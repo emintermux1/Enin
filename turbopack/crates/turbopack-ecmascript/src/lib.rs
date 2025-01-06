@@ -628,6 +628,11 @@ impl ChunkItem for ModuleChunkItem {
     }
 
     #[turbo_tasks::function]
+    fn references(&self) -> Vc<ModuleReferences> {
+        self.module.references()
+    }
+
+    #[turbo_tasks::function]
     fn chunking_context(&self) -> Vc<Box<dyn ChunkingContext>> {
         *ResolvedVc::upcast(self.chunking_context)
     }
