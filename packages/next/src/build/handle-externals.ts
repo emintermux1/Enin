@@ -73,7 +73,6 @@ export async function resolveExternal(
 
   for (const preferEsm of preferEsmOptions) {
     const resolveOptions = preferEsm ? esmResolveOptions : nodeResolveOptions
-
     const resolve = getResolve(resolveOptions)
 
     // Resolve the import with the webpack provided context, this

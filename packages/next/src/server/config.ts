@@ -926,6 +926,7 @@ function assignDefaults(
   if (!result.experimental) {
     result.experimental = {}
   }
+
   result.experimental.optimizePackageImports = [
     ...new Set([
       ...userProvidedOptimizePackageImports,
@@ -1011,6 +1012,12 @@ function assignDefaults(
       'react-icons/wi',
     ]),
   ]
+
+  // TODO: investigate these with rspack (main issue is with date-fns
+  // but disabling all for consistency)
+  if (process.env.NEXT_RSPACK) {
+    result.experimental.optimizePackageImports = []
+  }
 
   if (!result.experimental.htmlLimitedBots) {
     // @ts-expect-error: override the htmlLimitedBots with default string, type covert: RegExp -> string

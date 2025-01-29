@@ -12,7 +12,7 @@ import type {
 import type { LoadedEnvFiles } from '@next/env'
 import type { AppLoaderOptions } from './webpack/loaders/next-app-loader'
 
-import { posix, join, dirname, extname } from 'path'
+import { posix, join, dirname, extname, normalize } from 'path'
 import { stringify } from 'querystring'
 import fs from 'fs'
 import {
@@ -473,9 +473,18 @@ export function getInstrumentationEntry(opts: {
   }
 }
 
+export function getAppLoader() {
+  return process.env.BUILTIN_APP_LOADER
+    ? `builtin:next-app-loader`
+    : 'next-app-loader'
+}
+
 export function getAppEntry(opts: Readonly<AppLoaderOptions>) {
+  if (process.env.NEXT_RSPACK && process.env.BUILTIN_APP_LOADER) {
+    ;(opts as any).projectRoot = normalize(join(__dirname, '../../..'))
+  }
   return {
-    import: `next-app-loader?${stringify(opts)}!`,
+    import: `${getAppLoader()}?${stringify(opts)}!`,
     layer: WEBPACK_LAYERS.reactServerComponents,
   }
 }

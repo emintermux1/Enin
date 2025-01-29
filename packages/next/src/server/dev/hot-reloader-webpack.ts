@@ -263,6 +263,7 @@ export default class HotReloaderWebpack implements NextJsHotReloaderInterface {
   public activeWebpackConfigs?: Array<
     UnwrapPromise<ReturnType<typeof getBaseWebpackConfig>>
   >
+  private isRspack = Boolean(process.env.NEXT_RSPACK)
 
   constructor(
     dir: string,
@@ -751,6 +752,14 @@ export default class HotReloaderWebpack implements NextJsHotReloaderInterface {
   }
 
   public async start(): Promise<void> {
+    if (process.env.NEXT_RSPACK_OTEL) {
+      console.log('next bin rspack otel')
+      await require('@rspack/core').experiments.globalTrace.register(
+        'trace',
+        'otel',
+        ''
+      )
+    }
     const startSpan = this.hotReloaderSpan.traceChild('start')
     startSpan.stop() // Stop immediately to create an artificial parent span
 
@@ -1523,6 +1532,25 @@ export default class HotReloaderWebpack implements NextJsHotReloaderInterface {
     const outputPath = this.multiCompiler?.outputPath
     if (outputPath) {
       getInvalidator(outputPath)?.invalidate()
+    }
+  }
+
+  public async stop(): Promise<void> {
+    await new Promise((resolve, reject) => {
+      this.watcher.close((err: any) => (err ? reject(err) : resolve(true)))
+    })
+
+    if (this.fallbackWatcher) {
+      await new Promise((resolve, reject) => {
+        this.fallbackWatcher.close((err: any) =>
+          err ? reject(err) : resolve(true)
+        )
+      })
+    }
+    this.multiCompiler = undefined
+
+    if (this.isRspack) {
+      await require('@rspack/core').experiments.globalTrace.cleanup()
     }
   }
 

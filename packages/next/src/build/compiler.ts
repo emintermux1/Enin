@@ -35,7 +35,7 @@ function closeCompiler(compiler: webpack.Compiler | webpack.MultiCompiler) {
   })
 }
 
-export function runCompiler(
+export async function runCompiler(
   config: webpack.Configuration,
   {
     runWebpackSpan,
@@ -50,6 +50,14 @@ export function runCompiler(
     inputFileSystem?: webpack.Compiler['inputFileSystem'],
   ]
 > {
+  if (process.env.NEXT_RSPACK_OTEL) {
+    console.log('next bin rspack otel')
+    await require('@rspack/core').experiments.globalTrace.register(
+      'trace',
+      'otel',
+      ''
+    )
+  }
   return new Promise((resolve, reject) => {
     const compiler = webpack(config)
     // Ensure we use the previous inputFileSystem
@@ -58,11 +66,22 @@ export function runCompiler(
     }
     compiler.fsStartTime = Date.now()
     compiler.run((err, stats) => {
+      console.log('compiler.run', compiler.name, err)
+
+      const result = runWebpackSpan
+        .traceChild('webpack-generate-error-stats')
+        .traceFn(() =>
+          generateStats({ errors: [], warnings: [], stats }, stats!)
+        )
+
       const webpackCloseSpan = runWebpackSpan.traceChild('webpack-close', {
         name: config.name || 'unknown',
       })
       webpackCloseSpan
         .traceAsyncFn(() => closeCompiler(compiler))
+        .then(() => {
+          return require('@rspack/core').experiments.globalTrace.cleanup()
+        })
         .then(() => {
           if (err) {
             const reason = err.stack ?? err.toString()
@@ -78,12 +97,6 @@ export function runCompiler(
             }
             return reject(err)
           } else if (!stats) throw new Error('No Stats from webpack')
-
-          const result = webpackCloseSpan
-            .traceChild('webpack-generate-error-stats')
-            .traceFn(() =>
-              generateStats({ errors: [], warnings: [], stats }, stats)
-            )
           return resolve([result, compiler.inputFileSystem])
         })
     })
