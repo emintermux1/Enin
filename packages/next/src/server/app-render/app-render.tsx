@@ -1162,18 +1162,10 @@ async function renderToHTMLOrFlightImpl(
   // react-server-dom-webpack. This is a hack until we find a better way.
   if (ComponentMod.__next_app__) {
     const instrumented = wrapClientComponentLoader(ComponentMod)
-    // @ts-ignore
+    // @ts-expect-error
     globalThis.__next_require__ = instrumented.require
-    // When we are prerendering if there is a cacheSignal for tracking
-    // cache reads we wrap the loadChunk in this tracking. This allows us
-    // to treat chunk loading with similar semantics as cache reads to avoid
-    // async loading chunks from causing a prerender to abort too early.
-    // @ts-ignore
-    globalThis.__next_chunk_load__ = (...args: Array<any>) => {
-      const loadingChunk = instrumented.loadChunk(...args)
-      trackChunkLoading(loadingChunk)
-      return loadingChunk
-    }
+    // @ts-expect-error
+    globalThis.__next_chunk_load__ = instrumented.loadChunk
   }
 
   if (process.env.NODE_ENV === 'development') {
@@ -2253,19 +2245,13 @@ async function spawnDynamicValidationInDev(
   const nonce = '1'
 
   if (initialServerStream) {
-    const [warmupStream, renderStream] = initialServerStream.tee()
-    initialServerStream = null
-    // Before we attempt the SSR initial render we need to ensure all client modules
-    // are already loaded.
-    await warmFlightResponse(warmupStream, clientReferenceManifest)
-
     const prerender = require('react-dom/static.edge')
       .prerender as (typeof import('react-dom/static.edge'))['prerender']
     const pendingInitialClientResult = workUnitAsyncStorage.run(
       initialClientPrerenderStore,
       prerender,
       <App
-        reactServerStream={renderStream}
+        reactServerStream={initialServerStream}
         preinitScripts={() => {}}
         clientReferenceManifest={clientReferenceManifest}
         ServerInsertedHTMLProvider={ServerInsertedHTMLProvider}
@@ -2743,13 +2729,6 @@ async function prerenderToStream(
         }
 
         if (initialServerResult) {
-          // Before we attempt the SSR initial render we need to ensure all client modules
-          // are already loaded.
-          await warmFlightResponse(
-            initialServerResult.asStream(),
-            clientReferenceManifest
-          )
-
           const initialClientController = new AbortController()
           const initialClientPrerenderStore: PrerenderStore = {
             type: 'prerender',
@@ -2757,7 +2736,7 @@ async function prerenderToStream(
             implicitTags: implicitTags,
             renderSignal: initialClientController.signal,
             controller: initialClientController,
-            cacheSignal: null,
+            cacheSignal,
             dynamicTracking: null,
             revalidate: INFINITE_CACHE,
             expire: INFINITE_CACHE,
@@ -2810,7 +2789,8 @@ async function prerenderToStream(
                     : [bootstrapScript],
                 }
               ),
-            () => {
+            async () => {
+              await cacheSignal.cacheReady()
               initialClientController.abort()
             }
           ).catch((err) => {
@@ -2882,7 +2862,7 @@ async function prerenderToStream(
                 prerenderIsPending = false
                 return prerenderResult
               },
-              () => {
+              async () => {
                 if (finalServerController.signal.aborted) {
                   // If the server controller is already aborted we must have called something
                   // that required aborting the prerender synchronously such as with new Date()
@@ -2976,7 +2956,7 @@ async function prerenderToStream(
                   : [bootstrapScript],
               }
             ),
-          () => {
+          async () => {
             finalClientController.abort()
           }
         )
@@ -3231,19 +3211,13 @@ async function prerenderToStream(
         }
 
         if (initialServerStream) {
-          const [warmupStream, renderStream] = initialServerStream.tee()
-          initialServerStream = null
-          // Before we attempt the SSR initial render we need to ensure all client modules
-          // are already loaded.
-          await warmFlightResponse(warmupStream, clientReferenceManifest)
-
           const prerender = require('react-dom/static.edge')
             .prerender as (typeof import('react-dom/static.edge'))['prerender']
           const pendingInitialClientResult = workUnitAsyncStorage.run(
             initialClientPrerenderStore,
             prerender,
             <App
-              reactServerStream={renderStream}
+              reactServerStream={initialServerStream}
               preinitScripts={preinitScripts}
               clientReferenceManifest={clientReferenceManifest}
               ServerInsertedHTMLProvider={ServerInsertedHTMLProvider}
@@ -4030,62 +4004,6 @@ async function prerenderToStream(
       throw finalErr
     }
   }
-}
-
-const loadingChunks: Set<Promise<unknown>> = new Set()
-const chunkListeners: Array<(x?: unknown) => void> = []
-
-function trackChunkLoading(load: Promise<unknown>) {
-  loadingChunks.add(load)
-  load.finally(() => {
-    if (loadingChunks.has(load)) {
-      loadingChunks.delete(load)
-      if (loadingChunks.size === 0) {
-        // We are not currently loading any chunks. We can notify all listeners
-        for (let i = 0; i < chunkListeners.length; i++) {
-          chunkListeners[i]()
-        }
-        chunkListeners.length = 0
-      }
-    }
-  })
-}
-
-export async function warmFlightResponse(
-  flightStream: ReadableStream<Uint8Array>,
-  clientReferenceManifest: DeepReadonly<ClientReferenceManifest>
-) {
-  let createFromReadableStream
-  if (process.env.TURBOPACK) {
-    createFromReadableStream =
-      // eslint-disable-next-line import/no-extraneous-dependencies
-      require('react-server-dom-turbopack/client.edge').createFromReadableStream
-  } else {
-    createFromReadableStream =
-      // eslint-disable-next-line import/no-extraneous-dependencies
-      require('react-server-dom-webpack/client.edge').createFromReadableStream
-  }
-
-  try {
-    createFromReadableStream(flightStream, {
-      serverConsumerManifest: {
-        moduleLoading: clientReferenceManifest.moduleLoading,
-        moduleMap: clientReferenceManifest.ssrModuleMapping,
-        serverModuleMap: null,
-      },
-    })
-  } catch {
-    // We don't want to handle errors here but we don't want it to
-    // interrupt the outer flow. We simply ignore it here and expect
-    // it will bubble up during a render
-  }
-
-  // We'll wait at least one task and then if no chunks have started to load
-  // we'll we can infer that there are none to load from this flight response
-  trackChunkLoading(waitAtLeastOneReactRenderTask())
-  return new Promise((r) => {
-    chunkListeners.push(r)
-  })
 }
 
 const getGlobalErrorStyles = async (
