@@ -1,7 +1,7 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use next_custom_transforms::transforms::track_dynamic_imports::*;
-use swc_core::ecma::ast::Program;
+use swc_core::{common::SyntaxContext, ecma::ast::Program};
 use turbopack::module_options::ModuleRule;
 use turbopack_ecmascript::{CustomTransformer, TransformContext};
 
@@ -17,8 +17,8 @@ struct NextTrackDynamicImports {}
 #[async_trait]
 impl CustomTransformer for NextTrackDynamicImports {
     #[tracing::instrument(level = tracing::Level::TRACE, name = "next_track_dynamic_imports", skip_all)]
-    async fn transform(&self, program: &mut Program, _ctx: &TransformContext<'_>) -> Result<()> {
-        program.mutate(track_dynamic_imports());
+    async fn transform(&self, program: &mut Program, ctx: &TransformContext<'_>) -> Result<()> {
+        program.mutate(track_dynamic_imports(ctx.unresolved_mark, ctx.comments));
         Ok(())
     }
 }
