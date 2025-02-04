@@ -12,9 +12,10 @@
 
 type ChunkResolver = {
   resolved: boolean;
+  loadingStarted: boolean;
   resolve: () => void;
   reject: (error?: Error) => void;
-  promise: Promise<void>;
+  promise: Promise<any>;
 };
 
 let BACKEND: RuntimeBackend;
@@ -99,6 +100,7 @@ const chunkResolvers: Map<ChunkPath, ChunkResolver> = new Map();
       });
       resolver = {
         resolved: false,
+        loadingStarted: false,
         promise,
         resolve: () => {
           resolver!.resolved = true;
@@ -117,13 +119,14 @@ const chunkResolvers: Map<ChunkPath, ChunkResolver> = new Map();
    */
   async function doLoadChunk(chunkPath: ChunkPath, source: SourceInfo) {
     const resolver = getOrCreateResolver(chunkPath);
-    if (resolver.resolved) {
+    if (resolver.loadingStarted) {
       return resolver.promise;
     }
 
     if (source.type === SourceType.Runtime) {
       // We don't need to load chunks references from runtime code, as they're already
       // present in the DOM.
+      resolver.loadingStarted = true;
 
       if (chunkPath.endsWith(".css")) {
         // CSS chunks do not register themselves, and as such must be marked as
@@ -201,6 +204,7 @@ const chunkResolvers: Map<ChunkPath, ChunkResolver> = new Map();
       }
     }
 
+    resolver.loadingStarted = true;
     return resolver.promise;
   }
 })();
