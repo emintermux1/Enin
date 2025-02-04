@@ -1,4 +1,5 @@
 use std::{
+    cmp::max,
     collections::VecDeque,
     fmt::{Debug, Formatter},
     sync::{Arc, OnceLock},
@@ -10,7 +11,7 @@ use crate::{
     bottom_up::build_bottom_up_graph,
     span::{SpanGraph, SpanGraphEvent, SpanIndex},
     span_bottom_up_ref::SpanBottomUpRef,
-    span_ref::SpanRef,
+    span_ref::{SpanRef, LOGICAL_MIN_MAX_FACTOR},
     store::{SpanId, Store},
     FxIndexMap,
 };
@@ -164,6 +165,23 @@ impl<'a> SpanGraphRef<'a> {
                 bottom_up: bottom_up.clone(),
                 store: self.store,
             })
+    }
+
+    pub fn logical_needed_space(&self) -> u64 {
+        *self.graph.logical_needed_space.get_or_init(|| {
+            let children = self
+                .children()
+                .map(|child| child.logical_needed_space())
+                .collect::<Vec<_>>();
+            let Some(max_space) = children.iter().max() else {
+                return 1;
+            };
+            let min_space = max_space / LOGICAL_MIN_MAX_FACTOR;
+            children
+                .into_iter()
+                .map(|child| max(min_space, child))
+                .sum::<u64>()
+        })
     }
 
     pub fn max_depth(&self) -> u32 {
@@ -325,6 +343,7 @@ pub fn event_map_to_list(
                 total_span_count: OnceLock::new(),
                 corrected_self_time: OnceLock::new(),
                 corrected_total_time: OnceLock::new(),
+                logical_needed_space: OnceLock::new(),
                 bottom_up: OnceLock::new(),
             };
             SpanGraphEvent::Child {
