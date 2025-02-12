@@ -209,7 +209,7 @@ impl BrowserChunkingContext {
         *self.chunk_base_path
     }
 
-    /// Returns the minify type.
+    /// Returns the source map type.
     pub fn source_maps_type(&self) -> SourceMapsType {
         self.source_maps_type
     }
@@ -412,6 +412,11 @@ impl ChunkingContext for BrowserChunkingContext {
     #[turbo_tasks::function]
     fn is_tracing_enabled(&self) -> Vc<bool> {
         Vc::cell(self.enable_tracing)
+    }
+
+    #[turbo_tasks::function]
+    pub fn minify_type(&self) -> Vc<MinifyType> {
+        self.minify_type.cell()
     }
 
     #[turbo_tasks::function]

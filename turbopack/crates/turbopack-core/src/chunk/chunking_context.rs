@@ -16,21 +16,8 @@ use crate::{
     output::{OutputAsset, OutputAssets},
 };
 
-#[derive(
-    Debug,
-    Default,
-    TaskInput,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    Hash,
-    Serialize,
-    Deserialize,
-    TraceRawVcs,
-    DeterministicHash,
-    NonLocalValue,
-)]
+#[turbo_tasks::value(shared)]
+#[derive(Debug, Default, TaskInput, Clone, Copy, Hash, DeterministicHash)]
 pub enum MinifyType {
     #[default]
     Minify,
@@ -167,6 +154,10 @@ pub trait ChunkingContext {
 
     fn is_tracing_enabled(self: Vc<Self>) -> Vc<bool> {
         Vc::cell(false)
+    }
+
+    fn minify_type(self: Vc<Self>) -> Vc<MinifyType> {
+        MinifyType::NoMinify.cell()
     }
 
     fn async_loader_chunk_item(
