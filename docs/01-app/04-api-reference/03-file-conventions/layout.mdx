@@ -3,7 +3,9 @@ title: layout.js
 description: API reference for the layout.js file.
 ---
 
-The `layout` file is used to define a layout in your Next.js application.
+The `layout` file is used to define a layout in your Next.js application. Layouts are **shared** between multiple routes. On navigation, they preserve state, remain interactive, and don't re-render.
+
+You can define a layout by default exporting a React component from a `layout.js` file. The component should accept a `children` prop that will be populated with a child layout (if it exists) or a page during rendering.
 
 ```tsx filename="app/dashboard/layout.tsx" switcher
 export default function DashboardLayout({
@@ -21,31 +23,10 @@ export default function DashboardLayout({ children }) {
 }
 ```
 
-A **root layout** is the top-most layout in the root `app` directory. It is used to define the `<html>` and `<body>` tags and other globally shared UI.
-
-```tsx filename="app/layout.tsx" switcher
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
-  return (
-    <html lang="en">
-      <body>{children}</body>
-    </html>
-  )
-}
-```
-
-```jsx filename="app/layout.js" switcher
-export default function RootLayout({ children }) {
-  return (
-    <html lang="en">
-      <body>{children}</body>
-    </html>
-  )
-}
-```
+> **Good to know**:
+>
+> - `.js`, `.jsx`, or `.tsx` file extensions can be used for Layouts.
+> - Layouts are [Server Components](https://react.dev/reference/rsc/server-components) by default but can be set to a [Client Component](https://react.dev/reference/rsc/use-client).
 
 ## Reference
 
@@ -53,7 +34,7 @@ export default function RootLayout({ children }) {
 
 #### `children` (required)
 
-Layout components should accept and use a `children` prop. During rendering, `children` will be populated with the route segments the layout is wrapping. These will primarily be the component of a child [Layout](/docs/app/api-reference/file-conventions/page) (if it exists) or [Page](/docs/app/api-reference/file-conventions/page), but could also be other special files like [Loading](/docs/app/building-your-application/routing/loading-ui-and-streaming) or [Error](/docs/app/building-your-application/routing/error-handling) when applicable.
+Layout components should accept and use a `children` prop. During rendering, `children` will be populated with the route segments the layout is wrapping. This can be a child [`layout.js`](/docs/app/api-reference/file-conventions/layout) (if it exists) or [`page.js`](/docs/app/api-reference/file-conventions/page), but could also be other special files like [`loading.js`](/docs/app/api-reference/file-conventions/loading) or [`error.js`](/docs/app/api-reference/file-conventions/error) when applicable.
 
 #### `params` (optional)
 
@@ -86,7 +67,9 @@ export default async function Layout({ params }) {
 
 ### Root Layouts
 
-The `app` directory **must** include a root `app/layout.js`.
+The root layout is defined at the top level of the `app` directory and applies to all routes. This layout is **required** and must contain `html` and `body` tags, allowing you to modify the initial HTML returned from the server.
+
+The `app` router **must** include a root `app/layout.js`.
 
 ```tsx filename="app/layout.tsx" switcher
 export default function RootLayout({
@@ -112,42 +95,160 @@ export default function RootLayout({ children }) {
 }
 ```
 
-- The root layout **must** define `<html>` and `<body>` tags.
-  - You should **not** manually add `<head>` tags such as `<title>` and `<meta>` to root layouts. Instead, you should use the [Metadata API](/docs/app/building-your-application/optimizing/metadata) which automatically handles advanced requirements such as streaming and de-duplicating `<head>` elements.
-- You can use [route groups](/docs/app/building-your-application/routing/route-groups) to create multiple root layouts.
-  - Navigating **across multiple root layouts** will cause a **full page load** (as opposed to a client-side navigation). For example, navigating from `/cart` that uses `app/(shop)/layout.js` to `/blog` that uses `app/(marketing)/layout.js` will cause a full page load. This **only** applies to multiple root layouts.
+## Examples
 
-## Caveats
+### Nesting Layouts
 
-### Layouts do not receive `searchParams`
+By default, layouts in the folder hierarchy are **nested**, which means they wrap child layouts via their `children` prop. You can nest layouts by adding `layout.js` inside specific route segments (folders).
 
-Unlike [Pages](/docs/app/api-reference/file-conventions/page), Layout components **do not** receive the `searchParams` prop. This is because a shared layout is [not re-rendered during navigation](/docs/app/building-your-application/routing/linking-and-navigating#4-partial-rendering) which could lead to stale `searchParams` between navigations.
-
-When using client-side navigation, Next.js automatically only renders the part of the page below the common layout between two routes.
-
-For example, in the following directory structure, `dashboard/layout.tsx` is the common layout for both `/dashboard/settings` and `/dashboard/analytics`:
+For example, to create a layout for the `/dashboard` route, add a new `layout.js` file inside the `dashboard` folder:
 
 <Image
-  alt="File structure showing a dashboard folder nesting a layout.tsx file, and settings and analytics folders with their own pages"
-  srcLight="/docs/light/shared-dashboard-layout.png"
-  srcDark="/docs/dark/shared-dashboard-layout.png"
+  alt="Nested Layout"
+  srcLight="/docs/light/nested-layout.png"
+  srcDark="/docs/dark/nested-layout.png"
   width="1600"
-  height="687"
+  height="606"
 />
 
-When navigating from `/dashboard/settings` to `/dashboard/analytics`, `page.tsx` in `/dashboard/analytics` will rerender on the server, while `dashboard/layout.tsx` will **not** rerender because it's a common UI shared between the two routes.
+```tsx filename="app/dashboard/layout.tsx" switcher
+export default function DashboardLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  return <section>{children}</section>
+}
+```
 
-This performance optimization allows navigation between pages that share a layout to be quicker as only the data fetching and rendering for the page has to run, instead of the entire route that could include shared layouts that fetch their own data.
+```jsx filename="app/dashboard/layout.js" switcher
+export default function DashboardLayout({ children }) {
+  return <section>{children}</section>
+}
+```
 
-Because `dashboard/layout.tsx` doesn't re-render, the `searchParams` prop in the layout Server Component might become **stale** after navigation.
+If you were to combine the two layouts above, the root layout (`app/layout.js`) would wrap the dashboard layout (`app/dashboard/layout.js`), which would wrap route segments inside `app/dashboard/*`.
 
-Instead, use the Page [`searchParams`](/docs/app/api-reference/file-conventions/page#searchparams-optional) prop or the [`useSearchParams`](/docs/app/api-reference/functions/use-search-params) hook in a Client Component within the layout, which is rerendered on the client with the latest `searchParams`.
+The two layouts would be nested as such:
 
-### Layouts cannot access `pathname`
+<Image
+  alt="Nested Layouts"
+  srcLight="/docs/light/nested-layouts-ui.png"
+  srcDark="/docs/dark/nested-layouts-ui.png"
+  width="1600"
+  height="1026"
+/>
+
+### Creating multiple root layouts
+
+You can use [route groups](/docs/app/building-your-application/routing/route-groups) to create multiple root layouts.
+
+Navigating across multiple root layouts will cause a **full page load** (as opposed to a client-side navigation). For example, navigating from `/cart` that uses `app/(shop)/layout.js` to `/blog` that uses `app/(marketing)/layout.js` will cause a full page load.
+
+{/* TODO: Add Diagram */}
+
+### Adding metadata
+
+You should **not** manually add `<head>` tags such as `<title>` and `<meta>` to layouts. Instead, you can use the [Metadata API](/docs/app/building-your-application/optimizing/metadata) which automatically handles advanced requirements such as streaming and de-duplicating `<head>` elements.
+
+```tsx filename="app/dashboard/layout.tsx" switcher
+// This metadata will be applied to all pages in /dashboard/*
+import type { Metadata } from 'next'
+
+export const metadata: Metadata = {
+  title: 'Dashboard',
+  description: 'Dashboard',
+}
+
+export default function DashboardLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  return <section>{children}</section>
+}
+```
+
+```jsx filename="app/dashboard/layout.js" switcher
+// This metadata will be applied to all pages in /dashboard/*
+export const metadata = {
+  title: 'Dashboard',
+  description: 'Dashboard',
+}
+
+export default function DashboardLayout({ children }) {
+  return <section>{children}</section>
+}
+```
+
+### Fetching and passing data
+
+Layouts are [Server Components](/docs/app/building-your-application/rendering/server-components) by default, so you can fetch data by turning them into `async` functions.
+
+```tsx filename="app/dashboard/layout.tsx" switcher
+import { fetchUser } from '@/lib/data'
+
+export default async function DashboardLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  const user = await fetchUser('007')
+  return (
+    <section>
+      <header>
+        <h1>Welcome {user.name}/h1>
+      </header>
+      <main>{children}</main>
+    </section>
+  )
+}
+```
+
+```jsx filename="app/dashboard/layout.js" switcher
+export default async function DashboardLayout({ children }) {
+  const user = await fetchUser('007')
+
+  return (
+    <section>
+      <header>
+        <h1>Welcome {user.name}/h1>
+      </header>
+      <main>{children}</main>
+    </section>
+  )
+}
+```
+
+However, passing data between a layout and its children is not possible. Instead, you can fetch the same data in a route more than once, and use React's [`cache`](https://react.dev/reference/react/cache) function to dedupe the requests without affecting performance.
+
+```tsx filename="app/lib/data.ts" switcher
+import { cache } from 'react'
+
+export const fetchUser = cache(async (userId: string) => {
+  const response = await fetch(`https://api.example.com/user/${userId}`)
+  const data = await response.json()
+  return data.user
+})
+```
+
+```jsx filename="app/lib/data.js" switcher
+import { cache } from 'react'
+
+export const fetchUser = cache(async (userId) => {
+  const response = await fetch(`https://api.example.com/user/${userId}`)
+  const data = await response.json()
+  return data.user
+})
+```
+
+### Accessing `pathname`
 
 Layouts cannot access `pathname`. This is because layouts are Server Components by default, and [don't rerender during client-side navigation](/docs/app/building-your-application/routing/linking-and-navigating#4-partial-rendering), which could lead to `pathname` becoming stale between navigations. To prevent staleness, Next.js would need to refetch all segments of a route, losing the benefits of caching and increasing the [RSC payload](/docs/app/building-your-application/rendering/server-components#what-is-the-react-server-component-payload-rsc) size on navigation.
 
 Instead, you can extract the logic that depends on pathname into a Client Component and import it into your layouts. Since Client Components rerender (but are not refetched) during navigation, you can use Next.js hooks such as [`usePathname`](https://nextjs.org/docs/app/api-reference/functions/use-pathname) to access the current pathname and prevent staleness.
+
+Create a layout that imports a Client Component:
 
 ```tsx filename="app/dashboard/layout.tsx" switcher
 import { ClientComponent } from '@/app/ui/ClientComponent'
@@ -177,11 +278,113 @@ export default function Layout({ children }) {
 }
 ```
 
-Common `pathname` patterns can also be implemented with [`params`](#params-optional) prop.
+Then, call the `usePathname` hook in the Client Component:
 
-See the [examples](/docs/app/building-your-application/routing/layouts-and-templates#examples) section for more information.
+```tsx filename="app/ui/ClientComponent.tsx" switcher
+'use client'
 
-## Examples
+import { usePathname } from 'next/navigation'
+
+export function ClientComponent() {
+  const pathname = usePathname()
+  return <div>Current path: {pathname}</div>
+}
+```
+
+```jsx filename="app/ui/ClientComponent.js" switcher
+'use client'
+
+import { usePathname } from 'next/navigation'
+
+export function ClientComponent() {
+  const pathname = usePathname()
+  return <div>Current path: {pathname}</div>
+}
+```
+
+### Accessing `searchParams`
+
+Unlike [Pages](/docs/app/api-reference/file-conventions/page), Layout components **do not** receive the `searchParams` prop. This is because a shared layout is [not re-rendered during navigation](/docs/app/building-your-application/routing/linking-and-navigating#4-partial-rendering) which could lead to stale `searchParams` between navigations.
+
+When using client-side navigation, Next.js automatically only renders the part of the page below the common layout between two routes.
+
+For example, in the following directory structure, `dashboard/layout.tsx` is the common layout for both `/dashboard/settings` and `/dashboard/analytics`:
+
+<Image
+  alt="File structure showing a dashboard folder nesting a layout.tsx file, and settings and analytics folders with their own pages"
+  srcLight="/docs/light/shared-dashboard-layout.png"
+  srcDark="/docs/dark/shared-dashboard-layout.png"
+  width="1600"
+  height="687"
+/>
+
+When navigating from `/dashboard/settings` to `/dashboard/analytics`, `page.tsx` in `/dashboard/analytics` will rerender on the server, while `dashboard/layout.tsx` will **not** rerender because it's a common UI shared between the two routes.
+
+This performance optimization allows navigation between pages that share a layout to be quicker as only the data fetching and rendering for the page has to run, instead of the entire route that could include shared layouts that fetch their own data.
+
+Because `dashboard/layout.tsx` doesn't re-render, the `searchParams` prop in the layout Server Component might become **stale** after navigation.
+
+Instead, use the Page [`searchParams`](/docs/app/api-reference/file-conventions/page#searchparams-optional) prop.
+
+### Accessing route segments below a layout
+
+Layouts do not have access to the route segments below themselves. To access all route segments, you can use [`useSelectedLayoutSegment`](/docs/app/api-reference/functions/use-selected-layout-segment) or [`useSelectedLayoutSegments`](/docs/app/api-reference/functions/use-selected-layout-segments) in a Client Component.
+
+Create a layout that imports a Client Component:
+
+```tsx filename="app/dashboard/layout.tsx" switcher
+import { ClientComponent } from '@/app/ui/ClientComponent'
+
+export default function DashboardLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  return (
+    <>
+      <ClientComponent />
+      <main>{children}</main>
+    </>
+  )
+}
+```
+
+```jsx filename="app/dashboard/layout.js" switcher
+import { ClientComponent } from '@/app/ui/ClientComponent'
+
+export default function DashboardLayout({ children }) {
+  return (
+    <>
+      <ClientComponent />
+      <main>{children}</main>
+    </>
+  )
+}
+```
+
+Then, call the `useSelectedLayoutSegment` hook in the Client Component:
+
+```tsx filename="app/ui/ClientComponent.tsx" switcher
+'use client'
+
+import { useSelectedLayoutSegment } from 'next/navigation'
+
+export function ClientComponent() {
+  const segment = useSelectedLayoutSegment()
+  return <div>Current segment: {segment}</div>
+}
+```
+
+```jsx filename="app/ui/ClientComponent.js" switcher
+'use client'
+
+import { useSelectedLayoutSegment } from 'next/navigation'
+
+export function ClientComponent() {
+  const segment = useSelectedLayoutSegment()
+  return <div>Current segment: {segment}</div>
+}
+```
 
 ### Displaying content based on `params`
 
