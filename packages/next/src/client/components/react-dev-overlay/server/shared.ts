@@ -1,5 +1,4 @@
 import type { StackFrame } from 'stacktrace-parser'
-import type { ServerResponse } from 'http'
 import { codeFrameColumns } from 'next/dist/compiled/babel/code-frame'
 import isInternal, {
   nextInternalsRe,
@@ -8,6 +7,18 @@ import isInternal, {
 } from '../../../../shared/lib/is-internal'
 
 export type SourcePackage = 'react' | 'next'
+
+export interface OriginalStackFramesRequest {
+  frames: StackFrame[]
+  isServer: boolean
+  isEdgeServer: boolean
+  isAppDirectory: boolean
+}
+
+export type OriginalStackFramesResponse = OriginalStackFrameResponseResult[]
+
+export type OriginalStackFrameResponseResult =
+  PromiseSettledResult<OriginalStackFrameResponse>
 
 export interface OriginalStackFrameResponse {
   originalStackFrame?: (StackFrame & { ignored: boolean }) | null
@@ -49,7 +60,8 @@ export function findSourcePackage({
  */
 export function getOriginalCodeFrame(
   frame: StackFrame,
-  source: string | null
+  source: string | null,
+  colors: boolean = process.stdout.isTTY
 ): string | null {
   if (!source || isInternal(frame.file)) {
     return null
@@ -65,31 +77,6 @@ export function getOriginalCodeFrame(
         column: frame.column ?? 0,
       },
     },
-    { forceColor: process.stdout.isTTY }
+    { forceColor: colors }
   )
-}
-
-export function noContent(res: ServerResponse) {
-  res.statusCode = 204
-  res.end('No Content')
-}
-
-export function badRequest(res: ServerResponse) {
-  res.statusCode = 400
-  res.end('Bad Request')
-}
-
-export function internalServerError(res: ServerResponse, e?: any) {
-  res.statusCode = 500
-  res.end(e ?? 'Internal Server Error')
-}
-
-export function json(res: ServerResponse, data: any) {
-  res
-    .setHeader('Content-Type', 'application/json')
-    .end(Buffer.from(JSON.stringify(data)))
-}
-
-export function jsonString(res: ServerResponse, data: string) {
-  res.setHeader('Content-Type', 'application/json').end(Buffer.from(data))
 }

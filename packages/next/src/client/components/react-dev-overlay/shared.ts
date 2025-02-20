@@ -21,7 +21,8 @@ export interface OverlayState {
   versionInfo: VersionInfo
   notFound: boolean
   staticIndicator: boolean
-  debugInfo: DebugInfo | undefined
+  disableDevIndicator: boolean
+  debugInfo: DebugInfo
 }
 
 export const ACTION_STATIC_INDICATOR = 'static-indicator'
@@ -94,7 +95,7 @@ function pushErrorFilterDuplicates(
   return [
     ...errors.filter((e) => {
       // Filter out duplicate errors
-      return e.event.reason !== err.event.reason
+      return e.event.reason.stack !== err.event.reason.stack
     }),
     err,
   ]
@@ -106,10 +107,11 @@ export const INITIAL_OVERLAY_STATE: OverlayState = {
   errors: [],
   notFound: false,
   staticIndicator: false,
+  disableDevIndicator: process.env.__NEXT_DEV_INDICATOR?.toString() === 'false',
   refreshState: { type: 'idle' },
   rootLayoutMissingTags: [],
   versionInfo: { installed: '0.0.0', staleness: 'unknown' },
-  debugInfo: undefined,
+  debugInfo: { devtoolsFrontendUrl: undefined },
 }
 
 export function useErrorOverlayReducer() {
