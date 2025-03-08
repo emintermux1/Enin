@@ -230,8 +230,6 @@ export const configSchema: zod.ZodType<NextConfig> = z.lazy(() =>
     devIndicators: z
       .union([
         z.object({
-          appIsrStatus: z.boolean().optional(),
-          buildActivity: z.boolean().optional(),
           buildActivityPosition: z
             .union([
               z.literal('bottom-left'),
@@ -263,10 +261,10 @@ export const configSchema: zod.ZodType<NextConfig> = z.lazy(() =>
     excludeDefaultMomentLocales: z.boolean().optional(),
     experimental: z
       .strictObject({
+        allowedDevOrigins: z.array(z.string()).optional(),
         nodeMiddleware: z.boolean().optional(),
         after: z.boolean().optional(),
         appDocumentPreloading: z.boolean().optional(),
-        appIsrStatus: z.boolean().optional(),
         appNavFailHandling: z.boolean().optional(),
         preloadEntriesOnStart: z.boolean().optional(),
         allowedRevalidateHeaderKeys: z.array(z.string()).optional(),
@@ -451,9 +449,6 @@ export const configSchema: zod.ZodType<NextConfig> = z.lazy(() =>
         typedEnv: z.boolean().optional(),
         serverComponentsHmrCache: z.boolean().optional(),
         authInterrupts: z.boolean().optional(),
-        newDevOverlay: z.boolean().optional(),
-        streamingMetadata: z.boolean().optional(),
-        htmlLimitedBots: z.instanceof(RegExp).optional(),
         useCache: z.boolean().optional(),
         slowModuleDetection: z
           .object({
@@ -493,6 +488,7 @@ export const configSchema: zod.ZodType<NextConfig> = z.lazy(() =>
       .args()
       .returns(z.promise(z.array(zHeader)))
       .optional(),
+    htmlLimitedBots: z.instanceof(RegExp).optional(),
     httpAgentOptions: z
       .strictObject({ keepAlive: z.boolean().optional() })
       .optional(),

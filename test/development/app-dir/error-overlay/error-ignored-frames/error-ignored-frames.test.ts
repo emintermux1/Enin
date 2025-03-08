@@ -11,8 +11,6 @@ describe('error-ignored-frames', () => {
   })
 
   if (
-    // TODO(new-dev-overlay): Remove this once old dev overlay fork is removed
-    process.env.__NEXT_EXPERIMENTAL_NEW_DEV_OVERLAY === 'true' ||
     // Skip react 18 test as the call stacks are different
     process.env.NEXT_TEST_REACT_VERSION === '18.3.1'
   ) {
@@ -101,8 +99,8 @@ describe('error-ignored-frames', () => {
     if (isTurbopack) {
       expect(expendedStack).toMatchInlineSnapshot(`
        "at <unknown> (app/interleaved/page.tsx (7:11))
-       at Page (app/interleaved/page.tsx (6:35))
        at invokeCallback ()
+       at Page (app/interleaved/page.tsx (6:35))
        at ClientPageRoot ()"
       `)
     } else {
