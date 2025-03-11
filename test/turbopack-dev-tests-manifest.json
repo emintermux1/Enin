@@ -5552,10 +5552,11 @@
       "dynamic-io should prerender pages that only use cached (unstable_cache) IO",
       "dynamic-io should prerender pages that only use cached fetches",
       "dynamic-io should prerender pages that render in a microtask",
-      "dynamic-io should prerender static not-found pages"
+      "dynamic-io should prerender static not-found pages",
+      "dynamic-io should prerender pages that cached the whole page"
     ],
     "failed": [],
-    "pending": ["dynamic-io should prerender pages that cached the whole page"],
+    "pending": [],
     "flakey": [],
     "runtimeError": false
   },
@@ -13836,12 +13837,9 @@
     "runtimeError": false
   },
   "test/integration/edge-runtime-streaming-error/test/index.test.ts": {
-    "passed": [],
+    "passed": ["development mode logs the error correctly"],
+    "pending": ["production mode logs the error correctly"],
     "failed": [],
-    "pending": [
-      "development mode logs the error correctly",
-      "production mode logs the error correctly"
-    ],
     "flakey": [],
     "runtimeError": false
   },

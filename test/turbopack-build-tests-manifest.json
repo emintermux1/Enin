@@ -2125,12 +2125,11 @@
         "dynamic-io should prerender pages that only use cached (unstable_cache) IO",
         "dynamic-io should prerender pages that only use cached fetches",
         "dynamic-io should prerender pages that render in a microtask",
-        "dynamic-io should prerender static not-found pages"
-      ],
-      "failed": [],
-      "pending": [
+        "dynamic-io should prerender static not-found pages",
         "dynamic-io should prerender pages that cached the whole page"
       ],
+      "failed": [],
+      "pending": [],
       "flakey": [],
       "runtimeError": false
     },
@@ -2630,10 +2629,11 @@
       "runtimeError": false
     },
     "test/e2e/app-dir/loader-file-named-export-custom-loader-error/loader-file-named-export-custom-loader-error.test.ts": {
-      "passed": [],
+      "passed": [
+        "Error test if the loader file export a named function in Build and Start build and start only should show the build error"
+      ],
       "failed": [],
       "pending": [
-        "Error test if the loader file export a named function in Build and Start build and start only should show the build error",
         "Error test if the loader file export a named function in Development development only should show the error when using `Image` component",
         "Error test if the loader file export a named function in Development development only should show the error when using `getImageProps` method"
       ],
@@ -10681,9 +10681,12 @@
       "runtimeError": false
     },
     "test/integration/edge-runtime-streaming-error/test/index.test.ts": {
-      "passed": ["production mode logs the error correctly"],
+      "passed": [
+        "development mode logs the error correctly",
+        "production mode logs the error correctly"
+      ],
       "failed": [],
-      "pending": ["development mode logs the error correctly"],
+      "pending": [],
       "flakey": [],
       "runtimeError": false
     },
@@ -17468,6 +17471,15 @@
       "flakey": [],
       "runtimeError": false
     },
+    "test/production/app-dir/browser-chunks/browser-chunks.test.ts": {
+      "passed": [
+        "browser-chunks must not bundle any server modules into browser chunks"
+      ],
+      "failed": [],
+      "pending": [],
+      "flakey": [],
+      "runtimeError": false
+    },
     "test/production/app-dir/barrel-optimization/mui/index.test.ts": {
       "passed": [
         "Skipped in Turbopack app-dir - optimizePackageImports - mui should build successfully"
@@ -17949,11 +17961,11 @@
       "runtimeError": false
     },
     "test/production/edge-config-validations/index.test.ts": {
-      "passed": [],
-      "failed": [],
-      "pending": [
+      "passed": [
         "Edge config validations fails to build when unstable_allowDynamic is not a string"
       ],
+      "failed": [],
+      "pending": [],
       "flakey": [],
       "runtimeError": false
     },
