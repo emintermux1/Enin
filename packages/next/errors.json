@@ -663,5 +663,6 @@
   "662": "Invariant failed to find webpack runtime chunk",
   "663": "Invariant: client chunk changed but failed to detect hash %s",
   "664": "Failed to find Server Action \"%s\". This request might be from an older or newer deployment.%s\\nRead more: https://nextjs.org/docs/messages/failed-to-find-server-action",
-  "665": "Action handler not found in action module"
+  "665": "Action handler not found in action module",
+  "666": "This function cannot be used in the edge runtime"
 }
