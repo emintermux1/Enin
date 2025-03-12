@@ -48,6 +48,7 @@ import { RedirectStatusCode } from '../../client/components/redirect-status-code
 import { synchronizeMutableCookies } from '../async-storage/request-store'
 import type { TemporaryReferenceSet } from 'react-server-dom-webpack/server.edge'
 import { workUnitAsyncStorage } from '../app-render/work-unit-async-storage.external'
+import { InvariantError } from '../../shared/lib/invariant-error'
 
 function formDataFromSearchQueryString(query: string) {
   const searchParams = new URLSearchParams(query)
@@ -454,16 +455,19 @@ type HandleActionResult =
       type: 'not-found'
     }
   | {
-      /** We decoded a FormState, but haven't rendered anything yet. */
-      type: 'form-state'
+      /** The request turned out to not be an action. */
+      type: 'not-an-action'
     }
   | {
-      type: 'done'
-      result: RenderResult | undefined
-      formState?: any
+      /** We decoded a FormState, but haven't rendered anything yet. */
+      type: 'form-state'
+      formState: any
     }
-  /** The request turned out not to be a server action. */
-  | null
+  | {
+      /** A finished result. */
+      type: 'done'
+      result: RenderResult
+    }
 
 export async function handleAction({
   req,
@@ -485,7 +489,7 @@ export async function handleAction({
   requestStore: RequestStore
   serverActions?: ServerActionsConfig
   ctx: AppRenderContext
-}): Promise<HandleActionResult | null> {
+}): Promise<HandleActionResult> {
   const contentType = req.headers['content-type']
   const { serverActionsManifest, page } = ctx.renderOpts
 
@@ -501,7 +505,7 @@ export async function handleAction({
   // Note that this can be a false positive -- any multipart/urlencoded POST can get us here,
   // But won't know if it's an MPA action or not until we call `decodeAction` below.
   if (!isPotentialServerAction) {
-    return null
+    return { type: 'not-an-action' }
   }
 
   if (workStore.isStaticGeneration) {
@@ -643,7 +647,7 @@ export async function handleAction({
   try {
     return await actionAsyncStorage.run(
       { isAction: true },
-      async (): Promise<HandleActionResult | null> => {
+      async (): Promise<HandleActionResult> => {
         // We only use these for fetch actions -- MPA actions handle them inside `decodeAction`.
         let actionModId: string
         let boundActionArguments: unknown[]
@@ -708,39 +712,38 @@ export async function handleAction({
                 }
               }
 
-              if (typeof action === 'function') {
-                // an MPA action.
-
-                // Only warn if it's a server action, otherwise skip for other post requests
-                warnBadServerActionRequest()
-
-                let actionReturnedState: unknown
-                requestStore.phase = 'action'
-                try {
-                  actionReturnedState = await workUnitAsyncStorage.run(
-                    requestStore,
-                    action
-                  )
-                } finally {
-                  requestStore.phase = 'render'
-                }
-
-                const formState = await decodeFormState(
-                  actionReturnedState,
-                  formData,
-                  serverModuleMap
-                )
-
-                // Skip the fetch path.
-                // We need to render a full HTML version of the page for the response, we'll handle that in app-render.
-                return {
-                  type: 'done',
-                  result: undefined,
-                  formState,
-                }
-              } else {
+              if (typeof action !== 'function') {
                 // We couldn't decode an action, so this POST request turned out not to be a server action request.
-                return null
+                return { type: 'not-an-action' }
+              }
+
+              // an MPA action.
+
+              // Only warn if it's a server action, otherwise skip for other post requests
+              warnBadServerActionRequest()
+
+              let actionReturnedState: unknown
+              requestStore.phase = 'action'
+              try {
+                actionReturnedState = await workUnitAsyncStorage.run(
+                  requestStore,
+                  action
+                )
+              } finally {
+                requestStore.phase = 'render'
+              }
+
+              const formState = await decodeFormState(
+                actionReturnedState,
+                formData,
+                serverModuleMap
+              )
+
+              // Skip the fetch path.
+              // We need to render a full HTML version of the page for the response, we'll handle that in app-render.
+              return {
+                type: 'form-state',
+                formState,
               }
             }
           } else {
@@ -749,7 +752,7 @@ export async function handleAction({
             // If it's not multipart AND not a fetch action,
             // then it can't be an action request.
             if (!isFetchAction) {
-              return null
+              return { type: 'not-an-action' }
             }
 
             try {
@@ -916,39 +919,38 @@ export async function handleAction({
                 }
               }
 
-              if (typeof action === 'function') {
-                // an MPA action.
-
-                // Only warn if it's a server action, otherwise skip for other post requests
-                warnBadServerActionRequest()
-
-                let actionReturnedState: unknown
-                requestStore.phase = 'action'
-                try {
-                  actionReturnedState = await workUnitAsyncStorage.run(
-                    requestStore,
-                    action
-                  )
-                } finally {
-                  requestStore.phase = 'render'
-                }
-
-                const formState = await decodeFormState(
-                  actionReturnedState,
-                  formData,
-                  serverModuleMap
-                )
-
-                // Skip the fetch path.
-                // We need to render a full HTML version of the page for the response, we'll handle that in app-render.
-                return {
-                  type: 'done',
-                  result: undefined,
-                  formState,
-                }
-              } else {
+              if (typeof action !== 'function') {
                 // We couldn't decode an action, so this POST request turned out not to be a server action request.
-                return null
+                return { type: 'not-an-action' }
+              }
+
+              // an MPA action.
+
+              // Only warn if it's a server action, otherwise skip for other post requests
+              warnBadServerActionRequest()
+
+              let actionReturnedState: unknown
+              requestStore.phase = 'action'
+              try {
+                actionReturnedState = await workUnitAsyncStorage.run(
+                  requestStore,
+                  action
+                )
+              } finally {
+                requestStore.phase = 'render'
+              }
+
+              const formState = await decodeFormState(
+                actionReturnedState,
+                formData,
+                serverModuleMap
+              )
+
+              // Skip the fetch path.
+              // We need to render a full HTML version of the page for the response, we'll handle that in app-render.
+              return {
+                type: 'form-state',
+                formState,
               }
             }
           } else {
@@ -957,7 +959,7 @@ export async function handleAction({
             // If it's not multipart AND not a fetch action,
             // then it can't be an action request.
             if (!isFetchAction) {
-              return null
+              return { type: 'not-an-action' }
             }
 
             try {
@@ -999,6 +1001,11 @@ export async function handleAction({
           throw new Error('Invariant: Unknown request type.')
         }
 
+        // Handle a fetch action.
+
+        // Ensure that non-fetch codepaths can't reach this part.
+        isFetchAction satisfies true
+
         // actions.js
         // app/page.js
         //   action worker1
@@ -1014,11 +1021,8 @@ export async function handleAction({
         const actionMod = (await ComponentMod.__next_app__.require(
           actionModId
         )) as Record<string, (...args: unknown[]) => Promise<unknown>>
-        const actionHandler =
-          actionMod[
-            // `actionId` must exist if we got here, as otherwise `getActionModIdOrError` would have thrown earlier
-            actionId!
-          ]
+
+        const actionHandler = actionMod[actionId]
 
         let returnVal: unknown
         requestStore.phase = 'action'
@@ -1030,33 +1034,26 @@ export async function handleAction({
           requestStore.phase = 'render'
         }
 
-        // For form actions, we need to continue rendering the page.
-        if (isFetchAction) {
-          await addRevalidationHeader(res, {
-            workStore,
-            requestStore,
-          })
+        await addRevalidationHeader(res, {
+          workStore,
+          requestStore,
+        })
 
-          const actionResult = await finalizeAndGenerateFlight(
-            req,
-            ctx,
-            requestStore,
-            {
-              actionResult: Promise.resolve(returnVal),
-              // if the page was not revalidated, or if the action was forwarded from another worker, we can skip the rendering the flight tree
-              skipFlight: !workStore.pathWasRevalidated || actionWasForwarded,
-              temporaryReferences,
-            }
-          )
-
-          return {
-            type: 'done',
-            result: actionResult,
+        const actionResult = await finalizeAndGenerateFlight(
+          req,
+          ctx,
+          requestStore,
+          {
+            actionResult: Promise.resolve(returnVal),
+            // if the page was not revalidated, or if the action was forwarded from another worker, we can skip the rendering the flight tree
+            skipFlight: !workStore.pathWasRevalidated || actionWasForwarded,
+            temporaryReferences,
           }
-        } else {
-          // TODO: this shouldn't be reachable, because all non-fetch codepaths return early.
-          // this will be handled in a follow-up refactor PR.
-          return null
+        )
+
+        return {
+          type: 'done',
+          result: actionResult,
         }
       }
     )
@@ -1171,19 +1168,13 @@ export async function handleAction({
 }
 
 /**
- * Attempts to find the module ID for the action from the module map. When this fails, it could be a deployment skew where
- * the action came from a different deployment. It could also simply be an invalid POST request that is not a server action.
- * In either case, we'll throw an error to be handled by the caller.
+ * Attempts to find the module ID for the action from the module map.
+ * When this fails, it could be a deployment skew where the action came from a different deployment.
  */
 function getActionModIdOrError(
-  actionId: string | null,
+  actionId: string,
   serverModuleMap: ServerModuleMap
 ): string {
-  // if we're missing the action ID header, we can't do any further processing
-  if (!actionId) {
-    throw new Error("Invariant: Missing 'next-action' header.")
-  }
-
   let actionModId: string | undefined
   try {
     // `serverModuleMap` is a proxy (see: `createServerModuleMap`) which runs some lookup code,
