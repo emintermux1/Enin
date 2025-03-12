@@ -683,7 +683,22 @@ export async function handleAction({
             } else {
               // Multipart POST, but not a fetch action.
               // Potentially an MPA action, we have to try decoding it to check.
-              const action = await decodeAction(formData, serverModuleMap)
+
+              let action: Awaited<ReturnType<typeof decodeAction>> | undefined
+              try {
+                action = await decodeAction(
+                  formData,
+                  throwIfActionNotInModuleMap(serverModuleMap)
+                )
+              } catch (err) {
+                if (err instanceof ActionNotInModuleMapError) {
+                  console.error(err)
+                  return { type: 'not-found' }
+                } else {
+                  throw err
+                }
+              }
+
               if (typeof action === 'function') {
                 // an MPA action.
 
@@ -867,7 +882,22 @@ export async function handleAction({
                 duplex: 'half',
               })
               const formData = await fakeRequest.formData()
-              const action = await decodeAction(formData, serverModuleMap)
+
+              let action: Awaited<ReturnType<typeof decodeAction>> | undefined
+              try {
+                action = await decodeAction(
+                  formData,
+                  throwIfActionNotInModuleMap(serverModuleMap)
+                )
+              } catch (err) {
+                if (err instanceof ActionNotInModuleMapError) {
+                  console.error(err)
+                  return { type: 'not-found' }
+                } else {
+                  throw err
+                }
+              }
+
               if (typeof action === 'function') {
                 // an MPA action.
 
@@ -1162,6 +1192,32 @@ function getActionModIdOrError(
   }
 
   return actionModId
+}
+
+class ActionNotInModuleMapError extends Error {}
+
+/** If an action id is not found in the module map, `decodeAction` throws:
+ *   `"Error: Could not find the module "{id}" in the React Server Manifest."`
+ * We want to be able to distinguish this case from other potential reasons it could throw,
+ * (e.g. a malformed request) so we can use this wrapper to throw our own special error.
+ */
+function throwIfActionNotInModuleMap(
+  serverModuleMap: ServerModuleMap
+): ServerModuleMap {
+  return new Proxy(serverModuleMap, {
+    get(target, actionId: string) {
+      let result
+      try {
+        result = Reflect.get(target, actionId)
+      } catch (err) {
+        throw createActionNotFoundError(actionId, err)
+      }
+      if (result === undefined) {
+        throw createActionNotFoundError(actionId)
+      }
+      return result
+    },
+  })
 }
 
 function createActionNotFoundError(actionId: string, cause?: unknown) {
