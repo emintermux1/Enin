@@ -30,7 +30,7 @@ use crate::{
         ActivenessState, AggregationNumber, CachedDataItem, CachedDataItemKey, CollectibleRef,
         DirtyContainerCount,
     },
-    utils::deque_set::DequeSet,
+    utils::{deque_set::DequeSet, swap_retain},
 };
 
 pub const LEAF_NUMBER: u32 = 16;
@@ -1488,6 +1488,7 @@ impl AggregationUpdateQueue {
         let mut upper_upper_ids_with_new_follower = SmallVec::new();
         let mut tasks_for_which_increment_active_count = SmallVec::new();
         let mut is_active = false;
+
         swap_retain(&mut upper_ids, |&mut upper_id| {
             let mut upper = ctx.task(upper_id, TaskDataCategory::Meta);
             // decide if it should be an inner or follower
@@ -2245,31 +2246,5 @@ impl Operation for AggregationUpdateQueue {
                 return;
             }
         }
-    }
-}
-
-fn swap_retain<T, const N: usize>(vec: &mut SmallVec<[T; N]>, mut f: impl FnMut(&mut T) -> bool) {
-    let mut i = 0;
-    while i < vec.len() {
-        if !f(&mut vec[i]) {
-            vec.swap_remove(i);
-        } else {
-            i += 1;
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use smallvec::{smallvec, SmallVec};
-
-    use crate::backend::operation::aggregation_update::swap_retain;
-
-    #[test]
-    fn test_swap_retain() {
-        let mut vec: SmallVec<[i32; 4]> = smallvec![1, 2, 3, 4, 5];
-        swap_retain(&mut vec, |a| *a % 2 != 0);
-        let expected: SmallVec<[i32; 4]> = smallvec![1, 5, 3];
-        assert_eq!(vec, expected);
     }
 }
