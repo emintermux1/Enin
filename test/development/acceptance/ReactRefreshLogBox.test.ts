@@ -147,7 +147,7 @@ describe('ReactRefreshLogBox', () => {
            "description": "Error: no",
            "environmentLabel": null,
            "label": "Runtime Error",
-           "source": "index.js (3:7) @ eval
+           "source": "index.js (3:7)
          > 3 | throw new Error('no')
              |       ^",
            "stack": [
@@ -195,7 +195,7 @@ describe('ReactRefreshLogBox', () => {
            "description": "Error: no",
            "environmentLabel": null,
            "label": "Runtime Error",
-           "source": "index.js (3:7) @ eval
+           "source": "index.js (3:7)
          > 3 | throw new Error('no')
              |       ^",
            "stack": [
@@ -1216,7 +1216,7 @@ describe('ReactRefreshLogBox', () => {
          "description": "Error: anonymous error!",
          "environmentLabel": null,
          "label": "Runtime Error",
-         "source": "pages/index.js (3:11) @ eval
+         "source": "pages/index.js (3:11)
        > 3 |     throw new Error("anonymous error!");
            |           ^",
          "stack": [

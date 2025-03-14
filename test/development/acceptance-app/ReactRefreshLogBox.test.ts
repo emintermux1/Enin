@@ -94,8 +94,7 @@ describe('ReactRefreshLogBox app', () => {
          "description": "Error: no",
          "environmentLabel": null,
          "label": "Unhandled Runtime Error",
-         "source": "index.js (3:7) @ Module.
-       {module evaluation}
+         "source": "index.js (3:7)
        > 3 | throw new Error('no')
            |       ^",
          "stack": [
@@ -111,7 +110,7 @@ describe('ReactRefreshLogBox app', () => {
          "description": "Error: no",
          "environmentLabel": null,
          "label": "Unhandled Runtime Error",
-         "source": "index.js (3:7) @ eval
+         "source": "index.js (3:7)
        > 3 | throw new Error('no')
            |       ^",
          "stack": [
@@ -1180,7 +1179,7 @@ describe('ReactRefreshLogBox app', () => {
          "description": "Error: This is an error from an anonymous function",
          "environmentLabel": "Server",
          "label": "Unhandled Runtime Error",
-         "source": "app/page.js (4:13) @ <anonymous>
+         "source": "app/page.js (4:13)
        > 4 |       throw new Error("This is an error from an anonymous function");
            |             ^",
          "stack": [
@@ -1196,7 +1195,7 @@ describe('ReactRefreshLogBox app', () => {
          "description": "Error: This is an error from an anonymous function",
          "environmentLabel": "Server",
          "label": "Unhandled Runtime Error",
-         "source": "app/page.js (4:13) @ eval
+         "source": "app/page.js (4:13)
        > 4 |       throw new Error("This is an error from an anonymous function");
            |             ^",
          "stack": [
@@ -1463,7 +1462,7 @@ describe('ReactRefreshLogBox app', () => {
            "description": "Error: module error",
            "environmentLabel": null,
            "label": "Runtime Error",
-           "source": "index.js (1:7) @ eval
+           "source": "index.js (1:7)
          > 1 | throw new Error('module error')
              |       ^",
            "stack": [
@@ -1618,8 +1617,7 @@ export default function Home() {
          "description": "Error: utils error",
          "environmentLabel": null,
          "label": "Unhandled Runtime Error",
-         "source": "app/utils.ts (1:7) @ Module.
-       {module evaluation}
+         "source": "app/utils.ts (1:7)
        > 1 | throw new Error('utils error')
            |       ^",
          "stack": [
@@ -1636,16 +1634,16 @@ export default function Home() {
          "description": "Error: utils error",
          "environmentLabel": null,
          "label": "Unhandled Runtime Error",
-         "source": "app/utils.ts (1:7) @ eval
+         "source": "app/utils.ts (1:7)
        > 1 | throw new Error('utils error')
            |       ^",
          "stack": [
-           "eval app/utils.ts (1:7)",
+           "app/utils.ts (1:7)",
            "<FIXME-next-dist-dir>",
            "<FIXME-next-dist-dir>",
            "<FIXME-next-dist-dir>",
            "<FIXME-next-dist-dir>",
-           "eval ./app/page.js",
+           "./app/page.js",
            "<FIXME-next-dist-dir>",
            "<FIXME-next-dist-dir>",
            "<FIXME-next-dist-dir>",
