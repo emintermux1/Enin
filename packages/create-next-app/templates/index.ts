@@ -62,6 +62,7 @@ export const installTemplate = async ({
     cwd: templatePath,
     rename(name) {
       switch (name) {
+        case "env.example":
         case "gitignore": {
           return `.${name}`;
         }
