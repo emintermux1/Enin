@@ -436,16 +436,15 @@ impl ChunkingContext for BrowserChunkingContext {
         module_graph: Vc<ModuleGraph>,
         availability_info: Value<AvailabilityInfo>,
     ) -> Result<Vc<ChunkGroupResult>> {
-        let span = tracing::info_span!("chunking", ident = ident.to_string().await?.to_string());
+        let ident_str = ident.to_string().await?;
         async move {
             let this = self.await?;
-            let modules = chunk_group.entries();
             let input_availability_info = availability_info.into_value();
             let MakeChunkGroupResult {
                 chunks,
                 availability_info,
             } = make_chunk_group(
-                modules,
+                chunk_group,
                 module_graph,
                 ResolvedVc::upcast(self),
                 input_availability_info,
@@ -467,7 +466,11 @@ impl ChunkingContext for BrowserChunkingContext {
                     }
                     AvailabilityInfo::Complete { available_modules } => {
                         ident = ident.with_modifier(Vc::cell(
-                            available_modules.hash().await?.to_string().into(),
+                            available_modules
+                                .hash(module_graph.chunk_group_info())
+                                .await?
+                                .to_string()
+                                .into(),
                         ));
                     }
                 }
@@ -489,7 +492,7 @@ impl ChunkingContext for BrowserChunkingContext {
             }
             .cell())
         }
-        .instrument(span)
+        .instrument(tracing::info_span!("chunking", ident = display(ident_str)))
         .await
     }
 
@@ -501,21 +504,26 @@ impl ChunkingContext for BrowserChunkingContext {
         module_graph: Vc<ModuleGraph>,
         availability_info: Value<AvailabilityInfo>,
     ) -> Result<Vc<ChunkGroupResult>> {
-        let span = {
-            let ident = ident.to_string().await?.to_string();
-            tracing::info_span!("chunking", chunking_type = "evaluated", ident = ident)
-        };
+        let ident_str = ident.to_string().await?;
         async move {
             let this = self.await?;
             let availability_info = availability_info.into_value();
 
-            let entries = chunk_group.entries();
+            let evaluatable_entries = Vc::cell(
+                chunk_group
+                    .entries()
+                    .map(|m| {
+                        ResolvedVc::try_downcast::<Box<dyn EvaluatableAsset>>(m)
+                            .context("evaluated_chunk_group entries must be evaluatable assets")
+                    })
+                    .collect::<Result<Vec<_>>>()?,
+            );
 
             let MakeChunkGroupResult {
                 chunks,
                 availability_info,
             } = make_chunk_group(
-                entries,
+                chunk_group,
                 module_graph,
                 ResolvedVc::upcast(self),
                 availability_info,
@@ -530,21 +538,11 @@ impl ChunkingContext for BrowserChunkingContext {
 
             let other_assets = Vc::cell(assets.clone());
 
-            let entries = Vc::cell(
-                chunk_group
-                    .entries()
-                    .map(|m| {
-                        ResolvedVc::try_downcast::<Box<dyn EvaluatableAsset>>(m)
-                            .context("evaluated_chunk_group entries must be evaluatable assets")
-                    })
-                    .collect::<Result<Vec<_>>>()?,
-            );
-
             if this.enable_hot_module_replacement {
                 assets.push(
                     self.generate_chunk_list_register_chunk(
                         ident,
-                        entries,
+                        evaluatable_entries,
                         other_assets,
                         Value::new(EcmascriptDevChunkListSource::Entry),
                     )
@@ -554,9 +552,14 @@ impl ChunkingContext for BrowserChunkingContext {
             }
 
             assets.push(
-                self.generate_evaluate_chunk(ident, other_assets, entries, module_graph)
-                    .to_resolved()
-                    .await?,
+                self.generate_evaluate_chunk(
+                    ident,
+                    other_assets,
+                    evaluatable_entries,
+                    module_graph,
+                )
+                .to_resolved()
+                .await?,
             );
 
             Ok(ChunkGroupResult {
@@ -565,7 +568,11 @@ impl ChunkingContext for BrowserChunkingContext {
             }
             .cell())
         }
-        .instrument(span)
+        .instrument(tracing::info_span!(
+            "chunking",
+            chunking_type = "evaluated",
+            ident = display(ident_str)
+        ))
         .await
     }
 
