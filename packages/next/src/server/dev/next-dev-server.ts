@@ -69,14 +69,15 @@ import type { ServerOnInstrumentationRequestError } from '../app-render/types'
 import type { ServerComponentsHmrCache } from '../response-cache'
 import { logRequests } from './log-requests'
 import { FallbackMode } from '../../lib/fallback'
-import type { ReactDevOverlayType } from '../../client/components/react-dev-overlay/pages/react-dev-overlay'
+import type { PagesDevOverlayType } from '../../client/components/react-dev-overlay/pages/pages-dev-overlay'
 
 // Load ReactDevOverlay only when needed
-let ReactDevOverlayImpl: ReactDevOverlayType
-const ReactDevOverlay: ReactDevOverlayType = (props) => {
+let ReactDevOverlayImpl: PagesDevOverlayType
+const ReactDevOverlay: PagesDevOverlayType = (props) => {
   if (ReactDevOverlayImpl === undefined) {
     ReactDevOverlayImpl =
-      require('../../client/components/react-dev-overlay/pages/client').ReactDevOverlay
+      require('../../client/components/react-dev-overlay/pages/pages-dev-overlay')
+        .PagesDevOverlay as PagesDevOverlayType
   }
   return ReactDevOverlayImpl(props)
 }
@@ -604,10 +605,18 @@ export default class DevServer extends Server {
       this.nextConfig.basePath
     ).map((route) => new RegExp(buildCustomRoute('rewrite', route).regex))
 
+    if (this.nextConfig.output === 'export' && rewrites.length > 0) {
+      Log.error(
+        'Intercepting routes are not supported with static export.\nRead more: https://nextjs.org/docs/app/building-your-application/deploying/static-exports#unsupported-features'
+      )
+
+      process.exit(1)
+    }
+
     return rewrites ?? []
   }
 
-  protected getMiddleware() {
+  protected async getMiddleware() {
     // We need to populate the match
     // field as it isn't serializable
     if (this.middleware?.match === null) {

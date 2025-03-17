@@ -21,6 +21,11 @@ import type { NextInfoOptions } from '../cli/next-info.js'
 import type { NextDevOptions } from '../cli/next-dev.js'
 import type { NextBuildOptions } from '../cli/next-build.js'
 
+if (process.env.NEXT_RSPACK) {
+  // silent rspack's schema check
+  process.env.RSPACK_CONFIG_VALIDATE = 'loose-silent'
+}
+
 if (
   !semver.satisfies(
     process.versions.node,
@@ -125,12 +130,14 @@ program
   .option('--profile', 'Enables production profiling for React.')
   .option('--experimental-app-only', 'Builds only App Router routes.')
   .addOption(new Option('--experimental-turbo').hideHelp())
+  .addOption(new Option('--turbo').hideHelp())
+  .addOption(new Option('--turbopack').hideHelp())
   .addOption(
     new Option(
       '--experimental-build-mode [mode]',
       'Uses an experimental build mode.'
     )
-      .choices(['compile', 'generate'])
+      .choices(['compile', 'generate', 'generate-env'])
       .default('default')
   )
   .option(

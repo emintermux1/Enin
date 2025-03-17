@@ -40,7 +40,11 @@ import {
   PathParamsContext,
 } from '../../shared/lib/hooks-client-context.shared-runtime'
 import { useReducer, useUnwrapState } from './use-reducer'
-import { ErrorBoundary, type ErrorComponent } from './error-boundary'
+import {
+  default as DefaultGlobalError,
+  ErrorBoundary,
+  type GlobalErrorComponent,
+} from './error-boundary'
 import { isBot } from '../../shared/lib/router/utils/is-bot'
 import { addBasePath } from '../add-base-path'
 import { AppRouterAnnouncer } from './app-router-announcer'
@@ -54,9 +58,11 @@ import type { FlightRouterState } from '../../server/app-render/types'
 import { useNavFailureHandler } from './nav-failure-handler'
 import { useServerActionDispatcher } from '../app-call-server'
 import type { AppRouterActionQueue } from '../../shared/lib/router/action-queue'
-import { prefetch as prefetchWithSegmentCache } from '../components/segment-cache/prefetch'
+import { prefetch as prefetchWithSegmentCache } from './segment-cache'
 import { getRedirectTypeFromError, getURLFromRedirectError } from './redirect'
 import { isRedirectError, RedirectType } from './redirect-error'
+import { prefetchReducer } from './router-reducer/reducers/prefetch-reducer'
+import { pingVisibleLinks } from './links'
 
 const globalMutable: {
   pendingMpaPath?: string
@@ -137,6 +143,17 @@ function HistoryUpdater({
       window.history.replaceState(historyState, '', canonicalUrl)
     }
   }, [appRouterState])
+
+  useEffect(() => {
+    // The Next-Url and the base tree may affect the result of a prefetch
+    // task. Re-prefetch all visible links with the updated values. In most
+    // cases, this will not result in any new network requests, only if
+    // the prefetch result actually varies on one of these inputs.
+    if (process.env.__NEXT_CLIENT_SEGMENT_CACHE) {
+      pingVisibleLinks(appRouterState.nextUrl, appRouterState.tree)
+    }
+  }, [appRouterState.nextUrl, appRouterState.tree])
+
   return null
 }
 
@@ -229,10 +246,6 @@ function Head({
   // We use `useDeferredValue` to handle switching between the prefetched and
   // final values. The second argument is returned on initial render, then it
   // re-renders with the first argument.
-  //
-  // @ts-expect-error The second argument to `useDeferredValue` is only
-  // available in the experimental builds. When its disabled, it will always
-  // return `head`.
   return useDeferredValue(head, resolvedPrefetchRsc)
 }
 
@@ -242,9 +255,11 @@ function Head({
 function Router({
   actionQueue,
   assetPrefix,
+  globalError,
 }: {
   actionQueue: AppRouterActionQueue
   assetPrefix: string
+  globalError: [GlobalErrorComponent, React.ReactNode]
 }) {
   const [state, dispatch] = useReducer(actionQueue)
   const { canonicalUrl } = useUnwrapState(state)
@@ -290,12 +305,16 @@ function Router({
             // Use the old prefetch implementation.
             const url = createPrefetchURL(href)
             if (url !== null) {
-              startTransition(() => {
-                dispatch({
-                  type: ACTION_PREFETCH,
-                  url,
-                  kind: options?.kind ?? PrefetchKind.FULL,
-                })
+              // The prefetch reducer doesn't actually update any state or
+              // trigger a rerender. It just writes to a mutable cache. So we
+              // shouldn't bother calling setState/dispatch; we can just re-run
+              // the reducer directly using the current state.
+              // TODO: Refactor this away from a "reducer" so it's
+              // less confusing.
+              prefetchReducer(actionQueue.state, {
+                type: ACTION_PREFETCH,
+                url,
+                kind: options?.kind ?? PrefetchKind.FULL,
               })
             }
           },
@@ -610,6 +629,12 @@ function Router({
   )
 
   if (process.env.NODE_ENV !== 'production') {
+    // In development, we apply few error boundaries and hot-reloader:
+    // - DevRootHTTPAccessFallbackBoundary: avoid using navigation API like notFound() in root layout
+    // - HotReloader:
+    //  - hot-reload the app when the code changes
+    //  - render dev overlay
+    //  - catch runtime errors and display global-error when necessary
     if (typeof window !== 'undefined') {
       const { DevRootHTTPAccessFallbackBoundary } =
         require('./dev-root-http-access-fallback-boundary') as typeof import('./dev-root-http-access-fallback-boundary')
@@ -622,7 +647,21 @@ function Router({
     const HotReloader: typeof import('./react-dev-overlay/app/hot-reloader-client').default =
       require('./react-dev-overlay/app/hot-reloader-client').default
 
-    content = <HotReloader assetPrefix={assetPrefix}>{content}</HotReloader>
+    content = (
+      <HotReloader assetPrefix={assetPrefix} globalError={globalError}>
+        {content}
+      </HotReloader>
+    )
+  } else {
+    // In production, we only apply the user-customized global error boundary.
+    content = (
+      <ErrorBoundary
+        errorComponent={globalError[0]}
+        errorStyles={globalError[1]}
+      >
+        {content}
+      </ErrorBoundary>
+    )
   }
 
   return (
@@ -654,17 +693,22 @@ export default function AppRouter({
   assetPrefix,
 }: {
   actionQueue: AppRouterActionQueue
-  globalErrorComponentAndStyles: [ErrorComponent, React.ReactNode | undefined]
+  globalErrorComponentAndStyles: [GlobalErrorComponent, React.ReactNode]
   assetPrefix: string
 }) {
   useNavFailureHandler()
 
   return (
     <ErrorBoundary
-      errorComponent={globalErrorComponent}
-      errorStyles={globalErrorStyles}
+      // At the very top level, use the default GlobalError component as the final fallback.
+      // When the app router itself fails, which means the framework itself fails, we show the default error.
+      errorComponent={DefaultGlobalError}
     >
-      <Router actionQueue={actionQueue} assetPrefix={assetPrefix} />
+      <Router
+        actionQueue={actionQueue}
+        assetPrefix={assetPrefix}
+        globalError={[globalErrorComponent, globalErrorStyles]}
+      />
     </ErrorBoundary>
   )
 }

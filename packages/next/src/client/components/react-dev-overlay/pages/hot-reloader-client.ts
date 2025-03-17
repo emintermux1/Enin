@@ -35,18 +35,28 @@ import {
   onBeforeRefresh,
   onRefresh,
   onVersionInfo,
+  onStaticIndicator,
+  onDevIndicator,
 } from './client'
 import stripAnsi from 'next/dist/compiled/strip-ansi'
 import { addMessageListener, sendMessage } from './websocket'
-import formatWebpackMessages from '../internal/helpers/format-webpack-messages'
+import formatWebpackMessages from '../utils/format-webpack-messages'
 import { HMR_ACTIONS_SENT_TO_BROWSER } from '../../../../server/dev/hot-reloader-types'
 import type {
   HMR_ACTION_TYPES,
   TurbopackMsgToBrowser,
 } from '../../../../server/dev/hot-reloader-types'
-import { extractModulesFromTurbopackMessage } from '../../../../server/dev/extract-modules-from-turbopack-message'
-import { REACT_REFRESH_FULL_RELOAD_FROM_ERROR } from '../shared'
+import {
+  REACT_REFRESH_FULL_RELOAD,
+  REACT_REFRESH_FULL_RELOAD_FROM_ERROR,
+  reportInvalidHmrMessage,
+} from '../shared'
 import { RuntimeErrorHandler } from '../../errors/runtime-error-handler'
+import reportHmrLatency from '../utils/report-hmr-latency'
+import {
+  extractModulesFromTurbopackMessage,
+  TurbopackHmr,
+} from '../utils/turbopack-hot-reloader-common'
 // This alternative WebpackDevServer combines the functionality of:
 // https://github.com/webpack/webpack-dev-server/blob/webpack-1/client/index.js
 // https://github.com/webpack/webpack/blob/webpack-1/hot/dev-server.js
@@ -60,7 +70,6 @@ declare global {
   const __webpack_hash__: string
   interface Window {
     __nextDevClientId: number
-    __NEXT_HMR_LATENCY_CB: any
   }
 }
 
@@ -68,9 +77,7 @@ window.__nextDevClientId = Math.round(Math.random() * 100 + Date.now())
 
 let customHmrEventHandler: any
 let turbopackMessageListeners: ((msg: TurbopackMsgToBrowser) => void)[] = []
-let MODE: 'webpack' | 'turbopack' = 'webpack'
-export default function connect(mode: 'webpack' | 'turbopack') {
-  MODE = mode
+export default function connect() {
   register()
 
   addMessageListener((payload) => {
@@ -80,13 +87,8 @@ export default function connect(mode: 'webpack' | 'turbopack') {
 
     try {
       processMessage(payload)
-    } catch (err: any) {
-      console.warn(
-        '[HMR] Invalid message: ' +
-          JSON.stringify(payload) +
-          '\n' +
-          (err?.stack ?? '')
-      )
+    } catch (err: unknown) {
+      reportInvalidHmrMessage(payload, err)
     }
   })
 
@@ -126,21 +128,31 @@ function clearOutdatedErrors() {
 // Successful compilation.
 function handleSuccess() {
   clearOutdatedErrors()
+  hasCompileErrors = false
 
-  if (MODE === 'webpack') {
+  if (process.env.TURBOPACK) {
+    const hmrUpdate = turbopackHmr!.onBuilt()
+    if (hmrUpdate != null) {
+      reportHmrLatency(
+        sendMessage,
+        [...hmrUpdate.updatedModules],
+        hmrUpdate.startMsSinceEpoch,
+        hmrUpdate.endMsSinceEpoch
+      )
+    }
+    onBuildOk()
+  } else {
     const isHotUpdate =
       !isFirstCompilation ||
       (window.__NEXT_DATA__.page !== '/_error' && isUpdateAvailable())
-    isFirstCompilation = false
-    hasCompileErrors = false
 
     // Attempt to apply hot updates or reload.
     if (isHotUpdate) {
       tryApplyUpdates(onBeforeFastRefresh, onFastRefresh)
     }
-  } else {
-    onBuildOk()
   }
+
+  isFirstCompilation = false
 }
 
 // Compilation with warnings (e.g. ESLint).
@@ -194,6 +206,7 @@ function handleErrors(errors: any) {
   })
 
   // Only show the first error.
+
   onBuildError(formatted.errors[0])
 
   // Also log them to the console.
@@ -213,7 +226,11 @@ function handleErrors(errors: any) {
   }
 }
 
-let startLatency: number | undefined = undefined
+let webpackStartMsSinceEpoch: number | null = null
+const turbopackHmr: TurbopackHmr | null = process.env.TURBOPACK
+  ? new TurbopackHmr()
+  : null
+let isrManifest: Record<string, boolean> = {}
 
 function onBeforeFastRefresh(updatedModules: string[]) {
   if (updatedModules.length > 0) {
@@ -231,31 +248,12 @@ function onFastRefresh(updatedModules: ReadonlyArray<string> = []) {
 
   onRefresh()
 
-  reportHmrLatency()
-}
-
-function reportHmrLatency(updatedModules: ReadonlyArray<string> = []) {
-  if (startLatency) {
-    const endLatency = Date.now()
-    const latency = endLatency - startLatency
-    console.log(`[Fast Refresh] done in ${latency}ms`)
-    sendMessage(
-      JSON.stringify({
-        event: 'client-hmr-latency',
-        id: window.__nextDevClientId,
-        startTime: startLatency,
-        endTime: endLatency,
-        page: window.location.pathname,
-        updatedModules,
-        // Whether the page (tab) was hidden at the time the event occurred.
-        // This can impact the accuracy of the event's timing.
-        isPageHidden: document.visibilityState === 'hidden',
-      })
-    )
-    if (self.__NEXT_HMR_LATENCY_CB) {
-      self.__NEXT_HMR_LATENCY_CB(latency)
-    }
-  }
+  reportHmrLatency(
+    sendMessage,
+    updatedModules,
+    webpackStartMsSinceEpoch!,
+    Date.now()
+  )
 }
 
 // There is a newer version of the code available.
@@ -264,16 +262,43 @@ function handleAvailableHash(hash: string) {
   mostRecentCompilationHash = hash
 }
 
+export function handleStaticIndicator() {
+  if (process.env.__NEXT_DEV_INDICATOR) {
+    const routeInfo = window.next.router.components[window.next.router.pathname]
+    const pageComponent = routeInfo?.Component
+    const appComponent = window.next.router.components['/_app']?.Component
+    const isDynamicPage =
+      Boolean(pageComponent?.getInitialProps) || Boolean(routeInfo?.__N_SSP)
+    const hasAppGetInitialProps =
+      Boolean(appComponent?.getInitialProps) &&
+      appComponent?.getInitialProps !== appComponent?.origGetInitialProps
+
+    const isPageStatic =
+      window.location.pathname in isrManifest ||
+      (!isDynamicPage && !hasAppGetInitialProps)
+
+    onStaticIndicator(isPageStatic)
+  }
+}
+
 /** Handles messages from the sevrer for the Pages Router. */
 function processMessage(obj: HMR_ACTION_TYPES) {
   if (!('action' in obj)) {
     return
   }
 
-  // Use turbopack message for analytics, (still need built for webpack)
   switch (obj.action) {
+    case HMR_ACTIONS_SENT_TO_BROWSER.ISR_MANIFEST: {
+      isrManifest = obj.data
+      handleStaticIndicator()
+      break
+    }
     case HMR_ACTIONS_SENT_TO_BROWSER.BUILDING: {
-      startLatency = Date.now()
+      if (process.env.TURBOPACK) {
+        turbopackHmr!.onBuilding()
+      } else {
+        webpackStartMsSinceEpoch = Date.now()
+      }
       console.log('[Fast Refresh] rebuilding')
       break
     }
@@ -285,6 +310,7 @@ function processMessage(obj: HMR_ACTION_TYPES) {
 
       // Is undefined when it's a 'built' event
       if ('versionInfo' in obj) onVersionInfo(obj.versionInfo)
+      if ('devIndicator' in obj) onDevIndicator(obj.devIndicator)
 
       const hasErrors = Boolean(errors && errors.length)
       if (hasErrors) {
@@ -345,7 +371,7 @@ function processMessage(obj: HMR_ACTION_TYPES) {
     }
     case HMR_ACTIONS_SENT_TO_BROWSER.TURBOPACK_MESSAGE: {
       const updatedModules = extractModulesFromTurbopackMessage(obj.data)
-      onBeforeFastRefresh(updatedModules)
+      onBeforeFastRefresh([...updatedModules])
       for (const listener of turbopackMessageListeners) {
         listener({
           type: HMR_ACTIONS_SENT_TO_BROWSER.TURBOPACK_MESSAGE,
@@ -357,7 +383,7 @@ function processMessage(obj: HMR_ACTION_TYPES) {
         performFullReload(null)
       }
       onRefresh()
-      reportHmrLatency(updatedModules)
+      turbopackHmr!.onTurbopackMessage(obj)
       break
     }
     default: {
@@ -420,18 +446,9 @@ function tryApplyUpdates(
   function handleApplyUpdates(err: any, updatedModules: string[] | null) {
     if (err || RuntimeErrorHandler.hadRuntimeError || !updatedModules) {
       if (err) {
-        console.warn(
-          '[Fast Refresh] performing full reload\n\n' +
-            "Fast Refresh will perform a full reload when you edit a file that's imported by modules outside of the React rendering tree.\n" +
-            'You might have a file which exports a React component but also exports a value that is imported by a non-React component file.\n' +
-            'Consider migrating the non-React component export to a separate file and importing it into both files.\n\n' +
-            'It is also possible the parent component of the component you edited is a class component, which disables Fast Refresh.\n' +
-            'Fast Refresh requires at least one parent function component in your React tree.'
-        )
+        console.warn(REACT_REFRESH_FULL_RELOAD)
       } else if (RuntimeErrorHandler.hadRuntimeError) {
-        console.warn(
-          '[Fast Refresh] performing full reload because your application had an unrecoverable error'
-        )
+        console.warn(REACT_REFRESH_FULL_RELOAD_FROM_ERROR)
       }
       performFullReload(err)
       return
