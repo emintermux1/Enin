@@ -595,7 +595,7 @@ function assignDefaults(
     )
     if (isNaN(value) || value < 1) {
       throw new Error(
-        'Server Actions Size Limit must be a valid number or filesize format larger than 1MB: https://nextjs.org/docs/app/api-reference/next-config-js/serverActions#bodysizelimit'
+        'Server Actions Size Limit must be a valid number or filesize format larger than 1MB: https://nextjs.org/docs/app/api-reference/config/next-config-js/serverActions#bodysizelimit'
       )
     }
   }
@@ -1249,7 +1249,7 @@ export default async function loadConfig(
         'experimental.turbo.loaders is now deprecated. Please update next.config.js to use experimental.turbo.rules as soon as possible.\n' +
           'The new option is similar, but the key should be a glob instead of an extension.\n' +
           'Example: loaders: { ".mdx": ["mdx-loader"] } -> rules: { "*.mdx": ["mdx-loader"] }" }\n' +
-          'See more info here https://nextjs.org/docs/app/api-reference/next-config-js/turbo'
+          'See more info here https://nextjs.org/docs/app/api-reference/config/next-config-js/turbo'
       )
 
       const rules: Record<string, TurboLoaderItem[]> = {}
