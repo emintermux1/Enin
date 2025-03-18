@@ -510,11 +510,8 @@ export async function handleAction({
     // We want the render to see any cookie writes that we performed during the action,
     // so we need to update the immutable cookies to reflect the changes.
     synchronizeMutableCookies(requestStore)
-    requestStore.phase = 'render'
     return generateFlight(...args)
   }
-
-  requestStore.phase = 'action'
 
   // When running actions the default is no-store, you can still `cache: 'force-cache'`
   workStore.fetchCache = 'default-no-store'
@@ -679,18 +676,22 @@ export async function handleAction({
               // Only warn if it's a server action, otherwise skip for other post requests
               warnBadServerActionRequest()
 
-              const actionReturnedState = await workUnitAsyncStorage.run(
-                requestStore,
-                action
-              )
+              let actionReturnedState: unknown
+              requestStore.phase = 'action'
+              try {
+                actionReturnedState = await workUnitAsyncStorage.run(
+                  requestStore,
+                  action
+                )
+              } finally {
+                requestStore.phase = 'render'
+              }
 
               formState = await decodeFormState(
                 actionReturnedState,
                 formData,
                 serverModuleMap
               )
-
-              requestStore.phase = 'render'
             }
 
             // Skip the fetch path
@@ -834,18 +835,22 @@ export async function handleAction({
               // Only warn if it's a server action, otherwise skip for other post requests
               warnBadServerActionRequest()
 
-              const actionReturnedState = await workUnitAsyncStorage.run(
-                requestStore,
-                action
-              )
+              let actionReturnedState: unknown
+              requestStore.phase = 'action'
+              try {
+                actionReturnedState = await workUnitAsyncStorage.run(
+                  requestStore,
+                  action
+                )
+              } finally {
+                requestStore.phase = 'render'
+              }
 
               formState = await decodeFormState(
                 actionReturnedState,
                 formData,
                 serverModuleMap
               )
-
-              requestStore.phase = 'render'
             }
 
             // Skip the fetch path
@@ -922,9 +927,15 @@ export async function handleAction({
           actionId!
         ]
 
-      const returnVal = await workUnitAsyncStorage.run(requestStore, () =>
-        actionHandler.apply(null, boundActionArguments)
-      )
+      let returnVal: unknown
+      requestStore.phase = 'action'
+      try {
+        returnVal = await workUnitAsyncStorage.run(requestStore, () =>
+          actionHandler.apply(null, boundActionArguments)
+        )
+      } finally {
+        requestStore.phase = 'render'
+      }
 
       // For form actions, we need to continue rendering the page.
       if (isFetchAction) {
