@@ -122,7 +122,6 @@ pub struct ChunkingConfigs(FxHashMap<ResolvedVc<Box<dyn ChunkType>>, ChunkingCon
 #[turbo_tasks::value_trait]
 pub trait ChunkingContext {
     fn name(self: Vc<Self>) -> Vc<RcStr>;
-    fn should_use_file_source_map_uris(self: Vc<Self>) -> Vc<bool>;
     // The root path of the project
     fn root_path(self: Vc<Self>) -> Vc<FileSystemPath>;
     // The output root path in the output filesystem
@@ -172,6 +171,16 @@ pub trait ChunkingContext {
     }
 
     fn is_tracing_enabled(self: Vc<Self>) -> Vc<bool> {
+        Vc::cell(false)
+    }
+
+    /// Whether to use file:// uris for source map sources
+    fn should_use_file_source_map_uris(self: Vc<Self>) -> Vc<bool> {
+        Vc::cell(false)
+    }
+
+    /// Whether to give generated functions better names for stack traces
+    fn should_use_annotated_stack_traces(self: Vc<Self>) -> Vc<bool> {
         Vc::cell(false)
     }
 

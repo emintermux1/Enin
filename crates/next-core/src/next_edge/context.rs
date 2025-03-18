@@ -244,7 +244,9 @@ pub async fn get_edge_chunking_context_with_client_assets(
     })
     .module_id_strategy(module_id_strategy);
 
-    if !next_mode.is_development() {
+    if next_mode.is_development() {
+        builder = builder.use_annotated_stack_traces();
+    } else {
         builder = builder.ecmascript_chunking_config(ChunkingConfig {
             min_chunk_size: 20_000,
             ..Default::default()
@@ -297,7 +299,9 @@ pub async fn get_edge_chunking_context(
     })
     .module_id_strategy(module_id_strategy);
 
-    if !next_mode.is_development() {
+    if next_mode.is_development() {
+        builder = builder.use_annotated_stack_traces();
+    } else {
         builder = builder.ecmascript_chunking_config(ChunkingConfig {
             min_chunk_size: 20_000,
             ..Default::default()

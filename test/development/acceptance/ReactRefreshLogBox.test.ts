@@ -128,11 +128,12 @@ describe('ReactRefreshLogBox', () => {
            "description": "Error: no",
            "environmentLabel": null,
            "label": "Runtime Error",
-           "source": "index.js (3:7) @ [project]/index.js [ssr] (ecmascript)
+           "source": "index.js (3:7) @ Module.
+         {module evaluation}
          > 3 | throw new Error('no')
              |       ^",
            "stack": [
-             "[project]/index.js [ssr] (ecmascript) index.js (3:7)",
+             "Module. {module evaluation} index.js (3:7)",
              "<FIXME-next-dist-dir>",
              "<FIXME-next-dist-dir>",
              "<FIXME-next-dist-dir>",
@@ -175,11 +176,12 @@ describe('ReactRefreshLogBox', () => {
            "description": "Error: no",
            "environmentLabel": null,
            "label": "Runtime Error",
-           "source": "index.js (3:7) @ [project]/index.js [ssr] (ecmascript)
+           "source": "index.js (3:7) @ Module.
+         {module evaluation}
          > 3 | throw new Error('no')
              |       ^",
            "stack": [
-             "[project]/index.js [ssr] (ecmascript) index.js (3:7)",
+             "Module. {module evaluation} index.js (3:7)",
              "<FIXME-next-dist-dir>",
              "<FIXME-next-dist-dir>",
              "<FIXME-next-dist-dir>",
