@@ -2330,8 +2330,17 @@ export default abstract class Server<
       stripFlightHeaders(req.headers)
     }
 
-    let { isOnDemandRevalidate, revalidateOnlyGenerated } =
-      checkIsOnDemandRevalidate(req, this.renderOpts.previewProps)
+    let isOnDemandRevalidate = false
+    let revalidateOnlyGenerated = false
+    let isStaleRevalidationRequest = false
+
+    if (isSSG) {
+      ;({
+        isOnDemandRevalidate,
+        revalidateOnlyGenerated,
+        isStaleRevalidationRequest,
+      } = checkIsOnDemandRevalidate(req, this.renderOpts.previewProps))
+    }
 
     if (isSSG && this.minimalMode && req.headers[MATCHED_PATH_HEADER]) {
       // the url value is already correct when the matched-path header is set
@@ -2528,6 +2537,7 @@ export default abstract class Server<
         supportsDynamicResponse,
         shouldWaitOnAllReady,
         isOnDemandRevalidate,
+        isStaleRevalidationRequest: isStaleRevalidationRequest,
         isDraftMode: isPreviewMode,
         isServerAction,
         postponed,
@@ -2577,6 +2587,7 @@ export default abstract class Server<
               incrementalCache,
               cacheLifeProfiles: this.nextConfig.experimental?.cacheLife,
               isRevalidate: isSSG,
+              isStaleRevalidationRequest: isStaleRevalidationRequest,
               waitUntil: this.getWaitUntil(),
               onClose: res.onClose.bind(res),
               onAfterTaskError: undefined,

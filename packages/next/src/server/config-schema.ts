@@ -302,6 +302,7 @@ export const configSchema: zod.ZodType<NextConfig> = z.lazy(() =>
         clientSegmentCache: z.boolean().optional(),
         disableOptimizedLoading: z.boolean().optional(),
         disablePostcssPresetEnv: z.boolean().optional(),
+        disableBackgroundRevalidation: z.boolean().optional(),
         dynamicIO: z.boolean().optional(),
         inlineCss: z.boolean().optional(),
         esmExternals: z.union([z.boolean(), z.literal('loose')]).optional(),
