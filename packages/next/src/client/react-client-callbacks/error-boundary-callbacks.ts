@@ -2,7 +2,7 @@
 
 import type { ErrorInfo } from 'react'
 import { getReactStitchedError } from '../components/errors/stitched-error'
-import { handleClientError } from '../components/errors/use-error-handler'
+import { handleError } from '../components/errors/use-error-handler'
 import { isNextRouterError } from '../components/is-next-router-error'
 import { isBailoutToCSRError } from '../../shared/lib/lazy-dynamic/bailout-to-csr'
 import { reportGlobalError } from './report-global-error'
@@ -79,7 +79,7 @@ export function onCaughtError(
     // Log and report the error with location but without modifying the error stack
     originConsoleError('%o\n\n%s', err, errorLocation)
 
-    handleClientError(stitchedError, [])
+    handleError(stitchedError)
   } else {
     originConsoleError(err)
   }

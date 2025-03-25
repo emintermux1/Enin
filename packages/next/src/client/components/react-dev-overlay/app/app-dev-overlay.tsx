@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { AppDevOverlayErrorBoundary } from './app-dev-overlay-error-boundary'
 import { FontStyles } from '../font/font-styles'
 import { DevOverlay } from '../ui/dev-overlay'
-import { handleClientError } from '../../errors/use-error-handler'
+import { handleError } from '../../errors/use-error-handler'
 import { isNextRouterError } from '../../is-next-router-error'
 import { MISSING_ROOT_TAGS_ERROR } from '../../../../shared/lib/errors/constants'
 
@@ -52,10 +52,9 @@ function ReplaySsrOnlyErrors({
     // eslint-disable-next-line react-hooks/rules-of-hooks
     useEffect(() => {
       if (ssrError !== null) {
-        // TODO(veil): Produces wrong Owner Stack
         // TODO(veil): Mark as recoverable error
         // TODO(veil): console.error
-        handleClientError(ssrError, [])
+        handleError(ssrError)
 
         // If it's missing root tags, we can't recover, make it blocking.
         if (ssrError.digest === MISSING_ROOT_TAGS_ERROR) {

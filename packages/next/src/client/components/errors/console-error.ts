@@ -12,7 +12,7 @@ type UnhandledError = Error & {
 
 export function createUnhandledError(
   message: string | Error,
-  environmentName?: string | null
+  environmentName: string | null
 ): UnhandledError {
   const error = (
     typeof message === 'string' ? new Error(message) : message

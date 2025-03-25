@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { attachHydrationErrorState } from './attach-hydration-error-state'
 import { isNextRouterError } from '../is-next-router-error'
 import { storeHydrationErrorStateFromConsoleArgs } from './hydration-error-info'
-import { formatConsoleArgs, parseConsoleArgs } from '../../lib/console'
+import { formatConsoleArgs } from '../../lib/console'
 import isError from '../../../lib/is-error'
 import { createUnhandledError } from './console-error'
 import { enqueueConsecutiveDedupedError } from './enqueue-client-error'
@@ -18,21 +18,25 @@ const errorHandlers: Array<ErrorHandler> = []
 const rejectionQueue: Array<Error> = []
 const rejectionHandlers: Array<ErrorHandler> = []
 
-export function handleClientError(
+export function handleError(error: Error) {
+  errorQueue.push(error)
+  for (const handler of errorHandlers) {
+    handler(error)
+  }
+}
+
+export function handleConsoleError(
   originError: unknown,
   consoleErrorArgs: any[],
-  capturedFromConsole: boolean = false
+  environmentName: string | null
 ) {
   let error: Error
   if (!originError || !isError(originError)) {
     // If it's not an error, format the args into an error
     const formattedErrorMessage = formatConsoleArgs(consoleErrorArgs)
-    const { environmentName } = parseConsoleArgs(consoleErrorArgs)
     error = createUnhandledError(formattedErrorMessage, environmentName)
   } else {
-    error = capturedFromConsole
-      ? createUnhandledError(originError)
-      : originError
+    error = createUnhandledError(originError, environmentName)
   }
   error = getReactStitchedError(error)
 
@@ -78,27 +82,30 @@ export function useErrorHandler(
 }
 
 function onUnhandledError(event: WindowEventMap['error']): void | boolean {
-  if (isNextRouterError(event.error)) {
+  const error: unknown = event.error
+  if (isNextRouterError(error)) {
     event.preventDefault()
     return false
   }
   // When there's an error property present, we log the error to error overlay.
   // Otherwise we don't do anything as it's not logging in the console either.
-  if (event.error) {
-    handleClientError(event.error, [])
+  if (error) {
+    handleError(getReactStitchedError(error))
   }
 }
 
 function onUnhandledRejection(ev: WindowEventMap['unhandledrejection']): void {
-  const reason = ev?.reason
+  const reason: unknown = ev?.reason
   if (isNextRouterError(reason)) {
     ev.preventDefault()
     return
   }
 
-  let error = reason
-  if (error && !isError(error)) {
-    error = createUnhandledError(error + '')
+  let error: Error
+  if (isError(reason)) {
+    error = reason
+  } else {
+    error = createUnhandledError(reason + '', null)
   }
 
   rejectionQueue.push(error)

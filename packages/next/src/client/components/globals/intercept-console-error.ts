@@ -1,6 +1,6 @@
 import isError from '../../../lib/is-error'
 import { isNextRouterError } from '../is-next-router-error'
-import { handleClientError } from '../errors/use-error-handler'
+import { handleConsoleError } from '../errors/use-error-handler'
 import { parseConsoleArgs } from '../../lib/console'
 
 export const originConsoleError = globalThis.console.error
@@ -13,8 +13,10 @@ export function patchConsoleError() {
   }
   window.console.error = function error(...args: any[]) {
     let maybeError: unknown
+    let maybeEnvironmentName: string | null = null
     if (process.env.NODE_ENV !== 'production') {
-      const { error: replayedError } = parseConsoleArgs(args)
+      const { error: replayedError, environmentName } = parseConsoleArgs(args)
+      maybeEnvironmentName = environmentName
       if (replayedError) {
         maybeError = replayedError
       } else if (isError(args[0])) {
@@ -29,12 +31,12 @@ export function patchConsoleError() {
 
     if (!isNextRouterError(maybeError)) {
       if (process.env.NODE_ENV !== 'production') {
-        handleClientError(
+        handleConsoleError(
           // replayed errors have their own complex format string that should be used,
           // but if we pass the error directly, `handleClientError` will ignore it
           maybeError,
           args,
-          true
+          maybeEnvironmentName
         )
       }
 

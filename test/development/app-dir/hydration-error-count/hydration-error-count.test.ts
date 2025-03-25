@@ -162,7 +162,7 @@ describe('hydration-error-count', () => {
        "description": "In HTML, <p> cannot be a descendant of <p>.
      This will cause a hydration error.",
        "environmentLabel": null,
-       "label": "Unhandled Runtime Error",
+       "label": "Console Error",
        "source": "app/hydration-with-runtime-errors/page.tsx (12:14) @ Page
      > 12 |       sneaky <p>very sneaky</p>
           |              ^",
