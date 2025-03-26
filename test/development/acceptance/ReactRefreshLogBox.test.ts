@@ -48,6 +48,7 @@ describe('ReactRefreshLogBox', () => {
        {
          "count": 1,
          "description": "Error: idk",
+         "docs": null,
          "environmentLabel": null,
          "label": "Runtime Error",
          "source": "index.js (8:27) @ onClick
@@ -65,6 +66,7 @@ describe('ReactRefreshLogBox', () => {
        {
          "count": 1,
          "description": "Error: idk",
+         "docs": null,
          "environmentLabel": null,
          "label": "Runtime Error",
          "source": "index.js (8:27) @ onClick
@@ -126,6 +128,7 @@ describe('ReactRefreshLogBox', () => {
          {
            "count": 1,
            "description": "Error: no",
+           "docs": null,
            "environmentLabel": null,
            "label": "Runtime Error",
            "source": "index.js (3:7) @ [project]/index.js [ssr] (ecmascript)
@@ -144,6 +147,7 @@ describe('ReactRefreshLogBox', () => {
          {
            "count": 1,
            "description": "Error: no",
+           "docs": null,
            "environmentLabel": null,
            "label": "Runtime Error",
            "source": "index.js (3:7) @ eval
@@ -173,6 +177,7 @@ describe('ReactRefreshLogBox', () => {
          {
            "count": 1,
            "description": "Error: no",
+           "docs": null,
            "environmentLabel": null,
            "label": "Runtime Error",
            "source": "index.js (3:7) @ [project]/index.js [ssr] (ecmascript)
@@ -191,6 +196,7 @@ describe('ReactRefreshLogBox', () => {
          {
            "count": 1,
            "description": "Error: no",
+           "docs": null,
            "environmentLabel": null,
            "label": "Runtime Error",
            "source": "index.js (3:7) @ eval
@@ -278,6 +284,7 @@ describe('ReactRefreshLogBox', () => {
        {
          "count": 2,
          "description": "Error: no",
+         "docs": null,
          "environmentLabel": null,
          "label": "Runtime Error",
          "source": "FunctionDefault.js (1:51) @ FunctionDefault
@@ -296,6 +303,7 @@ describe('ReactRefreshLogBox', () => {
        {
          "count": 1,
          "description": "Error: no",
+         "docs": null,
          "environmentLabel": null,
          "label": "Runtime Error",
          "source": "FunctionDefault.js (1:51) @ FunctionDefault
@@ -372,6 +380,7 @@ describe('ReactRefreshLogBox', () => {
        {
          "count": 1,
          "description": "Parsing ecmascript source code failed",
+         "docs": null,
          "environmentLabel": null,
          "label": "Build Error",
          "source": "./index.js (7:1)
@@ -386,6 +395,7 @@ describe('ReactRefreshLogBox', () => {
        {
          "count": 1,
          "description": "Error:   x Unexpected token. Did you mean \`{'}'}\` or \`&rbrace;\`?",
+         "docs": null,
          "environmentLabel": null,
          "label": "Build Error",
          "source": "./index.js
@@ -467,6 +477,7 @@ describe('ReactRefreshLogBox', () => {
        {
          "count": 2,
          "description": "Error: ",
+         "docs": null,
          "environmentLabel": null,
          "label": "Runtime Error",
          "source": "Child.js (4:11) @ ClickCount.render
@@ -485,6 +496,7 @@ describe('ReactRefreshLogBox', () => {
        {
          "count": 1,
          "description": "Error: ",
+         "docs": null,
          "environmentLabel": null,
          "label": "Runtime Error",
          "source": "Child.js (4:11) @ ClickCount.render
@@ -547,6 +559,7 @@ describe('ReactRefreshLogBox', () => {
        {
          "count": 1,
          "description": "Parsing css source code failed",
+         "docs": null,
          "environmentLabel": null,
          "label": "Build Error",
          "source": "./index.module.css (1:9)
@@ -561,6 +574,7 @@ describe('ReactRefreshLogBox', () => {
        {
          "count": 1,
          "description": "Syntax error: <FIXME-project-root>/index.module.css Unknown word",
+         "docs": null,
          "environmentLabel": null,
          "label": "Build Error",
          "source": "./index.module.css (1:1)
@@ -581,6 +595,7 @@ describe('ReactRefreshLogBox', () => {
        {
          "count": 1,
          "description": "Parsing css source code failed",
+         "docs": null,
          "environmentLabel": null,
          "label": "Build Error",
          "source": "./index.module.css
@@ -594,6 +609,7 @@ describe('ReactRefreshLogBox', () => {
        {
          "count": 1,
          "description": "Syntax error: Selector "button" is not pure (pure selectors must contain at least one local class or id)",
+         "docs": null,
          "environmentLabel": null,
          "label": "Build Error",
          "source": "./index.module.css (1:1)
@@ -636,6 +652,7 @@ describe('ReactRefreshLogBox', () => {
        {
          "count": 1,
          "description": "Error: end https://nextjs.org",
+         "docs": null,
          "environmentLabel": null,
          "label": "Runtime Error",
          "source": "index.js (5:11) @ Index.useCallback[boom]
@@ -653,6 +670,7 @@ describe('ReactRefreshLogBox', () => {
        {
          "count": 1,
          "description": "Error: end https://nextjs.org",
+         "docs": null,
          "environmentLabel": null,
          "label": "Runtime Error",
          "source": "index.js (5:11) @ Index.useCallback[boom]
@@ -693,6 +711,7 @@ describe('ReactRefreshLogBox', () => {
        {
          "count": 1,
          "description": "Error: https://nextjs.org start",
+         "docs": null,
          "environmentLabel": null,
          "label": "Runtime Error",
          "source": "index.js (5:11) @ Index.useCallback[boom]
@@ -710,6 +729,7 @@ describe('ReactRefreshLogBox', () => {
        {
          "count": 1,
          "description": "Error: https://nextjs.org start",
+         "docs": null,
          "environmentLabel": null,
          "label": "Runtime Error",
          "source": "index.js (5:11) @ Index.useCallback[boom]
@@ -750,6 +770,7 @@ describe('ReactRefreshLogBox', () => {
        {
          "count": 1,
          "description": "Error: middle https://nextjs.org end",
+         "docs": null,
          "environmentLabel": null,
          "label": "Runtime Error",
          "source": "index.js (5:11) @ Index.useCallback[boom]
@@ -767,6 +788,7 @@ describe('ReactRefreshLogBox', () => {
        {
          "count": 1,
          "description": "Error: middle https://nextjs.org end",
+         "docs": null,
          "environmentLabel": null,
          "label": "Runtime Error",
          "source": "index.js (5:11) @ Index.useCallback[boom]
@@ -807,6 +829,7 @@ describe('ReactRefreshLogBox', () => {
        {
          "count": 1,
          "description": "Error: multiple https://nextjs.org links http://example.com",
+         "docs": null,
          "environmentLabel": null,
          "label": "Runtime Error",
          "source": "index.js (5:11) @ Index.useCallback[boom]
@@ -824,6 +847,7 @@ describe('ReactRefreshLogBox', () => {
        {
          "count": 1,
          "description": "Error: multiple https://nextjs.org links http://example.com",
+         "docs": null,
          "environmentLabel": null,
          "label": "Runtime Error",
          "source": "index.js (5:11) @ Index.useCallback[boom]
@@ -864,6 +888,7 @@ describe('ReactRefreshLogBox', () => {
        {
          "count": 1,
          "description": "Error: multiple https://nextjs.org links (http://example.com)",
+         "docs": null,
          "environmentLabel": null,
          "label": "Runtime Error",
          "source": "index.js (5:11) @ Index.useCallback[boom]
@@ -881,6 +906,7 @@ describe('ReactRefreshLogBox', () => {
        {
          "count": 1,
          "description": "Error: multiple https://nextjs.org links (http://example.com)",
+         "docs": null,
          "environmentLabel": null,
          "label": "Runtime Error",
          "source": "index.js (5:11) @ Index.useCallback[boom]
@@ -917,6 +943,7 @@ describe('ReactRefreshLogBox', () => {
        {
          "count": 1,
          "description": "Error: {"a":1,"b":"x"}",
+         "docs": null,
          "environmentLabel": null,
          "label": "Runtime Error",
          "source": null,
@@ -928,6 +955,7 @@ describe('ReactRefreshLogBox', () => {
        {
          "count": 1,
          "description": "Error: {"a":1,"b":"x"}",
+         "docs": null,
          "environmentLabel": null,
          "label": "Runtime Error",
          "source": null,
@@ -968,6 +996,7 @@ describe('ReactRefreshLogBox', () => {
          "count": 1,
          "description": "Error: class Hello {
        }",
+         "docs": null,
          "environmentLabel": null,
          "label": "Runtime Error",
          "source": null,
@@ -980,6 +1009,7 @@ describe('ReactRefreshLogBox', () => {
          "count": 1,
          "description": "Error: class Hello {
        }",
+         "docs": null,
          "environmentLabel": null,
          "label": "Runtime Error",
          "source": null,
@@ -1017,6 +1047,7 @@ describe('ReactRefreshLogBox', () => {
        {
          "count": 1,
          "description": "Error: string error",
+         "docs": null,
          "environmentLabel": null,
          "label": "Runtime Error",
          "source": null,
@@ -1028,6 +1059,7 @@ describe('ReactRefreshLogBox', () => {
        {
          "count": 1,
          "description": "Error: string error",
+         "docs": null,
          "environmentLabel": null,
          "label": "Runtime Error",
          "source": null,
@@ -1065,6 +1097,7 @@ describe('ReactRefreshLogBox', () => {
        {
          "count": 1,
          "description": "Error: A null error was thrown, see here for more info: https://nextjs.org/docs/messages/threw-undefined",
+         "docs": null,
          "environmentLabel": null,
          "label": "Runtime Error",
          "source": null,
@@ -1076,6 +1109,7 @@ describe('ReactRefreshLogBox', () => {
        {
          "count": 1,
          "description": "Error: A null error was thrown, see here for more info: https://nextjs.org/docs/messages/threw-undefined",
+         "docs": null,
          "environmentLabel": null,
          "label": "Runtime Error",
          "source": null,
@@ -1114,6 +1148,7 @@ describe('ReactRefreshLogBox', () => {
          {
            "count": 3,
            "description": "Error: Client error",
+           "docs": null,
            "environmentLabel": null,
            "label": "Runtime Error",
            "source": "pages/index.js (3:11) @ Page
@@ -1133,6 +1168,7 @@ describe('ReactRefreshLogBox', () => {
          {
            "count": 3,
            "description": "Error: Client error",
+           "docs": null,
            "environmentLabel": null,
            "label": "Runtime Error",
            "source": "pages/index.js (3:11) @ Page
@@ -1149,6 +1185,7 @@ describe('ReactRefreshLogBox', () => {
        {
          "count": 1,
          "description": "Error: Client error",
+         "docs": null,
          "environmentLabel": null,
          "label": "Runtime Error",
          "source": "pages/index.js (3:11) @ Page
@@ -1195,6 +1232,7 @@ describe('ReactRefreshLogBox', () => {
        {
          "count": 1,
          "description": "Error: anonymous error!",
+         "docs": null,
          "environmentLabel": null,
          "label": "Runtime Error",
          "source": "pages/index.js (3:11) @ <unknown>
@@ -1212,6 +1250,7 @@ describe('ReactRefreshLogBox', () => {
        {
          "count": 1,
          "description": "Error: anonymous error!",
+         "docs": null,
          "environmentLabel": null,
          "label": "Runtime Error",
          "source": "pages/index.js (3:11) @ eval
@@ -1254,6 +1293,7 @@ describe('ReactRefreshLogBox', () => {
      {
        "count": 1,
        "description": "TypeError: Invalid URL",
+       "docs": null,
        "environmentLabel": null,
        "label": "Runtime Error",
        "source": "pages/index.js (4:3) @ createURL
