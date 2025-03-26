@@ -31,6 +31,7 @@ pub fn minify(path: &FileSystemPath, code: &Code, source_maps: bool, mangle: boo
         .then(|| code.generate_source_map_ref())
         .transpose()?;
 
+    let span = tracing::info_span!("minify inner").entered();
     let cm = Arc::new(SwcSourceMap::new(FilePathMapping::empty()));
     let (src, mut src_map_buf) = {
         let fm = cm.new_source_file(
@@ -107,6 +108,7 @@ pub fn minify(path: &FileSystemPath, code: &Code, source_maps: bool, mangle: boo
 
         print_program(cm.clone(), program, source_maps.is_some())?
     };
+    drop(span);
 
     let mut builder = CodeBuilder::default();
     if let Some(original_map) = source_maps.as_ref() {

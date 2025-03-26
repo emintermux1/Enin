@@ -1235,6 +1235,7 @@ impl AggregationUpdateQueue {
     ) {
         for upper_id in upper_ids {
             let mut upper = ctx.task(upper_id, TaskDataCategory::Meta);
+            debug_assert!(is_aggregating_node(get_aggregation_number(&upper)));
             let diff = update.apply(
                 &mut upper,
                 ctx.session_id(),
@@ -1299,6 +1300,7 @@ impl AggregationUpdateQueue {
                 for upper_id in upper_ids.iter() {
                     // remove data from upper
                     let mut upper = ctx.task(*upper_id, TaskDataCategory::Meta);
+                    debug_assert!(is_aggregating_node(get_aggregation_number(&upper)));
                     let diff = data.apply(
                         &mut upper,
                         ctx.session_id(),
@@ -1435,6 +1437,7 @@ impl AggregationUpdateQueue {
         });
         for lost_follower_id in lost_follower_ids {
             let mut upper = ctx.task(upper_id, TaskDataCategory::Meta);
+            debug_assert!(is_aggregating_node(get_aggregation_number(&upper)));
             if update_count!(
                 upper,
                 Follower {
@@ -1489,6 +1492,7 @@ impl AggregationUpdateQueue {
             let mut upper = ctx.task(upper_id, TaskDataCategory::Meta);
             // decide if it should be an inner or follower
             let upper_aggregation_number = get_aggregation_number(&upper);
+            debug_assert!(is_aggregating_node(upper_aggregation_number));
 
             if !is_root_node(upper_aggregation_number)
                 && upper_aggregation_number <= follower_aggregation_number
@@ -1673,6 +1677,7 @@ impl AggregationUpdateQueue {
             }
             // decide if it should be an inner or follower
             upper_aggregation_number = get_aggregation_number(&upper);
+            debug_assert!(is_aggregating_node(upper_aggregation_number));
 
             if !is_root_node(upper_aggregation_number) {
                 followers_with_aggregation_number.retain(
