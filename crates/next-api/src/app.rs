@@ -1361,8 +1361,8 @@ impl AppEndpoint {
         );
 
         let server_action_manifest = create_server_actions_manifest(
+            *rsc_entry,
             actions,
-            project.project_path(),
             node_root,
             app_entry.original_name.clone(),
             runtime,
@@ -1988,8 +1988,7 @@ impl Endpoint for AppEndpoint {
 
         let server_actions_loader = ResolvedVc::upcast(
             build_server_actions_loader(
-                this.app_project.project().project_path(),
-                app_entry.original_name.clone(),
+                *rsc_entry,
                 actions,
                 match runtime {
                     NextRuntime::Edge => Vc::upcast(this.app_project.edge_rsc_module_context()),

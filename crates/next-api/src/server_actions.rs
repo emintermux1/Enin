@@ -26,7 +26,6 @@ use turbopack_core::{
     chunk::{ChunkItem, ChunkItemExt, ChunkableModule, ChunkingContext, EvaluatableAsset},
     context::AssetContext,
     file_source::FileSource,
-    ident::AssetIdent,
     module::Module,
     module_graph::{
         async_module_info::AsyncModulesInfo, ModuleGraph, SingleModuleGraph,
@@ -58,8 +57,8 @@ pub(crate) struct ServerActionsManifest {
 /// loader.
 #[turbo_tasks::function]
 pub(crate) async fn create_server_actions_manifest(
+    rsc_entry: Vc<Box<dyn Module>>,
     actions: Vc<AllActions>,
-    project_path: Vc<FileSystemPath>,
     node_root: Vc<FileSystemPath>,
     page_name: RcStr,
     runtime: NextRuntime,
@@ -67,8 +66,7 @@ pub(crate) async fn create_server_actions_manifest(
     module_graph: Vc<ModuleGraph>,
     chunking_context: Vc<Box<dyn ChunkingContext>>,
 ) -> Result<Vc<ServerActionsManifest>> {
-    let loader =
-        build_server_actions_loader(project_path, page_name.clone(), actions, rsc_asset_context);
+    let loader = build_server_actions_loader(rsc_entry, actions, rsc_asset_context);
     let evaluable = Vc::try_resolve_sidecast::<Box<dyn EvaluatableAsset>>(loader)
         .await?
         .context("loader module must be evaluatable")?
@@ -105,8 +103,7 @@ fn server_actions_loader_modifier() -> Vc<RcStr> {
 /// client and present inside the paired manifest.
 #[turbo_tasks::function]
 pub(crate) async fn build_server_actions_loader(
-    project_path: Vc<FileSystemPath>,
-    page_name: RcStr,
+    rsc_entry: Vc<Box<dyn Module>>,
     actions: Vc<AllActions>,
     asset_context: Vc<Box<dyn AssetContext>>,
 ) -> Result<Vc<Box<dyn EcmascriptChunkPlaceable>>> {
@@ -129,10 +126,12 @@ pub(crate) async fn build_server_actions_loader(
         )?;
     }
 
-    let path = project_path.join(format!(".next-internal/server/app{page_name}/actions.js").into());
     let file = File::from(contents.build());
     let source = VirtualSource::new_with_ident(
-        AssetIdent::from_path(path).with_modifier(server_actions_loader_modifier()),
+        rsc_entry
+            .ident()
+            .with_path(rsc_entry.ident().path().with_extension("js".into()))
+            .with_modifier(server_actions_loader_modifier()),
         AssetContent::file(file.into()),
     );
     let import_map = import_map.into_iter().map(|(k, v)| (v, k)).collect();
