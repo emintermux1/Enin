@@ -9889,6 +9889,7 @@ dependencies = [
  "anyhow",
  "async-stream",
  "async-trait",
+ "base64 0.22.1",
  "const_format",
  "either",
  "futures",
