@@ -209,6 +209,7 @@ import { turbopackBuild } from './turbopack-build'
 import { isPersistentCachingEnabled } from '../shared/lib/turbopack/utils'
 import { inlineStaticEnv } from '../lib/inline-static-env'
 import { populateStaticEnv } from '../lib/static-env'
+import { runAfterProductionBuild } from './after-production-build'
 
 type Fallback = null | boolean | string
 
@@ -3701,11 +3702,17 @@ export default async function build(
         })
       )
 
+      await shutdownPromise
+
+      await runAfterProductionBuild({
+        config,
+        buildSpan: nextBuildSpan,
+        telemetry,
+      })
+
       await nextBuildSpan
         .traceChild('telemetry-flush')
         .traceAsyncFn(() => telemetry.flush())
-
-      await shutdownPromise
     })
   } finally {
     // Ensure we wait for lockfile patching if present

@@ -456,6 +456,11 @@ export const configSchema: zod.ZodType<NextConfig> = z.lazy(() =>
           })
           .optional(),
         clientInstrumentationHook: z.boolean().optional(),
+        afterProductionBuild: z
+          .function()
+          .args()
+          .returns(z.promise(z.void()))
+          .optional(),
       })
       .optional(),
     exportPathMap: z

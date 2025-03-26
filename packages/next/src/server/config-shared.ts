@@ -610,6 +610,12 @@ export interface ExperimentalConfig {
    * Note: Use with caution as this can negatively impact page loading performance.
    */
   clientInstrumentationHook?: boolean
+
+  /**
+   * Hook that runs after the production build completes but before the server exits.
+   * Only executes when compilation is successful.
+   */
+  afterProductionBuild?: () => Promise<void>
 }
 
 export type ExportPathMap = {

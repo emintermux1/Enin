@@ -179,6 +179,7 @@ export type EventBuildFeatureUsage = {
     | 'webpackPlugins'
     | UseCacheTrackerKey
     | 'turbopackPersistentCaching'
+    | 'afterProductionBuild'
   invocationCount: number
 }
 export function eventBuildFeatureUsage(
