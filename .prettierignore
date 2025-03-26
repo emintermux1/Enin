@@ -66,3 +66,6 @@ test/e2e/async-modules/amp-validator-wasm.js
 
 # temporarily disable prettier for the turbopack directory
 /turbopack/
+
+# exclude import data for CMS Flotiq example
+examples/cms-flotiq/.flotiq/**

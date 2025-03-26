@@ -1,0 +1,269 @@
+# A dynamically generated blog example using Next.js and Flotiq
+
+This example showcases Next.js's [Server Side Generation](https://nextjs.org/docs/app/building-your-application/rendering/server-components#dynamic-rendering) with Next.js [Data Cache](https://nextjs.org/docs/app/building-your-application/caching#data-cache) feature using [Flotiq](https://www.flotiq.com/) as the data source.
+
+Live demo: [https://flotiq-nextjs-blog-starter.vercel.app](https://flotiq-nextjs-blog-starter.vercel.app)
+
+## Deploy your own
+
+Deploy the example using [Vercel](https://vercel.com?utm_source=github&utm_medium=readme&utm_campaign=next-example)
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/vercel/next.js/tree/canary/examples/cms-flotiq&project-name=cms-flotiq&repository-name=cms-flotiq)
+
+To deploy the project, you have to configure:
+
+1. [your account](#configuration)
+2. [environment variables](#env-variables)
+3. (additional) [webhooks](#nextjs-data-cache) to revalidate data cache after making changes in [Flotiq](https://editor.flotiq.com/al)
+
+### Related examples
+
+- [AgilityCMS](/examples/cms-agilitycms)
+- [Builder.io](/examples/cms-builder-io)
+- [ButterCMS](/examples/cms-buttercms)
+- [Contentful](/examples/cms-contentful)
+- [Cosmic](/examples/cms-cosmic)
+- [DatoCMS](/examples/cms-datocms)
+- [DotCMS](/examples/cms-dotcms)
+- [Drupal](/examples/cms-drupal)
+- [Enterspeed](/examples/cms-enterspeed)
+- [Flotiq](/examples/cms-flotiq)
+- [Ghost](/examples/cms-ghost)
+- [GraphCMS](/examples/cms-graphcms)
+- [Kontent.ai](/examples/cms-kontent-ai)
+- [MakeSwift](/examples/cms-makeswift)
+- [Payload](/examples/cms-payload)
+- [Plasmic](/examples/cms-plasmic)
+- [Prepr](/examples/cms-prepr)
+- [Prismic](/examples/cms-prismic)
+- [Sanity](/examples/cms-sanity)
+- [Sitecore XM Cloud](/examples/cms-sitecore-xmcloud)
+- [Sitefinity](/examples/cms-sitefinity)
+- [Storyblok](/examples/cms-storyblok)
+- [TakeShape](/examples/cms-takeshape)
+- [Tina](/examples/cms-tina)
+- [Umbraco](/examples/cms-umbraco)
+- [Umbraco heartcore](/examples/cms-umbraco-heartcore)
+- [Webiny](/examples/cms-webiny)
+- [WordPress](/examples/cms-wordpress)
+- [Blog Starter](/examples/blog-starter)
+
+## How to use
+
+Execute [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app) with [npm](https://docs.npmjs.com/cli/init), [Yarn](https://yarnpkg.com/lang/en/docs/cli/create/), [pnpm](https://pnpm.io), or [Bun](https://bun.sh/docs/cli/bunx) to bootstrap the example:
+
+```bash
+npx create-next-app --example cms-flotiq cms-flotiq-app
+```
+
+```bash
+yarn create next-app --example cms-flotiq cms-flotiq-app
+```
+
+```bash
+pnpm create next-app --example cms-flotiq cms-flotiq-app
+```
+
+```bash
+bunx create-next-app --example cms-flotiq cms-flotiq-app
+```
+
+Deploy it to the cloud with [Vercel](https://vercel.com/new?utm_source=github&utm_medium=readme&utm_campaign=next-example) ([Documentation](https://nextjs.org/docs/app/building-your-application/deploying)).
+
+## Configuration
+
+1. Create an account in Flotiq
+
+   If you already have an account, you can skip this step.
+
+   If you want to register with an auth provider (supported: **Github**, **Microsoft** and **Google** ), go to the [Flotiq login page](https://editor.flotiq.com/login) and click one of the buttons next to the login form.
+
+   If you want to register by email, go to the [Flotiq registration page](https://editor.flotiq.com/register) and fill out the form. You will receive an email with an activation link. Activate your account and log in to your dashboard.
+
+2. Import example data from the starter to Flotiq
+
+   After logging in to the [Flotiq panel](https://editor.flotiq.com/), go to the API keys tab and copy **Read and write API KEY**.
+
+   <img src=".docs/rw-api-key.png" alt="Copy read and write API key" width="1000px" />
+
+   Use the command below to import data to your account. Use the read and write API key you copied.
+
+   ```bash
+   cd cms-flotiq-app
+   npx flotiq-cli import .flotiq [flotiqApiKey]
+   ```
+
+   _Note: You don't need any content types in your account. The import command will create the blogpost content type used in this example._
+
+3. Add env variables
+
+   Flotiq provides a tool named [flotiq-setup](https://github.com/flotiq/flotiq-setup) for automatically populating `.env` files with your Flotiq API keys.
+
+   ```bash
+      npx flotiq-setup --nextjs
+   ```
+
+   After executing this command, a browser window will open with the Flotiq. Upon successful authentication,
+   the command will automatically generate appropriately filled `.env` files for you.
+
+   Go to the newly generated file and add the `FLOTIQ_CLIENT_AUTH_KEY` variable. You can set it to any string (read more about [env variables](#env-variables)), it will be needed later.
+
+4. Install dependencies
+
+   Navigate into your new site’s directory and run command to install dependencies with [npm](https://docs.npmjs.com/cli/init), [Yarn](https://yarnpkg.com/lang/en/docs/cli/create/), [pnpm](https://pnpm.io), or [Bun](https://bun.sh/docs/cli/bunx)
+
+   ```bash
+   npm install
+   ```
+
+   ```bash
+   yarn install
+   ```
+
+   ```bash
+   pnpm install
+   ```
+
+   ```bash
+   bun install
+   ```
+
+5. Flotiq API SDK - types
+
+   This starter uses [@flotiq/flotiq-api-sdk](https://www.npmjs.com/package/@flotiq/flotiq-api-sdk) package as an API client. It includes type generation for autocompletion of user data types.
+
+   Types generated using our typegen command enable fast and typesafe development with Flotiq as a data backend.
+   You can still use all the API features without type generation. TypeScript user types can be added or removed at any point in development without code changes required.
+
+   Generated `flotiq-api.d.ts` types can be either committed with your code, or .gitignore-d and generated during development and CI/CD.
+   For ease of use, we have already included a `flotiq-api.d.ts` file with types containing type definitions for this starter.
+
+   To regenerate Flotiq SDK you can use [flotiq-api-typegen CLI](https://www.npmjs.com/package/@flotiq/flotiq-api-sdk#flotiq-api-typegen), simply run one of the commands:
+
+   ```bash
+      npm exec flotiq-api-typegen
+   ```
+
+   ```bash
+      yarn run flotiq-api-typegen
+   ```
+
+   ```bash
+      pnpm exec flotiq-api-typegen
+   ```
+
+   ```bash
+      bun run flotiq-api-typegen
+   ```
+
+   Usage examples:
+
+   ```typescript
+   import { Flotiq } from "@flotiq/flotiq-api-sdk";
+
+   const api = new Flotiq({
+     apiKey: "<YOUR API KEY>",
+   });
+
+   await api.content._media.list().then((response) => {
+     console.log("media > list", response);
+   });
+   ```
+
+   More examples of its usage can be found in the [@flotiq/flotiq-api-sdk readme](https://www.npmjs.com/package/@flotiq/flotiq-api-sdk#usage-examples)
+
+   _Note: If you make any changes (additions or deletions) to the content type definitions in your Flotiq account, you will need to rerun the `flotiq-api-typegen` command.
+   If you are making changes during development, you can use `--watch` option, which will regenerate types for you, every time you change content type definition._
+
+6. Developing
+
+   Navigate into your new site’s directory and start it up.
+
+   ```bash
+   npm run dev
+   ```
+
+   ```bash
+   yarn run dev
+   ```
+
+   ```bash
+   pnpm run dev
+   ```
+
+   ```bash
+   bun run dev
+   ```
+
+   Your site is now running at `http://localhost:3000`!
+
+   Open the `cms-flotiq-app` directory in your code editor of choice and edit `src/app/page.tsx`. Save your changes, and the browser will update in real-time!
+
+7. Manage your content using Flotiq editor
+
+   You can now easily manage your content using [Flotiq editor](https://editor.flotiq.com)
+
+   _Note: If you make any changes (additions or deletions) to the content type definitions in your Flotiq account, you will need to rerun the `flotiq-api-typegen` command.
+   If you are making changes during development, you can use `--watch` option, which will regenerate types for you, every time you change content type definition._
+
+## Deployment
+
+Deploy using the template:
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/vercel/next.js/tree/canary/examples/cms-flotiq&project-name=cms-flotiq&repository-name=cms-flotiq)
+
+### Env variables:
+
+The project requires the following variables to start:
+
+| Name                     | Description                                                 |
+| ------------------------ | ----------------------------------------------------------- |
+| `FLOTIQ_CLIENT_AUTH_KEY` | The key used to [revalidate cache](#nextjs-data-cache)      |
+| `FLOTIQ_API_KEY`         | Flotiq Read API key with access to blogpost content objects |
+
+You can use any value for `FLOTIQ_CLIENT_AUTH_KEY`. Make sure to use different values for production and non-production variables.
+
+You can find the read-only API key on the API keys page in the [Flotiq panel](https://editor.flotiq.com/)
+
+ <img src=".docs/ro-api-key.png" alt="Read only API key" width="1000px" />
+
+### Next.js Data Cache
+
+This starter utilizes a [data caching mechanism in the Next.js application](https://nextjs.org/docs/app/building-your-application/caching#data-cache). After fetching, the data is cached, which means that the cache must be cleared to see the latest data. In this starter, we provide a special API endpoint that clears the cache. You can call it directly or use webhooks that will do it automatically after saving a blog post (both for adding a new entry and editing an existing one).
+
+#### API Endpoint
+
+To send a request to the endpoint that clears the cache, use the following command:
+
+```bash
+curl -X POST https://your-domain.com/api/flotiq/revalidate \
+     -H "x-editor-key: <FLOTIQ_CLIENT_AUTH_KEY>"
+```
+
+Replace `https://your-domain.com` with your actual `URL` and `FLOTIQ_CLIENT_AUTH_KEY` with the appropriate authorization key value.
+
+#### Webhooks in Flotiq space
+
+Once you have your app deployed, you can add a webhook that automatically clears the cache after saving a blog post; follow these instructions:
+
+1. Go to [Flotiq dashboard](https://editor.flotiq.com/login)
+2. Go to the _Webhooks_ page and click _Add new webhook_
+3. Name the webhook (e.g. Clear Blog Post cache)
+4. Paste the URL to your revalidate endpoint, eg. `https://your-domain.com/api/flotiq/revalidate`
+5. As a webhook type, choose **Content Object Changes Asynchronous (non-blocking)**
+6. Enable the webhook
+7. As a trigger, choose **Create**, **Update** and **Delete** actions on the **Blog Post** Content Type
+8. Add a new header with the following fields:
+   - **Header Name** - `x-editor-key`
+   - **Header Value** - value for `FLOTIQ_CLIENT_AUTH_KEY` env variable in your deployment
+9. Save the webhook
+
+Example webhook configuration:
+
+<img src=".docs/example-webhook.png" alt="Example webhook configuration" width="500px" />
+
+**Warning!** The webhook URL must be public. In development mode, caching is not applied, so the user does not need to worry about manually clearing the cache on `http://localhost:3000`.
+
+## Issues
+
+If you wish to talk with the Flotiq team about this project, feel free to hop on [Flotiq Discord ![Flotiq Discord Chat](https://img.shields.io/discord/682699728454025410.svg)](https://discord.gg/FwXcHnX).
