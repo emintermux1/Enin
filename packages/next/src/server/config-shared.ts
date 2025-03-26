@@ -318,6 +318,7 @@ export interface ExperimentalConfig {
   expireTime?: number
   middlewarePrefetch?: 'strict' | 'flexible'
   manualClientBasePath?: boolean
+  hardNavigate404?: boolean
   /**
    * CSS Chunking strategy. Defaults to `true` ("loose" mode), which guesses dependencies
    * between CSS files to keep ordering of them.
@@ -1206,6 +1207,7 @@ export const defaultConfig: NextConfig = {
     middlewarePrefetch: 'flexible',
     optimisticClientCache: true,
     manualClientBasePath: false,
+    hardNavigate404: false,
     cpus: Math.max(
       1,
       (Number(process.env.CIRCLE_NODE_TOTAL) ||
