@@ -23,6 +23,7 @@ import {
 } from '../response-cache'
 import { waitAtLeastOneReactRenderTask } from '../../lib/scheduler'
 import { cloneResponse } from './clone-response'
+import { getBuiltinRequestContext } from '../after/builtin-request-context'
 
 const isEdgeRuntime = process.env.NEXT_RUNTIME === 'edge'
 
@@ -676,7 +677,7 @@ export function createPatchedFetcher(
                   // We are dynamically rendering including dev mode. We want to return
                   // the response to the caller as soon as possible because it might stream
                   // over a very long time.
-                  cloned1
+                  const cacheSetPromise = cloned1
                     .arrayBuffer()
                     .then(async (arrayBuffer) => {
                       const bodyBuffer = Buffer.from(arrayBuffer)
@@ -709,6 +710,15 @@ export function createPatchedFetcher(
                       console.warn(`Failed to set fetch cache`, input, error)
                     )
                     .finally(handleUnlock)
+
+                  const waitUntil = getBuiltinRequestContext()?.waitUntil
+
+                  // if there is a waitUntil function available then use it to
+                  // wait for the promise to complete (otherwise the promise will
+                  // just be a dangling one)
+                  if (waitUntil) {
+                    waitUntil(cacheSetPromise)
+                  }
 
                   return cloned2
                 }
