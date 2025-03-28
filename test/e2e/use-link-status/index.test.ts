@@ -1,5 +1,5 @@
 import { nextTestSetup } from 'e2e-utils'
-import { waitFor } from 'next-test-utils'
+import { retry, waitFor } from 'next-test-utils'
 
 describe('useLinkStatus', () => {
   const { next } = nextTestSetup({
@@ -39,9 +39,18 @@ describe('useLinkStatus', () => {
     // Trigger shallow routing by clicking debug mode button
     await browser.elementById('enable-debug-btn').click()
 
-    // Pending state should be gone
-    const post1LoadingElements = await browser.elementsByCss('#post-1-loading')
-    expect(post1LoadingElements.length).toBe(0)
+    await retry(
+      async () => {
+        // Pending state should be gone
+        const post1LoadingElements =
+          await browser.elementsByCss('#post-1-loading')
+        expect(post1LoadingElements.length).toBe(0)
+      },
+      1500,
+      // Loading takes 3 seconds, assuming it takes at most 1.5 seconds to get
+      // here, we still have 1.5 seconds left to do the check
+      300
+    )
   })
 
   it('should remove pending state after browser back navigation', async () => {
