@@ -18,7 +18,7 @@ export default function Calculator() {
       case "×":
         return String(a * b);
       case "÷":
-        if (b === 0) return "Hata";
+        if (b === 0) return "Error";
         return String(a / b);
       default:
         return String(b);
@@ -26,7 +26,7 @@ export default function Calculator() {
   }
 
   function handleNumber(num: string) {
-    if (display === "Hata") {
+    if (display === "Error") {
       setDisplay(num);
       return;
     }
@@ -37,21 +37,21 @@ export default function Calculator() {
     }
     if (display === "0" && num !== ".") {
       setDisplay(num);
-    } else {
+    } else if (display.replace(/[-.]/g, "").length < 9) {
       setDisplay(display + num);
     }
   }
 
   function handleOperation(op: string) {
-    if (display === "Hata") return;
+    if (display === "Error") return;
     if (previousValue !== null && operation && !resetDisplay) {
       const result = calculate(
         parseFloat(previousValue),
         operation,
         parseFloat(display)
       );
-      if (result === "Hata") {
-        setDisplay("Hata");
+      if (result === "Error") {
+        setDisplay("Error");
         setPreviousValue(null);
         setOperation(null);
         setResetDisplay(true);
@@ -67,7 +67,7 @@ export default function Calculator() {
   }
 
   function handleEquals() {
-    if (previousValue === null || operation === null || display === "Hata")
+    if (previousValue === null || operation === null || display === "Error")
       return;
     const result = calculate(
       parseFloat(previousValue),
@@ -88,7 +88,7 @@ export default function Calculator() {
   }
 
   function handleToggleSign() {
-    if (display === "Hata" || display === "0") return;
+    if (display === "Error" || display === "0") return;
     if (display.startsWith("-")) {
       setDisplay(display.slice(1));
     } else {
@@ -97,12 +97,12 @@ export default function Calculator() {
   }
 
   function handlePercent() {
-    if (display === "Hata") return;
+    if (display === "Error") return;
     setDisplay(String(parseFloat(display) / 100));
   }
 
   function handleDecimal() {
-    if (display === "Hata") return;
+    if (display === "Error") return;
     if (resetDisplay) {
       setDisplay("0.");
       setResetDisplay(false);
@@ -113,15 +113,40 @@ export default function Calculator() {
     }
   }
 
+  function formatDisplay(val: string): string {
+    if (val === "Error") return val;
+    const num = parseFloat(val);
+    if (isNaN(num)) return val;
+    if (val.endsWith(".")) return val;
+    if (val.includes(".") && val.endsWith("0")) return val;
+    if (Number.isInteger(num) && !val.includes(".")) {
+      return num.toLocaleString("en-US");
+    }
+    return val;
+  }
+
+  const displayText = formatDisplay(display);
+  const displayClass = [
+    styles.display,
+    displayText.length > 11 ? styles.displayXSmall : "",
+    displayText.length > 7 && displayText.length <= 11
+      ? styles.displaySmall
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const isActiveOp = (op: string) => operation === op && resetDisplay;
+
   return (
     <div className={styles.calculator}>
-      <div className={styles.display}>{display}</div>
+      <div className={displayClass}>{displayText}</div>
       <div className={styles.buttons}>
         <button
           className={`${styles.button} ${styles.topRowButton}`}
           onClick={handleClear}
         >
-          C
+          {display === "0" && previousValue === null ? "AC" : "C"}
         </button>
         <button
           className={`${styles.button} ${styles.topRowButton}`}
@@ -136,7 +161,7 @@ export default function Calculator() {
           %
         </button>
         <button
-          className={`${styles.button} ${styles.operatorButton}`}
+          className={`${styles.button} ${styles.operatorButton} ${isActiveOp("÷") ? styles.operatorActive : ""}`}
           onClick={() => handleOperation("÷")}
         >
           ÷
@@ -152,7 +177,7 @@ export default function Calculator() {
           9
         </button>
         <button
-          className={`${styles.button} ${styles.operatorButton}`}
+          className={`${styles.button} ${styles.operatorButton} ${isActiveOp("×") ? styles.operatorActive : ""}`}
           onClick={() => handleOperation("×")}
         >
           ×
@@ -168,10 +193,10 @@ export default function Calculator() {
           6
         </button>
         <button
-          className={`${styles.button} ${styles.operatorButton}`}
+          className={`${styles.button} ${styles.operatorButton} ${isActiveOp("-") ? styles.operatorActive : ""}`}
           onClick={() => handleOperation("-")}
         >
-          -
+          −
         </button>
 
         <button className={styles.button} onClick={() => handleNumber("1")}>
@@ -184,7 +209,7 @@ export default function Calculator() {
           3
         </button>
         <button
-          className={`${styles.button} ${styles.operatorButton}`}
+          className={`${styles.button} ${styles.operatorButton} ${isActiveOp("+") ? styles.operatorActive : ""}`}
           onClick={() => handleOperation("+")}
         >
           +

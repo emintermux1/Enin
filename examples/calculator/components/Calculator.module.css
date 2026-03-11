@@ -1,82 +1,116 @@
 .calculator {
-  max-width: 320px;
-  background: #16213e;
-  border-radius: 16px;
-  padding: 24px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  width: 100%;
+  max-width: 400px;
+  background: #000;
+  padding: 0 16px;
+  padding-bottom: env(safe-area-inset-bottom, 16px);
+  display: flex;
+  flex-direction: column;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+@media (min-width: 500px) {
+  .calculator {
+    border-radius: 24px;
+    padding: 24px;
+    background: #1c1c1e;
+  }
 }
 
 .display {
-  background: #0f3460;
   color: white;
   text-align: right;
-  padding: 20px;
-  font-size: 2.5rem;
-  border-radius: 12px;
-  margin-bottom: 16px;
+  padding: 16px 8px;
+  font-size: 4rem;
+  font-weight: 300;
+  line-height: 1;
   overflow: hidden;
   text-overflow: ellipsis;
-  min-height: 80px;
+  white-space: nowrap;
+  min-height: 90px;
   display: flex;
   align-items: flex-end;
   justify-content: flex-end;
-  word-break: break-all;
+}
+
+.displaySmall {
+  font-size: 2.8rem;
+}
+
+.displayXSmall {
+  font-size: 2rem;
 }
 
 .buttons {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 10px;
+  gap: 12px;
 }
 
 .button {
-  padding: 20px;
-  font-size: 1.25rem;
+  aspect-ratio: 1;
+  font-size: 1.75rem;
   border: none;
-  border-radius: 12px;
+  border-radius: 50%;
   cursor: pointer;
-  background: #1a1a2e;
+  background: #333;
   color: white;
-  transition: background 0.2s;
-  font-weight: 600;
-}
-
-.button:hover {
-  background: #533483;
+  font-weight: 400;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.1s;
+  touch-action: manipulation;
+  outline: none;
+  -webkit-appearance: none;
 }
 
 .button:active {
-  background: #e94560;
-  transform: scale(0.95);
+  opacity: 0.6;
 }
 
 .operatorButton {
-  background: #e94560;
+  background: #ff9f0a;
   color: white;
+  font-size: 2rem;
+  font-weight: 500;
 }
 
-.operatorButton:hover {
-  background: #c73e54;
+.operatorActive {
+  background: white;
+  color: #ff9f0a;
+}
+
+.operatorButton:active {
+  opacity: 0.7;
 }
 
 .zeroButton {
+  border-radius: 999px;
+  aspect-ratio: auto;
   grid-column: span 2;
+  justify-content: flex-start;
+  padding-left: 28px;
 }
 
 .equalsButton {
-  background: #e94560;
+  background: #ff9f0a;
   color: white;
+  font-size: 2rem;
+  font-weight: 500;
 }
 
-.equalsButton:hover {
-  background: #c73e54;
+.equalsButton:active {
+  opacity: 0.7;
 }
 
 .topRowButton {
-  background: #533483;
-  color: white;
+  background: #a5a5a5;
+  color: #000;
+  font-weight: 500;
 }
 
-.topRowButton:hover {
-  background: #6b44a0;
+.topRowButton:active {
+  opacity: 0.6;
 }
