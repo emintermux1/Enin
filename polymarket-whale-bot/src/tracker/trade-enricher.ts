@@ -18,6 +18,7 @@ interface TraderStatsSnapshot {
   traderStats: TraderStats;
   recentTradeCount: number;
   positions: DataPosition[];
+  closedPositions: Array<{ title: string; realizedPnl: number; timestamp: number }>;
 }
 
 function normalizeWallet(wallet: string): string {
@@ -25,6 +26,15 @@ function normalizeWallet(wallet: string): string {
 }
 
 export class TradeEnricher {
+  private static readonly CATEGORY_KEYWORDS: Record<string, string[]> = {
+    Politics: ['president', 'election', 'minister', 'congress', 'senate', 'vote', 'governor', 'democrat', 'republican', 'trump', 'biden', 'party', 'political', 'cabinet'],
+    Sports: ['nba', 'nfl', 'soccer', 'football', 'basketball', 'baseball', 'tennis', 'ufc', 'match', 'championship', 'super bowl', 'premier league', 'world cup', 'playoffs', 'mvp'],
+    Crypto: ['bitcoin', 'ethereum', 'btc', 'eth', 'crypto', 'solana', 'token', 'blockchain', 'defi', 'altcoin', 'memecoin'],
+    Geopolitics: ['war', 'conflict', 'ceasefire', 'iran', 'russia', 'ukraine', 'china', 'nato', 'sanctions', 'invasion', 'military', 'peace', 'treaty'],
+    Culture: ['oscar', 'grammy', 'emmy', 'movie', 'music', 'celebrity', 'tiktok', 'youtube', 'influencer', 'awards', 'show'],
+    Economics: ['gdp', 'inflation', 'fed', 'interest rate', 'recession', 'stock', 'oil', 'commodity', 'tariff', 'unemployment', 'cpi'],
+  };
+
   private readonly traderStatsCache = new LRUCache<string, TraderStatsSnapshot>({ max: 500, ttl: 1000 * 60 * 10 });
   private readonly marketCache = new LRUCache<string, MarketInfo>({ max: 500, ttl: 1000 * 60 * 60 });
 
@@ -57,6 +67,8 @@ export class TradeEnricher {
     });
 
     const price = Math.max(trade.price || 0.01, 0.01);
+    const topCategory = this.determineTopCategory(statsSnapshot.positions, statsSnapshot.closedPositions);
+    const freshWalletsInMarket = this.countFreshWallets(holders.addresses);
 
     return {
       trade,
@@ -69,6 +81,8 @@ export class TradeEnricher {
       potentialWin: trade.usdcSize / price,
       multiplier: 1 / price,
       isFreshWallet: statsSnapshot.recentTradeCount > 0 && statsSnapshot.recentTradeCount < 20,
+      topCategory,
+      freshWalletsInMarket,
     };
   }
 
@@ -119,6 +133,11 @@ export class TradeEnricher {
       traderStats,
       recentTradeCount: recentActivity.length,
       positions,
+      closedPositions: closedPositions.map((position) => ({
+        title: position.title,
+        realizedPnl: Number(position.realizedPnl || 0),
+        timestamp: position.timestamp,
+      })),
     };
     this.traderStatsCache.set(key, snapshot);
     return snapshot;
@@ -201,6 +220,44 @@ export class TradeEnricher {
       insidersInMarket: insiderAddresses.size,
       traderIsTopHolder: holderStats.traderIsTopHolder,
     };
+  }
+
+  private determineTopCategory(
+    positions: DataPosition[],
+    closedPositions: Array<{ title: string }>,
+  ): string | null {
+    const allTitles = [...positions.map((position) => position.title), ...closedPositions.map((position) => position.title)].filter(Boolean);
+
+    if (allTitles.length === 0) {
+      return null;
+    }
+
+    const scores: Record<string, number> = {};
+    for (const title of allTitles) {
+      const lower = title.toLowerCase();
+      for (const [category, keywords] of Object.entries(TradeEnricher.CATEGORY_KEYWORDS)) {
+        for (const keyword of keywords) {
+          if (lower.includes(keyword)) {
+            scores[category] = (scores[category] || 0) + 1;
+            break;
+          }
+        }
+      }
+    }
+
+    const sorted = Object.entries(scores).sort((a, b) => b[1] - a[1]);
+    return sorted[0]?.[0] ?? null;
+  }
+
+  private countFreshWallets(addresses: string[]): number {
+    let count = 0;
+    for (const address of addresses) {
+      const cached = this.traderStatsCache.get(address);
+      if (cached && cached.recentTradeCount > 0 && cached.recentTradeCount < 20) {
+        count += 1;
+      }
+    }
+    return count;
   }
 
   private calculateBestWinStreak(closedPositions: Array<{ realizedPnl: number; timestamp: number }>): number | null {

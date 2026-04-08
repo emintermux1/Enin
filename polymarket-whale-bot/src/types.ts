@@ -77,6 +77,8 @@ export interface EnrichedTrade {
   potentialWin: number;
   multiplier: number;
   isFreshWallet: boolean;
+  topCategory: string | null;
+  freshWalletsInMarket: number;
 }
 
 export interface LeaderboardEntry {

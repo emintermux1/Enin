@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import { Markup, Telegraf } from 'telegraf';
 import { CardGenerator } from '../image/card-generator';
 import { EnrichedTrade, TelegramConfig } from '../types';
-import { formatMultiplier, formatPriceCents, formatResolveDate, formatUsd } from '../utils/formatter';
+import { formatCompactUsd, formatMultiplier, formatPriceCents, formatResolveDate, formatSignedUsd, formatUsd } from '../utils/formatter';
 import { logger } from '../utils/logger';
 import { TRADER_TYPE_META } from '../classifier/trader-classifier';
 import {
@@ -15,7 +15,7 @@ import {
   EMOJI_MONEY,
   EMOJI_CHART_UP,
   EMOJI_CHECK,
-  EMOJI_PORTFOLIO,
+  EMOJI_FIRE,
   PremiumEmoji,
 } from './premium-emojis';
 
@@ -211,26 +211,61 @@ export class ChannelPoster {
     builder.addText('└ ');
     builder.addPremiumEmoji(EMOJI_MONEY, ` To win: ${formatUsd(trade.potentialWin)} (${formatMultiplier(trade.multiplier)})`);
     builder.newLine().newLine();
-    builder.addPremiumEmoji(EMOJI_TRADER, ` Trader: ${displayName}`);
+    builder.addPremiumEmoji(EMOJI_TRADER, ' Trader: ');
+    builder.addLink(displayName, `https://polymarket.com/profile/${trade.trade.proxyWallet}`);
     builder.newLine();
 
+    const traderLines: Array<{ emoji: PremiumEmoji | null; text: string }> = [];
     if (trade.isFreshWallet) {
-      builder.addText('├ 🆕 Fresh Wallet');
-      builder.newLine();
+      traderLines.push({ emoji: null, text: '🆕 Fresh Wallet' });
     }
-
-    builder.addText('├ ');
-    builder.addPremiumEmoji(EMOJI_CHART_UP, ` Positions: ${formatUsd(trade.traderStats.totalPositionsValue)}`);
-    builder.newLine();
-
+    traderLines.push({
+      emoji: EMOJI_CHART_UP,
+      text: ` Positions: ${formatCompactUsd(trade.traderStats.totalPositionsValue)} · ${trade.traderStats.closedPositions} bets`,
+    });
     if (trade.traderStats.closedPositions >= 3) {
-      builder.addText('├ ');
-      builder.addPremiumEmoji(EMOJI_CHECK, ` Win Rate: ${trade.traderStats.winRateLabel}`);
+      traderLines.push({
+        emoji: EMOJI_CHECK,
+        text: ` Win Rate: ${trade.traderStats.winRateLabel}`,
+      });
+    }
+    traderLines.push({
+      emoji: EMOJI_MONEY,
+      text: ` P&L: ${formatSignedUsd(trade.traderStats.totalRealizedPnl)}`,
+    });
+    if (trade.traderStats.bestWinStreak && trade.traderStats.bestWinStreak >= 3) {
+      traderLines.push({
+        emoji: EMOJI_FIRE,
+        text: ` Streak: ${trade.traderStats.bestWinStreak} wins`,
+      });
+    }
+    if (trade.topCategory) {
+      traderLines.push({ emoji: null, text: `🏷️ ${trade.topCategory}` });
+    }
+    for (const [index, line] of traderLines.entries()) {
+      builder.addText(index === traderLines.length - 1 ? '└ ' : '├ ');
+      if (line.emoji) {
+        builder.addPremiumEmoji(line.emoji, line.text);
+      } else {
+        builder.addText(line.text);
+      }
       builder.newLine();
     }
 
-    builder.addText('└ ');
-    builder.addPremiumEmoji(EMOJI_PORTFOLIO, ` Portfolio: ${formatUsd(trade.traderStats.portfolioValue)}`);
+    const marketIntelligenceParts: string[] = [];
+    if (trade.holderStats.whalesInMarket > 0) {
+      marketIntelligenceParts.push(`🐋 ${trade.holderStats.whalesInMarket}`);
+    }
+    if (trade.holderStats.insidersInMarket > 0) {
+      marketIntelligenceParts.push(`🕵️ ${trade.holderStats.insidersInMarket}`);
+    }
+    if (trade.freshWalletsInMarket > 0) {
+      marketIntelligenceParts.push(`🆕 ${trade.freshWalletsInMarket}`);
+    }
+    if (marketIntelligenceParts.length > 0) {
+      builder.newLine();
+      builder.addText(marketIntelligenceParts.join(' · '));
+    }
 
     return builder.build();
   }
