@@ -163,6 +163,7 @@ export class TradeEnricher {
       traderStats: effectiveTraderStats,
       marketInfo,
       holderStats,
+      xUsername: trackedWallet?.xUsername || undefined,
       traderTypes,
       primaryType,
       risk: classifyRisk(price),

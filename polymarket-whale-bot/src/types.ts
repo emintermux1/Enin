@@ -73,6 +73,7 @@ export interface EnrichedTrade {
   traderStats: TraderStats;
   marketInfo: MarketInfo;
   holderStats: HolderStats;
+  xUsername?: string;
   traderTypes: TraderType[];
   primaryType: TraderType;
   risk: RiskLevel;
