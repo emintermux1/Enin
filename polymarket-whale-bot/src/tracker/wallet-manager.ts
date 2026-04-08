@@ -67,6 +67,19 @@ export class WalletManager {
         current.verifiedBadge = current.verifiedBadge || Boolean(entry.verifiedBadge);
         current.pnl = Math.max(current.pnl, Number(entry.pnl || 0));
         current.vol = Math.max(current.vol, Number(entry.vol || 0));
+        const rank = Number(entry.rank || 0) || undefined;
+        if (query.orderBy === 'PNL' && rank) {
+          current.bestPnlRank = current.bestPnlRank ? Math.min(current.bestPnlRank, rank) : rank;
+          if (query.category === 'OVERALL' && query.timePeriod === 'ALL') {
+            current.overallPnlRank = rank;
+          }
+        }
+        if (query.orderBy === 'VOL' && rank) {
+          current.bestVolRank = current.bestVolRank ? Math.min(current.bestVolRank, rank) : rank;
+          if (query.category === 'OVERALL' && query.timePeriod === 'ALL') {
+            current.overallVolRank = rank;
+          }
+        }
         if (!current.sources.includes(query.label)) {
           current.sources.push(query.label);
         }

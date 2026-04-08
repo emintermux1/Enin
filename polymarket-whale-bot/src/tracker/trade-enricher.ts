@@ -6,11 +6,12 @@ import { classifyRisk } from '../classifier/risk-classifier';
 import {
   DataPosition,
   EnrichedTrade,
-  HolderEntry,
   HolderStats,
   MarketInfo,
   PolymarketTrade,
+  SignalAssessment,
   TraderStats,
+  TrackedWallet,
 } from '../types';
 import { WalletManager } from './wallet-manager';
 import { logger } from '../utils/logger';
@@ -36,6 +37,7 @@ export class TradeEnricher {
   ) {}
 
   async enrichTrade(trade: PolymarketTrade): Promise<EnrichedTrade> {
+    const trackedWallet = this.walletManager.getWallet(trade.proxyWallet);
     const [statsSnapshot, marketInfo, holders] = await Promise.all([
       this.getTraderStats(trade.proxyWallet),
       this.getMarketInfo(trade),
@@ -50,7 +52,7 @@ export class TradeEnricher {
     const classification = classifyTrader({
       trade,
       traderStats: statsSnapshot.traderStats,
-      trackedWallet: this.walletManager.getWallet(trade.proxyWallet),
+      trackedWallet,
       holderStats,
       recentTradeCount: statsSnapshot.recentTradeCount,
       convictionBuild,
@@ -59,6 +61,15 @@ export class TradeEnricher {
     const price = Math.max(trade.price || 0.01, 0.01);
     const potentialWin = trade.usdcSize / price;
     const multiplier = 1 / price;
+    const signal = this.assessSignal({
+      trade,
+      stats: statsSnapshot.traderStats,
+      holderStats,
+      trackedWallet,
+      convictionBuild,
+      primaryType: classification.primaryType,
+    });
+    const traderLabel = trade.pseudonym || trade.name || `${trade.proxyWallet.slice(0, 6)}…${trade.proxyWallet.slice(-4)}`;
 
     return {
       trade,
@@ -70,6 +81,10 @@ export class TradeEnricher {
       risk: classifyRisk(price),
       potentialWin,
       multiplier,
+      signal,
+      traderLabel,
+      leaderboardSummary: this.buildLeaderboardSummary(trackedWallet),
+      trackedWallet,
     };
   }
 
@@ -91,6 +106,10 @@ export class TradeEnricher {
     const closedPositions = closedResult.status === 'fulfilled' ? closedResult.value : [];
     const portfolioValueFromApi = portfolioResult.status === 'fulfilled' ? portfolioResult.value : 0;
     const recentActivity = recentActivityResult.status === 'fulfilled' ? recentActivityResult.value : [];
+    const bestWinStreak = this.calculateBestWinStreak(closedPositions);
+    const activityTimestamps = recentActivity.map((trade) => Number(trade.timestamp || 0)).filter((timestamp) => Number.isFinite(timestamp) && timestamp > 0);
+    const closedTimestamps = closedPositions.map((position) => Number(position.timestamp || 0)).filter((timestamp) => Number.isFinite(timestamp) && timestamp > 0);
+    const earliestTimestamp = [...activityTimestamps, ...closedTimestamps].sort((a, b) => a - b)[0];
 
     const totalPositionsValue = positions.reduce((sum, position) => sum + Number(position.currentValue || 0), 0);
     const totalRealizedPnl = closedPositions.reduce((sum, position) => sum + Number(position.realizedPnl || 0), 0);
@@ -107,6 +126,9 @@ export class TradeEnricher {
       winRateLabel: `${Math.round(winRate)}% (${wins}W-${losses}L)`,
       totalRealizedPnl,
       portfolioValue: Math.max(totalPositionsValue, portfolioValueFromApi),
+      bestWinStreak,
+      activeSince: earliestTimestamp ? new Date(earliestTimestamp * 1000).toISOString() : null,
+      observedTradeCount: recentActivity.length,
     };
 
     const snapshot: TraderStatsSnapshot = {
@@ -153,10 +175,17 @@ export class TradeEnricher {
     const relevantHolders = holders.filter((holder) => holder.outcomeIndex === trade.outcomeIndex);
     const addresses = [...new Set(holders.map((holder) => normalizeWallet(holder.proxyWallet)).filter(Boolean))];
     const whalesInMarket = new Set(addresses.filter((address) => this.walletManager.isTracked(address))).size;
+    const totalTopHolders = Math.max(
+      20,
+      ...groups
+        .filter((group) => (group.holders ?? []).some((holder) => holder.outcomeIndex === trade.outcomeIndex))
+        .map((group) => group.holders.length),
+      relevantHolders.length,
+    );
 
     return {
       topHoldersOnSide: relevantHolders.length,
-      totalTopHolders: holders.length || 20,
+      totalTopHolders,
       side: trade.outcome || String(trade.outcomeIndex),
       whalesInMarket,
       insidersInMarket: 0,
@@ -188,5 +217,98 @@ export class TradeEnricher {
       insidersInMarket: insiderAddresses.size,
       traderIsTopHolder: holderStats.traderIsTopHolder,
     };
+  }
+
+  private calculateBestWinStreak(closedPositions: Array<{ realizedPnl: number; timestamp: number }>): number | null {
+    if (closedPositions.length === 0) {
+      return null;
+    }
+    let current = 0;
+    let best = 0;
+    for (const position of [...closedPositions].sort((a, b) => a.timestamp - b.timestamp)) {
+      if (Number(position.realizedPnl || 0) > 0) {
+        current += 1;
+        best = Math.max(best, current);
+      } else {
+        current = 0;
+      }
+    }
+    return best || null;
+  }
+
+  private buildLeaderboardSummary(trackedWallet?: TrackedWallet): string | null {
+    if (!trackedWallet) {
+      return null;
+    }
+    const parts: string[] = [];
+    if (trackedWallet.overallPnlRank) {
+      parts.push(`#${trackedWallet.overallPnlRank} PNL`);
+    } else if (trackedWallet.bestPnlRank) {
+      parts.push(`#${trackedWallet.bestPnlRank} PNL`);
+    }
+    if (trackedWallet.overallVolRank) {
+      parts.push(`#${trackedWallet.overallVolRank} VOL`);
+    } else if (trackedWallet.bestVolRank) {
+      parts.push(`#${trackedWallet.bestVolRank} VOL`);
+    }
+    return parts.length > 0 ? parts.join(' • ') : null;
+  }
+
+  private assessSignal(input: {
+    trade: PolymarketTrade;
+    stats: TraderStats;
+    holderStats: HolderStats;
+    trackedWallet?: TrackedWallet;
+    convictionBuild: boolean;
+    primaryType: EnrichedTrade['primaryType'];
+  }): SignalAssessment {
+    let score = 36;
+    if (input.trade.usdcSize >= 100_000) {
+      score += 24;
+    } else if (input.trade.usdcSize >= 50_000) {
+      score += 18;
+    } else if (input.trade.usdcSize >= 20_000) {
+      score += 12;
+    } else {
+      score += 6;
+    }
+
+    if (input.stats.winRate >= 85) {
+      score += 16;
+    } else if (input.stats.winRate >= 70) {
+      score += 10;
+    } else if (input.stats.winRate >= 55) {
+      score += 6;
+    }
+
+    if (input.holderStats.traderIsTopHolder) {
+      score += 10;
+    }
+    if (input.holderStats.whalesInMarket >= 5) {
+      score += 8;
+    } else if (input.holderStats.whalesInMarket >= 2) {
+      score += 4;
+    }
+    if (input.holderStats.insidersInMarket >= 2) {
+      score += 7;
+    }
+    if (input.convictionBuild) {
+      score += 8;
+    }
+    if (input.trackedWallet?.allTimeTop50) {
+      score += 8;
+    }
+
+    score = Math.min(99, Math.max(25, score));
+    if (score >= 85) {
+      return { score, confidence: 'A+', summary: 'Elite follow-through', label: 'ALPHA LOCK', emoji: '⚡' };
+    }
+    if (score >= 72) {
+      return { score, confidence: 'A', summary: 'Strong conviction', label: 'SHARP FLOW', emoji: '🎯' };
+    }
+    if (score >= 58) {
+      return { score, confidence: 'B', summary: 'Quality setup', label: 'SMART MONEY', emoji: '📈' };
+    }
+    return { score, confidence: 'C', summary: 'Early follow', label: 'WATCHLIST', emoji: '👀' };
   }
 }

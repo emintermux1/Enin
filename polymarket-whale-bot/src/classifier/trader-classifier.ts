@@ -1,10 +1,10 @@
 import { HolderStats, PolymarketTrade, TraderStats, TraderType, TrackedWallet } from '../types';
 
 export const TRADER_TYPE_META: Record<TraderType, { label: string; emoji: string }> = {
-  WHALE: { label: 'WHALE TRADE', emoji: '🐋' },
-  INSIDER: { label: 'INSIDER SIGNAL', emoji: '🕵️' },
-  TOP_HOLDER: { label: 'TOP HOLDER', emoji: '👑' },
-  CONVICTION_BUILD: { label: 'CONVICTION BUILD', emoji: '🔥' },
+  WHALE: { label: 'Whale Trade', emoji: '🐋' },
+  INSIDER: { label: 'Insider Spotted', emoji: '🕵️' },
+  TOP_HOLDER: { label: 'Top Holder', emoji: '👑' },
+  CONVICTION_BUILD: { label: 'Conviction Build', emoji: '🔥' },
 };
 
 const PRIORITY: TraderType[] = ['INSIDER', 'WHALE', 'TOP_HOLDER', 'CONVICTION_BUILD'];

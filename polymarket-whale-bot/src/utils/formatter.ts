@@ -76,6 +76,41 @@ export function formatResolveDay(input: string): string {
   }).format(date);
 }
 
+export function formatTimestamp(input: number): string {
+  const date = new Date(input * 1000);
+  if (Number.isNaN(date.getTime())) {
+    return 'Unknown';
+  }
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZoneName: 'short',
+  }).format(date);
+}
+
+export function formatMonthYear(input: string | null): string | null {
+  if (!input) {
+    return null;
+  }
+  const date = new Date(input);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    year: 'numeric',
+  }).format(date);
+}
+
+export function formatWallet(wallet: string): string {
+  if (!wallet) {
+    return 'Unknown wallet';
+  }
+  return `${wallet.slice(0, 6)}…${wallet.slice(-4)}`;
+}
+
 export function truncateText(value: string, maxLength: number): string {
   if (value.length <= maxLength) {
     return value;
