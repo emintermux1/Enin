@@ -4,6 +4,7 @@ import { Telegraf } from 'telegraf'
 import { config } from './src/config'
 import { DataApi } from './src/api/data-api'
 import { GammaApi } from './src/api/gamma-api'
+import { HashdiveApi } from './src/api/hashdive-api'
 import { ChannelPoster } from './src/telegram/channel-poster'
 import { WhaleTracker } from './src/tracker/whale-tracker'
 import { TradeEnricher } from './src/tracker/trade-enricher'
@@ -249,7 +250,10 @@ async function main() {
   const dataApi = new DataApi(config.api)
   const gammaApi = new GammaApi(config.api)
   const walletManager = new WalletManager(dataApi, config.tracking)
-  const enricher = new TradeEnricher(dataApi, gammaApi, walletManager)
+  const hashdiveApi = config.api.hashdiveApiKey
+    ? new HashdiveApi(config.api.hashdiveApiKey)
+    : undefined
+  const enricher = new TradeEnricher(dataApi, gammaApi, walletManager, hashdiveApi)
   const tracker = new WhaleTracker(config, async () => undefined)
   const smokeCardPath = path.resolve('/tmp', 'polymarket-whale-multi-post-smoke.png')
 

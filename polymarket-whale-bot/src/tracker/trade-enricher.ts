@@ -1,6 +1,7 @@
 import { LRUCache } from 'lru-cache';
 import { GammaApi } from '../api/gamma-api';
 import { DataApi } from '../api/data-api';
+import { HashdiveApi, HashdiveTraderProfile } from '../api/hashdive-api';
 import { classifyTrader } from '../classifier/trader-classifier';
 import { classifyRisk } from '../classifier/risk-classifier';
 import {
@@ -20,6 +21,10 @@ interface TraderStatsSnapshot {
   positions: DataPosition[];
   closedPositions: Array<{ title: string; realizedPnl: number; timestamp: number }>;
 }
+
+const EMPTY_HASHDIVE_PROFILE = { empty: true } as const;
+
+type HashdiveProfileCacheValue = HashdiveTraderProfile | typeof EMPTY_HASHDIVE_PROFILE;
 
 function normalizeWallet(wallet: string): string {
   return wallet.toLowerCase();
@@ -44,19 +49,25 @@ export class TradeEnricher {
 
   private readonly traderStatsCache = new LRUCache<string, TraderStatsSnapshot>({ max: 500, ttl: 1000 * 60 * 10 });
   private readonly marketCache = new LRUCache<string, MarketInfo>({ max: 500, ttl: 1000 * 60 * 60 });
+  private readonly hashdiveProfileCache = new LRUCache<string, HashdiveProfileCacheValue>({
+    max: 300,
+    ttl: 1000 * 60 * 30,
+  });
 
   constructor(
     private readonly dataApi: DataApi,
     private readonly gammaApi: GammaApi,
     private readonly walletManager: WalletManager,
+    private readonly hashdiveApi?: HashdiveApi,
   ) {}
 
   async enrichTrade(trade: PolymarketTrade): Promise<EnrichedTrade> {
     const trackedWallet = this.walletManager.getWallet(trade.proxyWallet);
-    const [statsSnapshot, marketInfo, holders] = await Promise.all([
+    const [statsSnapshot, marketInfo, holders, hashdiveProfile] = await Promise.all([
       this.getTraderStats(trade.proxyWallet),
       this.getMarketInfo(trade),
       this.getHolderStats(trade),
+      this.getHashdiveProfile(trade.proxyWallet),
     ]);
 
     const convictionBuild = statsSnapshot.positions.some(
@@ -73,13 +84,41 @@ export class TradeEnricher {
       convictionBuild,
     });
 
+    let effectiveWinRate = statsSnapshot.traderStats.winRate;
+    let effectiveWins = statsSnapshot.traderStats.wins;
+    let effectiveLosses = statsSnapshot.traderStats.losses;
+    const hashdiveResolvedCount = (hashdiveProfile?.resolvedWins || 0) + (hashdiveProfile?.resolvedLosses || 0);
+    if (hashdiveProfile && hashdiveResolvedCount >= 5) {
+      effectiveWinRate = hashdiveProfile.resolvedWinRate;
+      effectiveWins = hashdiveProfile.resolvedWins;
+      effectiveLosses = hashdiveProfile.resolvedLosses;
+      logger.info(
+        `Hashdive resolved stats applied for ${trade.proxyWallet}: ${effectiveWins}W-${effectiveLosses}L (${Math.round(effectiveWinRate)}%)`,
+      );
+    } else if (this.hashdiveApi && hashdiveProfile) {
+      logger.info(
+        `Hashdive profile available for ${trade.proxyWallet} but only ${hashdiveResolvedCount} resolved trades; using data-api fallback`,
+      );
+    } else if (this.hashdiveApi) {
+      logger.info(`Hashdive profile unavailable for ${trade.proxyWallet}; using data-api fallback`);
+    }
+
     const price = Math.max(trade.price || 0.01, 0.01);
-    const topCategory = this.determineTopCategory(statsSnapshot.positions, statsSnapshot.closedPositions);
+    let topCategory = this.determineTopCategory(statsSnapshot.positions, statsSnapshot.closedPositions);
+    if (!topCategory && hashdiveProfile?.topCategory) {
+      topCategory = hashdiveProfile.topCategory;
+    }
     const freshWalletsInMarket = this.countFreshWallets(holders.addresses);
 
     return {
       trade,
-      traderStats: statsSnapshot.traderStats,
+      traderStats: {
+        ...statsSnapshot.traderStats,
+        winRate: effectiveWinRate,
+        wins: effectiveWins,
+        losses: effectiveLosses,
+        winRateLabel: `${Math.round(effectiveWinRate)}% (${effectiveWins}W-${effectiveLosses}L)`,
+      },
       marketInfo,
       holderStats,
       traderTypes: classification.traderTypes,
@@ -90,6 +129,16 @@ export class TradeEnricher {
       isFreshWallet: statsSnapshot.recentTradeCount > 0 && statsSnapshot.recentTradeCount < 20,
       topCategory,
       freshWalletsInMarket,
+      hashdiveProfile: hashdiveProfile
+        ? {
+            resolvedWinRate: hashdiveProfile.resolvedWinRate,
+            resolvedWins: hashdiveProfile.resolvedWins,
+            resolvedLosses: hashdiveProfile.resolvedLosses,
+            totalTrades: hashdiveProfile.totalTrades,
+            totalVolumeUsd: hashdiveProfile.totalVolumeUsd,
+            topCategory: hashdiveProfile.topCategory,
+          }
+        : undefined,
     };
   }
 
@@ -155,6 +204,31 @@ export class TradeEnricher {
     };
     this.traderStatsCache.set(key, snapshot);
     return snapshot;
+  }
+
+  private async getHashdiveProfile(wallet: string): Promise<HashdiveTraderProfile | null> {
+    if (!this.hashdiveApi) {
+      return null;
+    }
+
+    const key = normalizeWallet(wallet);
+    const cached = this.hashdiveProfileCache.get(key);
+    if (cached !== undefined) {
+      if ('empty' in cached) {
+        return null;
+      }
+      return cached;
+    }
+
+    const trades = await this.hashdiveApi.getTraderTrades(wallet, 100);
+    if (trades.length === 0) {
+      this.hashdiveProfileCache.set(key, EMPTY_HASHDIVE_PROFILE);
+      return null;
+    }
+
+    const profile = this.hashdiveApi.buildTraderProfile(trades);
+    this.hashdiveProfileCache.set(key, profile);
+    return profile;
   }
 
   private async getMarketInfo(trade: PolymarketTrade): Promise<MarketInfo> {

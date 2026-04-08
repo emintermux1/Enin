@@ -81,6 +81,14 @@ export interface EnrichedTrade {
   isFreshWallet: boolean;
   topCategory: string | null;
   freshWalletsInMarket: number;
+  hashdiveProfile?: {
+    resolvedWinRate: number;
+    resolvedWins: number;
+    resolvedLosses: number;
+    totalTrades: number;
+    totalVolumeUsd: number;
+    topCategory: string | null;
+  };
 }
 
 export interface LeaderboardEntry {
@@ -192,6 +200,7 @@ export interface ApiConfig {
   timeoutMs: number;
   retryCount: number;
   minRequestSpacingMs: number;
+  hashdiveApiKey?: string;
 }
 
 export interface AppConfig {
