@@ -21,12 +21,20 @@ import {
 
 interface CaptionResult {
   text: string;
-  entities: Array<{
-    type: 'custom_emoji';
-    offset: number;
-    length: number;
-    custom_emoji_id: string;
-  }>;
+  entities: Array<
+    | {
+        type: 'custom_emoji';
+        offset: number;
+        length: number;
+        custom_emoji_id: string;
+      }
+    | {
+        type: 'text_link';
+        offset: number;
+        length: number;
+        url: string;
+      }
+  >;
 }
 
 class CaptionBuilder {
@@ -51,6 +59,18 @@ class CaptionBuilder {
 
   addText(text: string): this {
     this.text += text;
+    return this;
+  }
+
+  addLink(text: string, url: string): this {
+    const offset = this.text.length;
+    this.text += text;
+    this.entities.push({
+      type: 'text_link',
+      offset,
+      length: text.length,
+      url,
+    });
     return this;
   }
 
@@ -169,12 +189,14 @@ export class ChannelPoster {
     const side = trade.trade.side === 'BUY' ? 'Buy' : 'Sell';
     const question = trade.marketInfo.question || trade.trade.title;
     const outcome = trade.trade.outcome || String(trade.trade.outcomeIndex);
+    const eventSlug = trade.marketInfo.eventSlug || trade.trade.eventSlug || trade.marketInfo.slug || trade.trade.slug;
+    const marketUrl = `https://polymarket.com/event/${eventSlug}`;
 
     const builder = new CaptionBuilder();
 
     builder.addPremiumEmoji(typeEmoji, ` ${typeMeta.label}`);
     builder.newLine().newLine();
-    builder.addText(question);
+    builder.addLink(question, marketUrl);
     builder.newLine();
     builder.addPremiumEmoji(EMOJI_CALENDAR, ` Resolves: ${formatResolveDate(trade.marketInfo.endDate)}`);
     builder.newLine().newLine();
@@ -191,6 +213,12 @@ export class ChannelPoster {
     builder.newLine().newLine();
     builder.addPremiumEmoji(EMOJI_TRADER, ` Trader: ${displayName}`);
     builder.newLine();
+
+    if (trade.isFreshWallet) {
+      builder.addText('├ 🆕 Fresh Wallet');
+      builder.newLine();
+    }
+
     builder.addText('├ ');
     builder.addPremiumEmoji(EMOJI_CHART_UP, ` Positions: ${formatUsd(trade.traderStats.totalPositionsValue)}`);
     builder.newLine();

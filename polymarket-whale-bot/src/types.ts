@@ -76,6 +76,7 @@ export interface EnrichedTrade {
   risk: RiskLevel;
   potentialWin: number;
   multiplier: number;
+  isFreshWallet: boolean;
 }
 
 export interface LeaderboardEntry {
