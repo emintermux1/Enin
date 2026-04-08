@@ -21,7 +21,7 @@ export function formatSignedUsd(value: number): string {
 }
 
 export function formatCompactUsd(value: number): string {
-  if (Math.abs(value) < 1_000_000) {
+  if (Math.abs(value) < 10_000_000) {
     return formatUsd(value);
   }
   return new Intl.NumberFormat('en-US', {
@@ -38,7 +38,7 @@ export function formatPriceCents(price: number): string {
 }
 
 export function formatMultiplier(multiplier: number): string {
-  return `${multiplier.toFixed(multiplier >= 10 ? 1 : 1)}x`;
+  return `${multiplier.toFixed(1)}x`;
 }
 
 export function formatPercent(value: number): string {
@@ -53,13 +53,21 @@ export function formatResolveDate(input: string): string {
   if (Number.isNaN(date.getTime())) {
     return input;
   }
-  return new Intl.DateTimeFormat('en-US', {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
     month: 'short',
     day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
-    timeZoneName: 'short',
-  }).format(date);
+    hour12: true,
+  });
+  const parts = formatter.formatToParts(date);
+  const month = parts.find((part) => part.type === 'month')?.value ?? '';
+  const day = parts.find((part) => part.type === 'day')?.value ?? '';
+  const hour = parts.find((part) => part.type === 'hour')?.value ?? '';
+  const minute = parts.find((part) => part.type === 'minute')?.value ?? '00';
+  const dayPeriod = parts.find((part) => part.type === 'dayPeriod')?.value?.toUpperCase() ?? '';
+  return `${month} ${day} ${hour}:${minute} ${dayPeriod} ET`.trim();
 }
 
 export function formatResolveDay(input: string): string {

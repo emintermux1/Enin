@@ -1,6 +1,6 @@
 import path from 'node:path';
 import dotenv from 'dotenv';
-import { AlertMode, AppConfig } from './types';
+import { AppConfig } from './types';
 
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
@@ -18,21 +18,12 @@ function readString(name: string, fallback = ''): string {
   return raw?.trim() || fallback;
 }
 
-function readAlertMode(name: string, fallback: AlertMode): AlertMode {
-  const raw = readString(name, fallback);
-  if (raw === 'compact' || raw === 'image' || raw === 'hybrid') {
-    return raw;
-  }
-  return fallback;
-}
-
 export const config: AppConfig = {
   telegram: {
     botToken: readString('TELEGRAM_BOT_TOKEN'),
     channelId: readString('TELEGRAM_CHANNEL_ID', '-1003756373077'),
     referralUrl: readString('REFERRAL_URL', 'https://t.me/PolytechTradeBot?start=ref_cococooker'),
     referralButtonText: readString('REFERRAL_BUTTON_TEXT', '⚡ Trade on Polytech'),
-    alertMode: readAlertMode('ALERT_MODE', 'hybrid'),
   },
   tracking: {
     minTradeSize: readNumber('MIN_TRADE_SIZE', 10_000),
@@ -49,9 +40,8 @@ export const config: AppConfig = {
     minRequestSpacingMs: 40,
   },
   runtime: {
-    sampleCompactCardPath: path.resolve(process.cwd(), 'sample-compact-alert.png'),
-    samplePosterCardPath: path.resolve(process.cwd(), 'sample-premium-alert.png'),
-    sampleAlertPath: path.resolve(process.cwd(), 'sample-alert.txt'),
+    sampleCardPath: path.resolve(process.cwd(), 'sample-card.png'),
+    sampleCaptionPath: path.resolve(process.cwd(), 'sample-caption.txt'),
   },
 };
 

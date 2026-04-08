@@ -16,11 +16,8 @@ async function main() {
     }
   });
 
-  const sampleTrade = await tracker.runStartupSmokeTest(poster.getCardGenerator(), {
-    compact: config.runtime.sampleCompactCardPath,
-    premium: config.runtime.samplePosterCardPath,
-  });
-  await poster.writeSampleOutput(sampleTrade, config.runtime.sampleAlertPath);
+  const sampleTrade = await tracker.runStartupSmokeTest(poster.getCardGenerator(), config.runtime.sampleCardPath);
+  await poster.writeSampleOutput(sampleTrade, config.runtime.sampleCaptionPath);
   await poster.launch();
   await tracker.start();
 

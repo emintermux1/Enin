@@ -33,10 +33,7 @@ export class WhaleTracker {
     this.tradeEnricher = new TradeEnricher(this.dataApi, this.gammaApi, this.walletManager);
   }
 
-  async runStartupSmokeTest(
-    cardGenerator: CardGenerator,
-    outputPaths: { compact: string; premium: string },
-  ): Promise<EnrichedTrade> {
+  async runStartupSmokeTest(cardGenerator: CardGenerator, outputPath: string): Promise<EnrichedTrade> {
     logger.info('Running startup smoke test...');
     await this.walletManager.refreshIfNeeded(true);
     const wallets = this.walletManager.getWallets();
@@ -61,11 +58,12 @@ export class WhaleTracker {
     }
 
     const enriched = await this.tradeEnricher.enrichTrade(sampleTrade);
-    const saved = await cardGenerator.saveSampleCards(enriched, outputPaths);
+    const saved = await cardGenerator.saveSampleCard(enriched, outputPath);
     if (!saved) {
-      throw new Error('Smoke test failed: canvas unavailable, sample cards not generated');
+      logger.warn('Canvas unavailable — bot will post text-only alerts (no card images)');
+    } else {
+      logger.info(`Smoke test card OK: ${outputPath}`);
     }
-    logger.info(`Smoke test cards OK: ${outputPaths.compact} and ${outputPaths.premium}`);
     return enriched;
   }
 

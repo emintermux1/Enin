@@ -2,18 +2,69 @@ import fs from 'node:fs';
 import { Markup, Telegraf } from 'telegraf';
 import { CardGenerator } from '../image/card-generator';
 import { EnrichedTrade, TelegramConfig } from '../types';
-import {
-  formatCompactUsd,
-  formatMonthYear,
-  formatPriceCents,
-  formatResolveDay,
-  formatSignedUsd,
-  formatTimestamp,
-  formatUsd,
-  truncateText,
-} from '../utils/formatter';
+import { formatMultiplier, formatPriceCents, formatResolveDate, formatUsd } from '../utils/formatter';
 import { logger } from '../utils/logger';
 import { TRADER_TYPE_META } from '../classifier/trader-classifier';
+import {
+  TRADER_TYPE_PREMIUM,
+  EMOJI_CALENDAR,
+  EMOJI_TARGET,
+  EMOJI_TRADER,
+  EMOJI_MONEYBAG,
+  EMOJI_COIN,
+  EMOJI_MONEY,
+  EMOJI_CHART_UP,
+  EMOJI_CHECK,
+  EMOJI_PORTFOLIO,
+  PremiumEmoji,
+} from './premium-emojis';
+
+interface CaptionResult {
+  text: string;
+  entities: Array<{
+    type: 'custom_emoji';
+    offset: number;
+    length: number;
+    custom_emoji_id: string;
+  }>;
+}
+
+class CaptionBuilder {
+  private text = '';
+  private entities: CaptionResult['entities'] = [];
+
+  addPremiumEmoji(emoji: PremiumEmoji, textAfter = ''): this {
+    const offset = this.text.length;
+    const emojiLength = emoji.char.length;
+    this.text += emoji.char;
+    this.entities.push({
+      type: 'custom_emoji',
+      offset,
+      length: emojiLength,
+      custom_emoji_id: emoji.id,
+    });
+    if (textAfter) {
+      this.text += textAfter;
+    }
+    return this;
+  }
+
+  addText(text: string): this {
+    this.text += text;
+    return this;
+  }
+
+  newLine(): this {
+    this.text += '\n';
+    return this;
+  }
+
+  build(): CaptionResult {
+    const trimmed = this.text.slice(0, 1024);
+    const entities = this.entities.filter((entity) => entity.offset + entity.length <= trimmed.length);
+    return { text: trimmed, entities };
+  }
+}
 
 export class ChannelPoster {
   private readonly bot: Telegraf;
@@ -23,7 +74,7 @@ export class ChannelPoster {
   constructor(private readonly config: TelegramConfig) {
     this.bot = new Telegraf(config.botToken);
     this.bot.start(async (ctx) => {
-      await ctx.reply(`Polymarket Whale Bot is online. Channel default: ${this.config.channelId}. Mode: ${this.config.alertMode}.`);
+      await ctx.reply(`Polymarket Whale Bot is online. Channel default: ${this.config.channelId}.`);
     });
   }
 
@@ -33,7 +84,7 @@ export class ChannelPoster {
     }
     await this.bot.launch();
     this.launched = true;
-    logger.info(`Telegram posting target: ${this.config.channelId} (${this.config.alertMode} mode)`);
+    logger.info(`Telegram posting target: ${this.config.channelId}`);
   }
 
   stop(reason = 'shutdown'): void {
@@ -48,117 +99,111 @@ export class ChannelPoster {
   }
 
   async writeSampleOutput(trade: EnrichedTrade, outputPath: string): Promise<void> {
-    const compactMessage = this.buildCompactMessage(trade);
-    const mediaCaption = this.buildPhotoCaption(trade);
-    const body = [
-      'COMPACT ALERT',
-      compactMessage,
-      '',
-      'PHOTO CAPTION',
-      mediaCaption,
-    ].join('\n');
-    await fs.promises.writeFile(outputPath, body);
+    const { text, entities } = this.buildCaption(trade);
+    const output = `${text}\n\n--- ENTITIES ---\n${JSON.stringify(entities, null, 2)}`;
+    await fs.promises.writeFile(outputPath, output);
   }
 
   async postAlert(trade: EnrichedTrade): Promise<void> {
-    const keyboard = Markup.inlineKeyboard([
-      [Markup.button.url(this.config.referralButtonText, this.config.referralUrl)],
-      [Markup.button.url('📊 View Market', `https://polymarket.com/event/${trade.trade.eventSlug}`)],
-      [Markup.button.url('👤 View Trader', `https://polymarket.com/profile/${trade.trade.proxyWallet}`)],
-    ]);
+    const { text, entities } = this.buildCaption(trade);
+    const keyboard = this.buildKeyboard(trade);
+    const image = await this.cardGenerator.generateCard(trade);
 
-    if (this.config.alertMode === 'compact') {
-      await this.bot.telegram.sendMessage(this.config.channelId, this.buildCompactMessage(trade), {
-        reply_markup: keyboard.reply_markup,
-        link_preview_options: { is_disabled: true },
-      });
-      return;
-    }
-
-    const image = await this.cardGenerator.generateCompactCard(trade);
-    if (this.config.alertMode === 'image') {
+    try {
       if (image) {
-        await this.bot.telegram.sendPhoto(this.config.channelId, { source: image }, { caption: this.buildPhotoCaption(trade), reply_markup: keyboard.reply_markup });
+        await this.bot.telegram.sendPhoto(
+          this.config.channelId,
+          { source: image },
+          {
+            caption: text,
+            caption_entities: entities,
+            reply_markup: keyboard.reply_markup,
+          } as any,
+        );
         return;
       }
-      await this.bot.telegram.sendMessage(this.config.channelId, this.buildCompactMessage(trade), {
-        reply_markup: keyboard.reply_markup,
-        link_preview_options: { is_disabled: true },
-      });
-      return;
-    }
 
-    const sentMessage = await this.bot.telegram.sendMessage(this.config.channelId, this.buildCompactMessage(trade), {
-      reply_markup: keyboard.reply_markup,
-      link_preview_options: { is_disabled: true },
-    });
-
-    if (image) {
-      await this.bot.telegram.sendPhoto(this.config.channelId, { source: image }, {
-        caption: this.buildPhotoCaption(trade),
-        disable_notification: true,
-        reply_parameters: { message_id: sentMessage.message_id },
-      });
+      await this.bot.telegram.sendMessage(
+        this.config.channelId,
+        text,
+        {
+          entities,
+          reply_markup: keyboard.reply_markup,
+          link_preview_options: { is_disabled: true },
+        } as any,
+      );
+    } catch (error: any) {
+      const errorMsg = String(error?.message || error);
+      if (errorMsg.includes('CUSTOM_EMOJI') || errorMsg.includes('custom emoji') || errorMsg.includes('premium')) {
+        logger.warn('Premium custom emoji not supported, falling back to standard emoji');
+        if (image) {
+          await this.bot.telegram.sendPhoto(
+            this.config.channelId,
+            { source: image },
+            { caption: text, reply_markup: keyboard.reply_markup },
+          );
+        } else {
+          await this.bot.telegram.sendMessage(this.config.channelId, text, {
+            reply_markup: keyboard.reply_markup,
+            link_preview_options: { is_disabled: true },
+          });
+        }
+        return;
+      }
+      throw error;
     }
   }
 
-  private buildCompactMessage(trade: EnrichedTrade): string {
-    const typeMeta = TRADER_TYPE_META[trade.primaryType];
-    const headline = `${typeMeta.emoji} ${typeMeta.label} • ${trade.risk.emoji} ${trade.risk.level}`;
-    const traderMetrics = [
-      `Win ${trade.traderStats.winRateLabel}`,
-      `P/L ${formatSignedUsd(trade.traderStats.totalRealizedPnl)}`,
-      `Port ${formatCompactUsd(trade.traderStats.portfolioValue)}`,
-    ];
-    if (trade.leaderboardSummary) {
-      traderMetrics.push(trade.leaderboardSummary);
-    }
-    if (trade.trackedWallet?.vol) {
-      traderMetrics.push(`Vol ${formatCompactUsd(trade.trackedWallet.vol)}`);
-    }
-    if (trade.traderStats.bestWinStreak) {
-      traderMetrics.push(`Streak ${trade.traderStats.bestWinStreak}W`);
-    }
-    const activeSince = formatMonthYear(trade.traderStats.activeSince);
-
-    const lines = [
-      headline,
-      truncateText(trade.marketInfo.question || trade.trade.title, 96),
-      '',
-      `◉ ${trade.trade.side === 'BUY' ? 'Buy' : 'Sell'} ${trade.trade.outcome} • ${formatUsd(trade.trade.usdcSize)} • ${formatPriceCents(trade.trade.price)} • ${new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(trade.trade.size || trade.trade.usdcSize / Math.max(trade.trade.price, 0.01))} shares`,
-      `⚡ ${trade.signal.label} • ${trade.signal.confidence} confidence • ${trade.signal.score}/99 strength • To win ${formatUsd(trade.potentialWin)}`,
-      '',
-      `👤 ${trade.traderLabel}`,
-      `   ${traderMetrics.join(' • ')}`,
-      activeSince ? `   Active since ${activeSince}` : undefined,
-      '',
-      `🌊 ${trade.holderStats.topHoldersOnSide}/${trade.holderStats.totalTopHolders} top holders on ${trade.holderStats.side} • 🐋 ${trade.holderStats.whalesInMarket} whales • 🕵️ ${trade.holderStats.insidersInMarket} insiders`,
-      `🕒 ${formatTimestamp(trade.trade.timestamp)} • Resolves ${formatResolveDay(trade.marketInfo.endDate)}`,
-      trade.marketInfo.tags.length > 0 ? `🏷️ ${trade.marketInfo.tags.slice(0, 4).map((tag) => `#${tag.replace(/\s+/g, '')}`).join(' ')}` : undefined,
-    ];
-
-    return lines.filter(Boolean).join('\n').slice(0, 4096);
+  private buildKeyboard(trade: EnrichedTrade) {
+    const eventSlug = trade.marketInfo.eventSlug || trade.trade.eventSlug || trade.marketInfo.slug || trade.trade.slug;
+    return Markup.inlineKeyboard([
+      [Markup.button.url(this.config.referralButtonText, this.config.referralUrl)],
+      [Markup.button.url('📊 View Polymarket', `https://polymarket.com/event/${eventSlug}`)],
+    ]);
   }
 
-  private buildPhotoCaption(trade: EnrichedTrade): string {
+  private buildCaption(trade: EnrichedTrade): CaptionResult {
+    const typeEmoji = TRADER_TYPE_PREMIUM[trade.primaryType];
     const typeMeta = TRADER_TYPE_META[trade.primaryType];
-    const meta = [trade.signal.label, `${trade.signal.confidence} conf`, `${trade.signal.score}/99`].join(' • ');
-    const traderSummary = [trade.traderStats.winRateLabel, formatSignedUsd(trade.traderStats.totalRealizedPnl)];
-    if (trade.leaderboardSummary) {
-      traderSummary.push(trade.leaderboardSummary);
+    const displayName = trade.trade.name || trade.trade.pseudonym || trade.trade.proxyWallet.slice(0, 10);
+    const side = trade.trade.side === 'BUY' ? 'Buy' : 'Sell';
+    const question = trade.marketInfo.question || trade.trade.title;
+    const outcome = trade.trade.outcome || String(trade.trade.outcomeIndex);
+
+    const builder = new CaptionBuilder();
+
+    builder.addPremiumEmoji(typeEmoji, ` ${typeMeta.label}`);
+    builder.newLine().newLine();
+    builder.addText(question);
+    builder.newLine();
+    builder.addPremiumEmoji(EMOJI_CALENDAR, ` Resolves: ${formatResolveDate(trade.marketInfo.endDate)}`);
+    builder.newLine().newLine();
+    builder.addPremiumEmoji(EMOJI_TARGET, ` ${side} ${outcome}`);
+    builder.newLine();
+    builder.addText('├ ');
+    builder.addPremiumEmoji(EMOJI_MONEYBAG, ` Amount: ${formatUsd(trade.trade.usdcSize)}`);
+    builder.newLine();
+    builder.addText('├ ');
+    builder.addPremiumEmoji(EMOJI_COIN, ` Price: ${formatPriceCents(trade.trade.price)}`);
+    builder.newLine();
+    builder.addText('└ ');
+    builder.addPremiumEmoji(EMOJI_MONEY, ` To win: ${formatUsd(trade.potentialWin)} (${formatMultiplier(trade.multiplier)})`);
+    builder.newLine().newLine();
+    builder.addPremiumEmoji(EMOJI_TRADER, ` Trader: ${displayName}`);
+    builder.newLine();
+    builder.addText('├ ');
+    builder.addPremiumEmoji(EMOJI_CHART_UP, ` Positions: ${formatUsd(trade.traderStats.totalPositionsValue)}`);
+    builder.newLine();
+
+    if (trade.traderStats.closedPositions >= 3) {
+      builder.addText('├ ');
+      builder.addPremiumEmoji(EMOJI_CHECK, ` Win Rate: ${trade.traderStats.winRateLabel}`);
+      builder.newLine();
     }
 
-    const lines = [
-      `${typeMeta.emoji} ${typeMeta.label} • ${trade.risk.emoji} ${trade.risk.level}`,
-      `📌 ${truncateText(trade.marketInfo.question || trade.trade.title, 84)}`,
-      '',
-      `◉ ${trade.trade.side === 'BUY' ? 'Buy' : 'Sell'} ${trade.trade.outcome} • ${formatUsd(trade.trade.usdcSize)} @ ${formatPriceCents(trade.trade.price)}`,
-      `⚡ ${meta}`,
-      `👤 ${trade.traderLabel} • ${traderSummary.join(' • ')}`,
-      `🌊 ${trade.holderStats.topHoldersOnSide}/${trade.holderStats.totalTopHolders} on ${trade.holderStats.side} • 🐋 ${trade.holderStats.whalesInMarket} • 🕵️ ${trade.holderStats.insidersInMarket}`,
-      `🕒 ${formatTimestamp(trade.trade.timestamp)} • ⏳ ${formatResolveDay(trade.marketInfo.endDate)}`,
-    ];
+    builder.addText('└ ');
+    builder.addPremiumEmoji(EMOJI_PORTFOLIO, ` Portfolio: ${formatUsd(trade.traderStats.portfolioValue)}`);
 
-    return lines.join('\n').slice(0, 1024);
+    return builder.build();
   }
 }
