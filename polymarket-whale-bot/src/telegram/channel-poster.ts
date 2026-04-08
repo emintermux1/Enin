@@ -10,6 +10,12 @@ import {
   EMOJI_CALENDAR,
   EMOJI_TARGET,
   EMOJI_TRADER,
+  EMOJI_MONEYBAG,
+  EMOJI_COIN,
+  EMOJI_MONEY,
+  EMOJI_CHART_UP,
+  EMOJI_CHECK,
+  EMOJI_PORTFOLIO,
   PremiumEmoji,
 } from './premium-emojis';
 
@@ -152,8 +158,7 @@ export class ChannelPoster {
     const eventSlug = trade.marketInfo.eventSlug || trade.trade.eventSlug || trade.marketInfo.slug || trade.trade.slug;
     return Markup.inlineKeyboard([
       [Markup.button.url(this.config.referralButtonText, this.config.referralUrl)],
-      [Markup.button.url('📊 View Market', `https://polymarket.com/event/${eventSlug}`)],
-      [Markup.button.url('👤 View Trader', `https://polymarket.com/profile/${trade.trade.proxyWallet}`)],
+      [Markup.button.url('📊 View Polymarket', `https://polymarket.com/event/${eventSlug}`)],
     ]);
   }
 
@@ -175,23 +180,29 @@ export class ChannelPoster {
     builder.newLine().newLine();
     builder.addPremiumEmoji(EMOJI_TARGET, ` ${side} ${outcome}`);
     builder.newLine();
-    builder.addText(`├ Amount: ${formatUsd(trade.trade.usdcSize)}`);
+    builder.addText('├ ');
+    builder.addPremiumEmoji(EMOJI_MONEYBAG, ` Amount: ${formatUsd(trade.trade.usdcSize)}`);
     builder.newLine();
-    builder.addText(`├ Price: ${formatPriceCents(trade.trade.price)}`);
+    builder.addText('├ ');
+    builder.addPremiumEmoji(EMOJI_COIN, ` Price: ${formatPriceCents(trade.trade.price)}`);
     builder.newLine();
-    builder.addText(`└ To win: ${formatUsd(trade.potentialWin)} (${formatMultiplier(trade.multiplier)})`);
+    builder.addText('└ ');
+    builder.addPremiumEmoji(EMOJI_MONEY, ` To win: ${formatUsd(trade.potentialWin)} (${formatMultiplier(trade.multiplier)})`);
     builder.newLine().newLine();
     builder.addPremiumEmoji(EMOJI_TRADER, ` Trader: ${displayName}`);
     builder.newLine();
-    builder.addText(`├ Positions: ${formatUsd(trade.traderStats.totalPositionsValue)}`);
+    builder.addText('├ ');
+    builder.addPremiumEmoji(EMOJI_CHART_UP, ` Positions: ${formatUsd(trade.traderStats.totalPositionsValue)}`);
     builder.newLine();
 
     if (trade.traderStats.closedPositions >= 3) {
-      builder.addText(`├ Win Rate: ${trade.traderStats.winRateLabel}`);
+      builder.addText('├ ');
+      builder.addPremiumEmoji(EMOJI_CHECK, ` Win Rate: ${trade.traderStats.winRateLabel}`);
       builder.newLine();
     }
 
-    builder.addText(`└ Portfolio: ${formatUsd(trade.traderStats.portfolioValue)}`);
+    builder.addText('└ ');
+    builder.addPremiumEmoji(EMOJI_PORTFOLIO, ` Portfolio: ${formatUsd(trade.traderStats.portfolioValue)}`);
 
     return builder.build();
   }
