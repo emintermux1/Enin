@@ -20,6 +20,13 @@ const CARD_LABELS: Record<TraderType, string> = {
   CONVICTION_BUILD: 'CONVICTION BUILD',
 };
 
+const LABEL_COLORS: Record<TraderType, string> = {
+  WHALE: '#60a5fa',
+  INSIDER: '#f59e0b',
+  TOP_HOLDER: '#a78bfa',
+  CONVICTION_BUILD: '#f87171',
+};
+
 function roundedRect(ctx: any, x: number, y: number, width: number, height: number, radius: number) {
   ctx.beginPath();
   ctx.moveTo(x + radius, y);
@@ -114,88 +121,130 @@ export class CardGenerator {
     const cardY = 24;
     const cardWidth = 1232;
     const cardHeight = 672;
+    const cardRadius = 34;
+    const imgSplitX = 578;
+    const imageWidth = cardX + cardWidth - imgSplitX;
+    const textLeftX = 76;
+    const textMaxWidth = 480;
+    const textRightX = textLeftX + textMaxWidth;
+    const barY = 560;
+    const barHeight = cardY + cardHeight - barY;
     const question = trade.marketInfo.question || trade.trade.title;
     const displayName = trade.trade.name || trade.trade.pseudonym || trade.trade.proxyWallet.slice(0, 10);
     const side = trade.trade.side === 'BUY' ? 'Buy' : 'Sell';
     const action = trade.trade.side === 'BUY' ? 'BUY' : 'SELL';
     const outcome = trade.trade.outcome || String(trade.trade.outcomeIndex);
     const badgeColor = trade.trade.side === 'BUY' ? '#22c55e' : '#ef4444';
+    const badgeTextColor = trade.trade.side === 'BUY' ? '#071014' : '#ffffff';
     const label = CARD_LABELS[trade.primaryType];
+    const labelColor = LABEL_COLORS[trade.primaryType];
+    const riskColor = trade.risk.color;
+    const riskBadgeBg = `${riskColor}33`;
+    const titleLineHeight = 62;
 
     ctx.fillStyle = '#060913';
     ctx.fillRect(0, 0, 1280, 720);
 
-    fillRoundedRect(ctx, cardX, cardY, cardWidth, cardHeight, 34, '#0b1220');
+    fillRoundedRect(ctx, cardX, cardY, cardWidth, cardHeight, cardRadius, '#0b1220');
 
     const heroImage = await this.loadMarketImage(canvasModule, trade.marketInfo.image || trade.trade.icon);
     ctx.save();
-    roundedRect(ctx, cardX, cardY, cardWidth, cardHeight, 34);
+    roundedRect(ctx, cardX, cardY, cardWidth, cardHeight, cardRadius);
     ctx.clip();
 
     if (heroImage) {
-      ctx.drawImage(heroImage, cardX, cardY, cardWidth, cardHeight);
+      this.drawCoverImage(ctx, heroImage, imgSplitX, cardY, imageWidth, cardHeight);
     } else {
-      const fallback = ctx.createLinearGradient(cardX, cardY, cardX + cardWidth, cardY + cardHeight);
+      const fallback = ctx.createLinearGradient(imgSplitX, cardY, cardX + cardWidth, cardY + cardHeight);
       fallback.addColorStop(0, '#152235');
       fallback.addColorStop(0.5, '#0f1728');
       fallback.addColorStop(1, '#1f2937');
       ctx.fillStyle = fallback;
-      ctx.fillRect(cardX, cardY, cardWidth, cardHeight);
+      ctx.fillRect(imgSplitX, cardY, imageWidth, cardHeight);
     }
 
-    const overlay = ctx.createLinearGradient(0, cardY, 0, cardY + cardHeight);
-    overlay.addColorStop(0, 'rgba(4,7,13,0.42)');
-    overlay.addColorStop(0.33, 'rgba(4,7,13,0.62)');
-    overlay.addColorStop(0.72, 'rgba(4,7,13,0.2)');
-    overlay.addColorStop(1, 'rgba(4,7,13,0.88)');
-    ctx.fillStyle = overlay;
-    ctx.fillRect(cardX, cardY, cardWidth, cardHeight);
+    const fadeGradient = ctx.createLinearGradient(imgSplitX, 0, 780, 0);
+    fadeGradient.addColorStop(0, 'rgba(11,18,32,1)');
+    fadeGradient.addColorStop(1, 'rgba(11,18,32,0)');
+    ctx.fillStyle = fadeGradient;
+    ctx.fillRect(imgSplitX, cardY, 202, cardHeight);
 
-    const vignette = ctx.createRadialGradient(860, 210, 40, 860, 210, 660);
-    vignette.addColorStop(0, 'rgba(255,255,255,0)');
-    vignette.addColorStop(1, 'rgba(4,7,13,0.4)');
-    ctx.fillStyle = vignette;
-    ctx.fillRect(cardX, cardY, cardWidth, cardHeight);
-    ctx.restore();
+    const imageOverlay = ctx.createLinearGradient(0, cardY, 0, cardY + cardHeight);
+    imageOverlay.addColorStop(0, 'rgba(4,7,13,0.15)');
+    imageOverlay.addColorStop(1, 'rgba(4,7,13,0.4)');
+    ctx.fillStyle = imageOverlay;
+    ctx.fillRect(imgSplitX, cardY, imageWidth, cardHeight);
 
-    ctx.font = '700 20px Inter, Arial, sans-serif';
-    ctx.fillStyle = 'rgba(233,240,255,0.82)';
-    ctx.fillText(label, 76, 84);
+    ctx.fillStyle = 'rgba(6,12,21,0.88)';
+    ctx.fillRect(cardX, barY, cardWidth, barHeight);
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    ctx.fillRect(cardX, barY, cardWidth, 1);
 
-    ctx.font = '800 58px Inter, Arial, sans-serif';
+    if ('letterSpacing' in ctx) {
+      ctx.letterSpacing = '1.5px';
+    }
+    ctx.font = '700 18px Inter, Arial, sans-serif';
+    ctx.fillStyle = labelColor;
+    ctx.fillText(label, textLeftX, 78);
+    if ('letterSpacing' in ctx) {
+      ctx.letterSpacing = '0px';
+    }
+
+    ctx.font = '700 14px Inter, Arial, sans-serif';
+    const riskText = trade.risk.level;
+    const riskBadgeWidth = ctx.measureText(riskText).width + 24;
+    const riskBadgeHeight = 30;
+    const riskBadgeX = textRightX - riskBadgeWidth;
+    const riskBadgeY = 56;
+    fillRoundedRect(ctx, riskBadgeX, riskBadgeY, riskBadgeWidth, riskBadgeHeight, 15, riskBadgeBg);
+    ctx.fillStyle = riskColor;
+    ctx.textBaseline = 'middle';
+    ctx.fillText(riskText, riskBadgeX + 12, riskBadgeY + riskBadgeHeight / 2);
+    ctx.textBaseline = 'alphabetic';
+
+    ctx.font = '800 52px Inter, Arial, sans-serif';
     ctx.fillStyle = '#f8fafc';
-    const titleLines = wrapText(ctx, question, 980, 2);
+    const titleLines = wrapText(ctx, question, textMaxWidth, 2);
+    const titleY = 168;
     titleLines.forEach((line, index) => {
-      ctx.fillText(line, 76, 224 + index * 66);
+      ctx.fillText(line, textLeftX, titleY + index * titleLineHeight);
     });
 
-    ctx.font = '600 28px Inter, Arial, sans-serif';
-    ctx.fillStyle = 'rgba(226,232,240,0.92)';
-    ctx.fillText(`${side} ${outcome} · Resolves ${formatResolveDate(trade.marketInfo.endDate)}`, 76, 366);
-
-    const barX = 56;
-    const barY = 562;
-    const barWidth = 1168;
-    const barHeight = 112;
-    fillRoundedRect(ctx, barX, barY, barWidth, barHeight, 28, 'rgba(6,12,21,0.82)');
-    fillRoundedRect(ctx, barX, barY, barWidth, 2, 1, 'rgba(255,255,255,0.18)');
+    const lastTitleY = titleY + (titleLines.length - 1) * titleLineHeight;
+    const subtitleY = lastTitleY + 52;
+    ctx.font = '600 24px Inter, Arial, sans-serif';
+    ctx.fillStyle = 'rgba(226,232,240,0.82)';
+    ctx.fillText(`${side} ${outcome} · Resolves ${formatResolveDate(trade.marketInfo.endDate)}`, textLeftX, subtitleY);
 
     ctx.fillStyle = '#f8fafc';
-    ctx.font = '800 42px Inter, Arial, sans-serif';
+    ctx.font = '800 48px Inter, Arial, sans-serif';
     const amountText = formatUsd(trade.trade.usdcSize);
-    ctx.fillText(amountText, 84, 630);
+    const amountY = 618;
+    ctx.fillText(amountText, textLeftX, amountY);
     const amountWidth = ctx.measureText(amountText).width;
 
-    const badgeX = 104 + amountWidth;
-    const badgeWidth = drawBadge(ctx, badgeX, 596, action, badgeColor, '#071014');
+    ctx.font = '800 22px Inter, Arial, sans-serif';
+    const actionBadgeWidth = ctx.measureText(action).width + 28;
+    const actionBadgeHeight = 36;
+    const actionBadgeX = textLeftX + amountWidth + 20;
+    const actionBadgeY = 592;
+    fillRoundedRect(ctx, actionBadgeX, actionBadgeY, actionBadgeWidth, actionBadgeHeight, 18, badgeColor);
+    ctx.fillStyle = badgeTextColor;
+    ctx.textBaseline = 'middle';
+    ctx.fillText(action, actionBadgeX + 14, actionBadgeY + actionBadgeHeight / 2);
+    ctx.textBaseline = 'alphabetic';
 
-    const infoText = `at ${formatPriceCents(trade.trade.price)}   Win ${formatUsd(trade.potentialWin)}   ${formatMultiplier(trade.multiplier)}   Trader ${truncateText(displayName, 18)}   Portfolio ${formatUsd(trade.traderStats.portfolioValue)}`;
-    const infoX = badgeX + badgeWidth + 24;
-    const infoMaxWidth = barX + barWidth - infoX - 28;
-    const infoFontSize = fitFontSize(ctx, infoText, infoMaxWidth, 28, 18, 600);
+    const infoText = `at ${formatPriceCents(trade.trade.price)} · Win ${formatUsd(trade.potentialWin)} · ${formatMultiplier(trade.multiplier)} · Trader ${truncateText(displayName, 14)}`;
+    const infoMaxWidth = 1208 - (actionBadgeX + actionBadgeWidth + 28);
+    const infoFontSize = fitFontSize(ctx, infoText, infoMaxWidth, 22, 16, 600);
     ctx.font = `600 ${infoFontSize}px Inter, Arial, sans-serif`;
-    ctx.fillStyle = 'rgba(241,245,249,0.94)';
-    ctx.fillText(infoText, infoX, 629);
+    ctx.fillStyle = 'rgba(241,245,249,0.7)';
+    ctx.textAlign = 'right';
+    ctx.fillText(infoText, 1208, 620);
+    ctx.textAlign = 'left';
+    ctx.restore();
+
+    this.applyGrain(ctx, 1280, 720, 8);
 
     return this.canvasToBuffer(canvas);
   }
@@ -211,6 +260,41 @@ export class CardGenerator {
     }
     await fs.promises.writeFile(outputPath, card);
     return true;
+  }
+
+  private drawCoverImage(ctx: any, img: any, dx: number, dy: number, dw: number, dh: number) {
+    const imgRatio = img.width / img.height;
+    const areaRatio = dw / dh;
+    let sx = 0;
+    let sy = 0;
+    let sw = img.width;
+    let sh = img.height;
+
+    if (imgRatio > areaRatio) {
+      sw = img.height * areaRatio;
+      sx = (img.width - sw) / 2;
+    } else {
+      sh = img.width / areaRatio;
+      sy = (img.height - sh) / 2;
+    }
+
+    ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);
+  }
+
+  private applyGrain(ctx: any, width: number, height: number, amount: number) {
+    try {
+      const imageData = ctx.getImageData(0, 0, width, height);
+      const data = imageData.data;
+      for (let i = 0; i < data.length; i += 4) {
+        const noise = (Math.random() - 0.5) * amount * 2;
+        data[i] = Math.max(0, Math.min(255, data[i] + noise));
+        data[i + 1] = Math.max(0, Math.min(255, data[i + 1] + noise));
+        data[i + 2] = Math.max(0, Math.min(255, data[i + 2] + noise));
+      }
+      ctx.putImageData(imageData, 0, 0);
+    } catch {
+      return;
+    }
   }
 
   private canvasToBuffer(canvas: any): Buffer | null {
