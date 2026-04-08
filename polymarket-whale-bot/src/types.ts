@@ -59,7 +59,6 @@ export interface HolderStats {
 }
 
 export type TraderType = 'WHALE' | 'INSIDER' | 'TOP_HOLDER' | 'CONVICTION_BUILD';
-export type AlertMode = 'compact' | 'image' | 'hybrid';
 
 export interface RiskLevel {
   level: string;
@@ -77,10 +76,6 @@ export interface EnrichedTrade {
   risk: RiskLevel;
   potentialWin: number;
   multiplier: number;
-  signal: SignalAssessment;
-  traderLabel: string;
-  leaderboardSummary: string | null;
-  trackedWallet?: TrackedWallet;
 }
 
 export interface LeaderboardEntry {
@@ -116,14 +111,6 @@ export interface TrackedWallet {
   bestVolRank?: number;
   overallPnlRank?: number;
   overallVolRank?: number;
-}
-
-export interface SignalAssessment {
-  score: number;
-  confidence: string;
-  summary: string;
-  label: string;
-  emoji: string;
 }
 
 export interface DataPosition {
@@ -184,7 +171,6 @@ export interface TelegramConfig {
   channelId: string;
   referralUrl: string;
   referralButtonText: string;
-  alertMode: AlertMode;
 }
 
 export interface TrackingConfig {
@@ -208,8 +194,7 @@ export interface AppConfig {
   tracking: TrackingConfig;
   api: ApiConfig;
   runtime: {
-    sampleCompactCardPath: string;
-    samplePosterCardPath: string;
-    sampleAlertPath: string;
+    sampleCardPath: string;
+    sampleCaptionPath: string;
   };
 }
