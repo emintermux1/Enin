@@ -239,7 +239,7 @@ export class CardGenerator {
     if ('letterSpacing' in ctx) {
       ctx.letterSpacing = '1.5px'
     }
-    ctx.font = '700 22px Inter, Arial, sans-serif'
+    ctx.font = '700 24px Inter, Arial, sans-serif'
     ctx.fillStyle = labelColor
     ctx.fillText(label, textLeftX, 78)
     const labelWidth = ctx.measureText(label).width
@@ -283,7 +283,7 @@ export class CardGenerator {
 
     const lastTitleY = titleY + (titleLines.length - 1) * titleLineHeight
     const subtitleY = lastTitleY + 52
-    ctx.font = '600 26px Inter, Arial, sans-serif'
+    ctx.font = '600 28px Inter, Arial, sans-serif'
     ctx.fillStyle = 'rgba(226,232,240,0.82)'
     ctx.fillText(
       `${side} ${outcome} · Resolves ${formatResolveDate(trade.marketInfo.endDate)}`,
@@ -292,7 +292,7 @@ export class CardGenerator {
     )
 
     ctx.fillStyle = '#f8fafc'
-    ctx.font = '800 56px Inter, Arial, sans-serif'
+    ctx.font = '800 64px Inter, Arial, sans-serif'
     const amountText = formatUsd(trade.trade.usdcSize)
     const amountY = 618
     ctx.fillText(amountText, textLeftX, amountY)
@@ -335,7 +335,7 @@ export class CardGenerator {
     infoParts.push(truncateText(displayName, 16))
     const infoText = infoParts.join('     ')
     const infoMaxWidth = 1208 - (actionBadgeX + actionBadgeWidth + 28)
-    const infoFontSize = fitFontSize(ctx, infoText, infoMaxWidth, 24, 18, 600)
+    const infoFontSize = fitFontSize(ctx, infoText, infoMaxWidth, 28, 20, 600)
     ctx.font = `600 ${infoFontSize}px Inter, Arial, sans-serif`
     ctx.fillStyle = 'rgba(241,245,249,0.7)'
     ctx.textAlign = 'right'

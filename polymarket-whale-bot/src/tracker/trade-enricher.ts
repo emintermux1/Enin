@@ -27,7 +27,7 @@ function normalizeWallet(wallet: string): string {
 
 export class TradeEnricher {
   private static readonly CATEGORY_KEYWORDS: Record<string, string[]> = {
-    Esports: ['counter-strike', 'cs2', 'csgo', 'league of legends', 'lol', 'dota', 'valorant', 'overwatch', 'call of duty', 'cod', 'fortnite', 'rocket league', 'rainbow six', 'apex legends', 'esl', 'blast', 'iem', 'major', 'nip', 'faze', 'navi', 'g2', 'fnatic', 'vitality', 'astralis', 'mouz', 'liquid', 'cloud9', 'heroic', 'bo3', 'bo5'],
+    Esports: ['esports', 'counter-strike', 'cs2', 'csgo', 'league of legends', 'lol', 'dota', 'valorant', 'overwatch', 'call of duty', 'cod', 'fortnite', 'rocket league', 'rainbow six', 'apex legends', 'esl', 'blast', 'iem', 'major', 'nip', 'faze', 'navi', 'g2', 'fnatic', 'vitality', 'astralis', 'mouz', 'liquid', 'cloud9', 'heroic', 'bo3', 'bo5'],
     Football: ['premier league', 'la liga', 'champions league', 'europa league', 'bundesliga', 'serie a', 'ligue 1', 'world cup', 'mls', 'soccer', 'fc barcelona', 'real madrid', 'manchester', 'liverpool', 'arsenal', 'chelsea', 'tottenham', 'juventus', 'bayern', 'psg', 'inter milan', 'ac milan', 'atletico'],
     Basketball: ['nba', 'basketball', 'lakers', 'celtics', 'warriors', 'bucks', 'nuggets', 'knicks', 'heat', 'suns', 'nets', 'mvp', 'playoffs', 'finals'],
     'American Football': ['nfl', 'super bowl', 'touchdown', 'quarterback', 'chiefs', 'eagles', 'cowboys', 'patriots', '49ers', 'ravens', 'bills'],
@@ -162,7 +162,10 @@ export class TradeEnricher {
     if (cached) {
       return cached;
     }
-    const market = await this.gammaApi.getMarketBySlug(trade.slug).catch((error) => {
+    const market = await this.gammaApi.getMarketBySlug(trade.slug, {
+      eventSlug: trade.eventSlug,
+      conditionId: trade.conditionId,
+    }).catch((error) => {
       logger.warn(`Failed to fetch market for ${trade.slug}`, error);
       return null;
     });
@@ -179,6 +182,9 @@ export class TradeEnricher {
       eventSlug: trade.eventSlug,
       slug: trade.slug,
     };
+    if (!fallback.endDate && trade.title) {
+      fallback.endDate = this.extractDateFromTitle(trade.title);
+    }
     this.marketCache.set(trade.slug, fallback);
     return fallback;
   }
@@ -261,6 +267,23 @@ export class TradeEnricher {
 
     const sorted = Object.entries(scores).sort((a, b) => b[1] - a[1]);
     return sorted[0]?.[0] ?? null;
+  }
+
+  private extractDateFromTitle(title: string): string {
+    const monthDayPattern = /\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2})/i;
+    const match = title.match(monthDayPattern);
+    if (!match) {
+      return '';
+    }
+    const year = new Date().getFullYear();
+    const parsed = new Date(`${match[1]} ${match[2]}, ${year}`);
+    if (Number.isNaN(parsed.getTime())) {
+      return '';
+    }
+    if (parsed < new Date()) {
+      parsed.setFullYear(year + 1);
+    }
+    return parsed.toISOString();
   }
 
   private countFreshWallets(addresses: string[]): number {

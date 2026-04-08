@@ -232,6 +232,9 @@ export class ChannelPoster {
     const builder = new CaptionBuilder()
 
     builder.addPremiumEmoji(typeEmoji, ` ${typeMeta.label}`)
+    if (trade.isFreshWallet) {
+      builder.addText(' | 🆕 Fresh Wallet Detected')
+    }
     builder.newLine().newLine()
     builder.addPremiumEmoji(EMOJI_CHART_UP, ' ')
     builder.addLink(question, marketUrl)
@@ -251,7 +254,7 @@ export class ChannelPoster {
       ` Resolves: ${formatResolveDate(trade.marketInfo.endDate)}`
     )
     builder.newLine()
-    builder.addText(`⚠️ Risk ${trade.risk.emoji}`)
+    builder.addText(`${trade.risk.emoji} Risk`)
     builder.newLine().newLine()
     builder.addPremiumEmoji(EMOJI_TARGET, ` ${side} ${outcome}`)
     builder.newLine()
@@ -283,9 +286,6 @@ export class ChannelPoster {
     builder.newLine()
 
     const traderLines: Array<{ emoji: PremiumEmoji | null; text: string }> = []
-    if (trade.isFreshWallet) {
-      traderLines.push({ emoji: null, text: '🆕 Fresh Wallet' })
-    }
     traderLines.push({
       emoji: EMOJI_CHART_UP,
       text: ` Positions: ${formatCompactUsd(trade.traderStats.totalPositionsValue)} · ${trade.traderStats.closedPositions} bets`,
