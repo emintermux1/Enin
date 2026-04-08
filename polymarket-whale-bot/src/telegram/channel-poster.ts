@@ -251,7 +251,7 @@ export class ChannelPoster {
       ` Resolves: ${formatResolveDate(trade.marketInfo.endDate)}`
     )
     builder.newLine()
-    builder.addText(`Risk ${trade.risk.emoji}`)
+    builder.addText(`⚠️ Risk ${trade.risk.emoji}`)
     builder.newLine().newLine()
     builder.addPremiumEmoji(EMOJI_TARGET, ` ${side} ${outcome}`)
     builder.newLine()
@@ -278,6 +278,8 @@ export class ChannelPoster {
       displayName,
       `https://polymarket.com/profile/${trade.trade.proxyWallet}`
     )
+    builder.addText(' · ')
+    builder.addLink('Copy Trade', this.config.referralUrl)
     builder.newLine()
 
     const traderLines: Array<{ emoji: PremiumEmoji | null; text: string }> = []
@@ -304,16 +306,21 @@ export class ChannelPoster {
         text: ` Best Win: ${formatSignedUsd(trade.traderStats.bestWinAmount)}`,
       })
     }
+    if (trade.traderStats.currentStreak && trade.traderStats.currentStreak >= 2) {
+      traderLines.push({
+        emoji: EMOJI_FIRE,
+        text: ` Last Streak: ${trade.traderStats.currentStreak}W`,
+      })
+    }
     if (
       trade.traderStats.bestWinStreak &&
-      trade.traderStats.bestWinStreak >= 3
+      trade.traderStats.bestWinStreak >= 3 &&
+      trade.traderStats.bestWinStreak !== trade.traderStats.currentStreak
     ) {
-      if (trade.traderStats.bestWinStreak < trade.traderStats.wins) {
-        traderLines.push({
-          emoji: EMOJI_FIRE,
-          text: ` Best Streak: ${trade.traderStats.bestWinStreak}W`,
-        })
-      }
+      traderLines.push({
+        emoji: EMOJI_FIRE,
+        text: ` Best Streak: ${trade.traderStats.bestWinStreak}W`,
+      })
     }
     if (trade.holderStats.traderIsTopHolder) {
       traderLines.push({
@@ -322,7 +329,7 @@ export class ChannelPoster {
       })
     }
     if (trade.topCategory) {
-      traderLines.push({ emoji: null, text: `🏷️ ${trade.topCategory}` })
+      traderLines.push({ emoji: null, text: `🏷️ Top Category: ${trade.topCategory}` })
     }
     for (const [index, line] of traderLines.entries()) {
       builder.addText(index === traderLines.length - 1 ? '└ ' : '├ ')

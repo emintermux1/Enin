@@ -32,6 +32,7 @@ export interface TraderStats {
   portfolioValue: number;
   bestWinAmount: number | null;
   bestWinStreak: number | null;
+  currentStreak: number | null;
   activeSince: string | null;
   observedTradeCount: number;
 }

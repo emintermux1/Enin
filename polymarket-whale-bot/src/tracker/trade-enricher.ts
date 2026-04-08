@@ -27,12 +27,19 @@ function normalizeWallet(wallet: string): string {
 
 export class TradeEnricher {
   private static readonly CATEGORY_KEYWORDS: Record<string, string[]> = {
-    Politics: ['president', 'election', 'minister', 'congress', 'senate', 'vote', 'governor', 'democrat', 'republican', 'trump', 'biden', 'party', 'political', 'cabinet'],
-    Sports: ['nba', 'nfl', 'soccer', 'football', 'basketball', 'baseball', 'tennis', 'ufc', 'match', 'championship', 'super bowl', 'premier league', 'world cup', 'playoffs', 'mvp'],
-    Crypto: ['bitcoin', 'ethereum', 'btc', 'eth', 'crypto', 'solana', 'token', 'blockchain', 'defi', 'altcoin', 'memecoin'],
-    Geopolitics: ['war', 'conflict', 'ceasefire', 'iran', 'russia', 'ukraine', 'china', 'nato', 'sanctions', 'invasion', 'military', 'peace', 'treaty'],
-    Culture: ['oscar', 'grammy', 'emmy', 'movie', 'music', 'celebrity', 'tiktok', 'youtube', 'influencer', 'awards', 'show'],
-    Economics: ['gdp', 'inflation', 'fed', 'interest rate', 'recession', 'stock', 'oil', 'commodity', 'tariff', 'unemployment', 'cpi'],
+    Esports: ['counter-strike', 'cs2', 'csgo', 'league of legends', 'lol', 'dota', 'valorant', 'overwatch', 'call of duty', 'cod', 'fortnite', 'rocket league', 'rainbow six', 'apex legends', 'esl', 'blast', 'iem', 'major', 'nip', 'faze', 'navi', 'g2', 'fnatic', 'vitality', 'astralis', 'mouz', 'liquid', 'cloud9', 'heroic', 'bo3', 'bo5'],
+    Football: ['premier league', 'la liga', 'champions league', 'europa league', 'bundesliga', 'serie a', 'ligue 1', 'world cup', 'mls', 'soccer', 'fc barcelona', 'real madrid', 'manchester', 'liverpool', 'arsenal', 'chelsea', 'tottenham', 'juventus', 'bayern', 'psg', 'inter milan', 'ac milan', 'atletico'],
+    Basketball: ['nba', 'basketball', 'lakers', 'celtics', 'warriors', 'bucks', 'nuggets', 'knicks', 'heat', 'suns', 'nets', 'mvp', 'playoffs', 'finals'],
+    'American Football': ['nfl', 'super bowl', 'touchdown', 'quarterback', 'chiefs', 'eagles', 'cowboys', 'patriots', '49ers', 'ravens', 'bills'],
+    Baseball: ['mlb', 'baseball', 'world series', 'yankees', 'dodgers', 'mets', 'astros', 'red sox'],
+    Combat: ['ufc', 'mma', 'boxing', 'fight', 'bout', 'knockout', 'bellator', 'pfl'],
+    Tennis: ['tennis', 'wimbledon', 'us open', 'australian open', 'french open', 'atp', 'wta', 'djokovic', 'nadal', 'federer', 'alcaraz', 'sinner'],
+    Motorsport: ['formula 1', 'f1', 'nascar', 'grand prix', 'qualifying', 'verstappen', 'hamilton', 'leclerc'],
+    Politics: ['president', 'election', 'minister', 'congress', 'senate', 'vote', 'governor', 'democrat', 'republican', 'trump', 'biden', 'party', 'political', 'cabinet', 'parliament', 'prime minister'],
+    Crypto: ['bitcoin', 'ethereum', 'btc', 'eth', 'crypto', 'solana', 'token', 'blockchain', 'defi', 'altcoin', 'memecoin', 'price', 'ath'],
+    Geopolitics: ['war', 'conflict', 'ceasefire', 'iran', 'russia', 'ukraine', 'china', 'nato', 'sanctions', 'invasion', 'military', 'peace', 'treaty', 'tariff'],
+    Culture: ['oscar', 'grammy', 'emmy', 'movie', 'music', 'celebrity', 'tiktok', 'youtube', 'influencer', 'awards', 'show', 'netflix', 'spotify'],
+    Economics: ['gdp', 'inflation', 'fed', 'interest rate', 'recession', 'stock', 'oil', 'commodity', 'unemployment', 'cpi', 'fomc'],
   };
 
   private readonly traderStatsCache = new LRUCache<string, TraderStatsSnapshot>({ max: 500, ttl: 1000 * 60 * 10 });
@@ -105,6 +112,7 @@ export class TradeEnricher {
     const portfolioValueFromApi = portfolioResult.status === 'fulfilled' ? portfolioResult.value : 0;
     const recentActivity = recentActivityResult.status === 'fulfilled' ? recentActivityResult.value : [];
     const bestWinStreak = this.calculateBestWinStreak(closedPositions);
+    const currentStreak = this.calculateCurrentStreak(closedPositions);
     const activityTimestamps = recentActivity.map((entry) => Number(entry.timestamp || 0)).filter((timestamp) => Number.isFinite(timestamp) && timestamp > 0);
     const closedTimestamps = closedPositions.map((position) => Number(position.timestamp || 0)).filter((timestamp) => Number.isFinite(timestamp) && timestamp > 0);
     const earliestTimestamp = [...activityTimestamps, ...closedTimestamps].sort((a, b) => a - b)[0];
@@ -130,6 +138,7 @@ export class TradeEnricher {
       portfolioValue: Math.max(totalPositionsValue, portfolioValueFromApi),
       bestWinAmount,
       bestWinStreak,
+      currentStreak,
       activeSince: earliestTimestamp ? new Date(earliestTimestamp * 1000).toISOString() : null,
       observedTradeCount: recentActivity.length,
     };
@@ -280,5 +289,21 @@ export class TradeEnricher {
       }
     }
     return best || null;
+  }
+
+  private calculateCurrentStreak(closedPositions: Array<{ realizedPnl: number; timestamp: number }>): number | null {
+    if (closedPositions.length === 0) {
+      return null;
+    }
+    const sorted = [...closedPositions].sort((a, b) => b.timestamp - a.timestamp);
+    let streak = 0;
+    for (const position of sorted) {
+      if (Number(position.realizedPnl || 0) > 0) {
+        streak += 1;
+      } else {
+        break;
+      }
+    }
+    return streak > 0 ? streak : null;
   }
 }
