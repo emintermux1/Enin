@@ -293,6 +293,10 @@ export class ChannelPoster {
       displayName,
       `https://polymarket.com/profile/${trade.trade.proxyWallet}`
     )
+    if (trade.xUsername) {
+      builder.addText(' · ')
+      builder.addLink('𝕏', `https://x.com/${trade.xUsername}`)
+    }
     builder.addText(' · ')
     builder.addLink('Copy Trade', this.config.referralUrl)
     builder.newLine()
