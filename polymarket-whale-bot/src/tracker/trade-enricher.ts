@@ -68,6 +68,7 @@ export class TradeEnricher {
       risk: classifyRisk(price),
       potentialWin: trade.usdcSize / price,
       multiplier: 1 / price,
+      isFreshWallet: statsSnapshot.recentTradeCount > 0 && statsSnapshot.recentTradeCount < 20,
     };
   }
 
