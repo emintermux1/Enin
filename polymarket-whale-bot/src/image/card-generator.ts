@@ -273,6 +273,39 @@ export class CardGenerator {
     ctx.fillText(riskText, riskBadgeX + 12, riskBadgeY + riskBadgeHeight / 2)
     ctx.textBaseline = 'alphabetic'
 
+    const scoreBadges = [
+      trade.insiderScore && trade.insiderScore.score >= 60
+        ? { text: 'INSIDER', color: '#f59e0b', background: '#f59e0b33' }
+        : null,
+      trade.unusualScore && trade.unusualScore.score >= 50
+        ? { text: 'UNUSUAL', color: '#fb7185', background: '#fb718533' }
+        : null,
+    ].filter(
+      (badge): badge is { text: string; color: string; background: string } =>
+        Boolean(badge)
+    )
+    let scoreBadgeCursorX = riskBadgeX - 12
+    ctx.font = '700 14px Inter, Arial, sans-serif'
+    for (const badge of scoreBadges.reverse()) {
+      const badgeWidth = ctx.measureText(badge.text).width + 24
+      const badgeHeight = 28
+      const badgeX = scoreBadgeCursorX - badgeWidth
+      fillRoundedRect(
+        ctx,
+        badgeX,
+        riskBadgeY + 1,
+        badgeWidth,
+        badgeHeight,
+        14,
+        badge.background
+      )
+      ctx.fillStyle = badge.color
+      ctx.textBaseline = 'middle'
+      ctx.fillText(badge.text, badgeX + 12, riskBadgeY + riskBadgeHeight / 2)
+      ctx.textBaseline = 'alphabetic'
+      scoreBadgeCursorX = badgeX - 10
+    }
+
     ctx.font = '800 44px Inter, Arial, sans-serif'
     ctx.fillStyle = '#f8fafc'
     const titleLines = wrapText(ctx, question, textMaxWidth, 3)

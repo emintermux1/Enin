@@ -89,6 +89,16 @@ export interface EnrichedTrade {
     totalVolumeUsd: number;
     topCategory: string | null;
   };
+  insiderScore?: {
+    score: number;
+    signals: string[];
+    isInsider: boolean;
+  };
+  unusualScore?: {
+    score: number;
+    signals: string[];
+    isUnusual: boolean;
+  };
 }
 
 export interface LeaderboardEntry {
@@ -189,6 +199,7 @@ export interface TelegramConfig {
 export interface TrackingConfig {
   minTradeSize: number;
   pollIntervalMs: number;
+  hashdivePollIntervalMs: number;
   maxTrackedWallets: number;
   leaderboardRefreshHours: number;
   walletBatchSize: number;
