@@ -151,6 +151,10 @@ export class WhaleTracker {
     const newTrades = trades
       .filter((trade) => Number(trade.timestamp || 0) > lastSeen)
       .filter((trade) => Number(trade.usdcSize || 0) >= this.config.tracking.minTradeSize)
+      .filter((trade) => {
+        const price = Number(trade.price || 0);
+        return price >= 0.03 && price <= 0.93;
+      })
       .filter((trade) => this.dedupCache.addIfNew(trade.transactionHash))
       .sort((a, b) => a.timestamp - b.timestamp);
 

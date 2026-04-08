@@ -13,7 +13,7 @@ export interface PremiumEmoji {
 }
 
 // Trader type header emojis
-export const EMOJI_WHALE: PremiumEmoji = { char: '💙', id: '5420534836798458790' };
+export const EMOJI_WHALE: PremiumEmoji = { char: '🐋', id: '5420534836798458790' };
 export const EMOJI_INSIDER: PremiumEmoji = { char: '🔥', id: '4969918262650340505' };
 export const EMOJI_TOP_HOLDER: PremiumEmoji = { char: '💰', id: '5897958754267174109' };
 export const EMOJI_CONVICTION: PremiumEmoji = { char: '📈', id: '6030861234432121355' };

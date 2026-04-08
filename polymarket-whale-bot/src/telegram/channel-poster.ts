@@ -195,6 +195,7 @@ export class ChannelPoster {
     const builder = new CaptionBuilder();
 
     builder.addPremiumEmoji(typeEmoji, ` ${typeMeta.label}`);
+    builder.addText(` • ${trade.risk.emoji} ${trade.risk.level}`);
     builder.newLine().newLine();
     builder.addLink(question, marketUrl);
     builder.newLine();
@@ -234,10 +235,12 @@ export class ChannelPoster {
       text: ` P&L: ${formatSignedUsd(trade.traderStats.totalRealizedPnl)}`,
     });
     if (trade.traderStats.bestWinStreak && trade.traderStats.bestWinStreak >= 3) {
-      traderLines.push({
-        emoji: EMOJI_FIRE,
-        text: ` Streak: ${trade.traderStats.bestWinStreak} wins`,
-      });
+      if (trade.traderStats.bestWinStreak < trade.traderStats.wins) {
+        traderLines.push({
+          emoji: EMOJI_FIRE,
+          text: ` Best Streak: ${trade.traderStats.bestWinStreak}W`,
+        });
+      }
     }
     if (trade.topCategory) {
       traderLines.push({ emoji: null, text: `🏷️ ${trade.topCategory}` });
@@ -254,13 +257,15 @@ export class ChannelPoster {
 
     const marketIntelligenceParts: string[] = [];
     if (trade.holderStats.whalesInMarket > 0) {
-      marketIntelligenceParts.push(`🐋 ${trade.holderStats.whalesInMarket}`);
+      const whaleWord = trade.holderStats.whalesInMarket === 1 ? 'Whale' : 'Whales';
+      marketIntelligenceParts.push(`🐋 ${trade.holderStats.whalesInMarket} ${whaleWord}`);
     }
     if (trade.holderStats.insidersInMarket > 0) {
-      marketIntelligenceParts.push(`🕵️ ${trade.holderStats.insidersInMarket}`);
+      const insiderWord = trade.holderStats.insidersInMarket === 1 ? 'Insider' : 'Insiders';
+      marketIntelligenceParts.push(`🕵️ ${trade.holderStats.insidersInMarket} ${insiderWord}`);
     }
     if (trade.freshWalletsInMarket > 0) {
-      marketIntelligenceParts.push(`🆕 ${trade.freshWalletsInMarket}`);
+      marketIntelligenceParts.push(`🆕 ${trade.freshWalletsInMarket} Fresh`);
     }
     if (marketIntelligenceParts.length > 0) {
       builder.newLine();
