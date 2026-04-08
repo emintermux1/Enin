@@ -30,7 +30,9 @@ export interface TraderStats {
   winRateLabel: string;
   totalRealizedPnl: number;
   portfolioValue: number;
+  bestWinAmount: number | null;
   bestWinStreak: number | null;
+  currentStreak: number | null;
   activeSince: string | null;
   observedTradeCount: number;
 }
@@ -77,6 +79,8 @@ export interface EnrichedTrade {
   potentialWin: number;
   multiplier: number;
   isFreshWallet: boolean;
+  topCategory: string | null;
+  freshWalletsInMarket: number;
 }
 
 export interface LeaderboardEntry {

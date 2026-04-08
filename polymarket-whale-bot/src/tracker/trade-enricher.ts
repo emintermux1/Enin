@@ -18,6 +18,7 @@ interface TraderStatsSnapshot {
   traderStats: TraderStats;
   recentTradeCount: number;
   positions: DataPosition[];
+  closedPositions: Array<{ title: string; realizedPnl: number; timestamp: number }>;
 }
 
 function normalizeWallet(wallet: string): string {
@@ -25,6 +26,22 @@ function normalizeWallet(wallet: string): string {
 }
 
 export class TradeEnricher {
+  private static readonly CATEGORY_KEYWORDS: Record<string, string[]> = {
+    Esports: ['esports', 'counter-strike', 'cs2', 'csgo', 'league of legends', 'lol', 'dota', 'valorant', 'overwatch', 'call of duty', 'cod', 'fortnite', 'rocket league', 'rainbow six', 'apex legends', 'esl', 'blast', 'iem', 'major', 'nip', 'faze', 'navi', 'g2', 'fnatic', 'vitality', 'astralis', 'mouz', 'liquid', 'cloud9', 'heroic', 'bo3', 'bo5'],
+    Football: ['premier league', 'la liga', 'champions league', 'europa league', 'bundesliga', 'serie a', 'ligue 1', 'world cup', 'mls', 'soccer', 'fc barcelona', 'real madrid', 'manchester', 'liverpool', 'arsenal', 'chelsea', 'tottenham', 'juventus', 'bayern', 'psg', 'inter milan', 'ac milan', 'atletico'],
+    Basketball: ['nba', 'basketball', 'lakers', 'celtics', 'warriors', 'bucks', 'nuggets', 'knicks', 'heat', 'suns', 'nets', 'mvp', 'playoffs', 'finals'],
+    'American Football': ['nfl', 'super bowl', 'touchdown', 'quarterback', 'chiefs', 'eagles', 'cowboys', 'patriots', '49ers', 'ravens', 'bills'],
+    Baseball: ['mlb', 'baseball', 'world series', 'yankees', 'dodgers', 'mets', 'astros', 'red sox'],
+    Combat: ['ufc', 'mma', 'boxing', 'fight', 'bout', 'knockout', 'bellator', 'pfl'],
+    Tennis: ['tennis', 'wimbledon', 'us open', 'australian open', 'french open', 'atp', 'wta', 'djokovic', 'nadal', 'federer', 'alcaraz', 'sinner'],
+    Motorsport: ['formula 1', 'f1', 'nascar', 'grand prix', 'qualifying', 'verstappen', 'hamilton', 'leclerc'],
+    Politics: ['president', 'election', 'minister', 'congress', 'senate', 'vote', 'governor', 'democrat', 'republican', 'trump', 'biden', 'party', 'political', 'cabinet', 'parliament', 'prime minister'],
+    Crypto: ['bitcoin', 'ethereum', 'btc', 'eth', 'crypto', 'solana', 'token', 'blockchain', 'defi', 'altcoin', 'memecoin', 'price', 'ath'],
+    Geopolitics: ['war', 'conflict', 'ceasefire', 'iran', 'russia', 'ukraine', 'china', 'nato', 'sanctions', 'invasion', 'military', 'peace', 'treaty', 'tariff'],
+    Culture: ['oscar', 'grammy', 'emmy', 'movie', 'music', 'celebrity', 'tiktok', 'youtube', 'influencer', 'awards', 'show', 'netflix', 'spotify'],
+    Economics: ['gdp', 'inflation', 'fed', 'interest rate', 'recession', 'stock', 'oil', 'commodity', 'unemployment', 'cpi', 'fomc'],
+  };
+
   private readonly traderStatsCache = new LRUCache<string, TraderStatsSnapshot>({ max: 500, ttl: 1000 * 60 * 10 });
   private readonly marketCache = new LRUCache<string, MarketInfo>({ max: 500, ttl: 1000 * 60 * 60 });
 
@@ -57,6 +74,8 @@ export class TradeEnricher {
     });
 
     const price = Math.max(trade.price || 0.01, 0.01);
+    const topCategory = this.determineTopCategory(statsSnapshot.positions, statsSnapshot.closedPositions);
+    const freshWalletsInMarket = this.countFreshWallets(holders.addresses);
 
     return {
       trade,
@@ -69,6 +88,8 @@ export class TradeEnricher {
       potentialWin: trade.usdcSize / price,
       multiplier: 1 / price,
       isFreshWallet: statsSnapshot.recentTradeCount > 0 && statsSnapshot.recentTradeCount < 20,
+      topCategory,
+      freshWalletsInMarket,
     };
   }
 
@@ -91,6 +112,7 @@ export class TradeEnricher {
     const portfolioValueFromApi = portfolioResult.status === 'fulfilled' ? portfolioResult.value : 0;
     const recentActivity = recentActivityResult.status === 'fulfilled' ? recentActivityResult.value : [];
     const bestWinStreak = this.calculateBestWinStreak(closedPositions);
+    const currentStreak = this.calculateCurrentStreak(closedPositions);
     const activityTimestamps = recentActivity.map((entry) => Number(entry.timestamp || 0)).filter((timestamp) => Number.isFinite(timestamp) && timestamp > 0);
     const closedTimestamps = closedPositions.map((position) => Number(position.timestamp || 0)).filter((timestamp) => Number.isFinite(timestamp) && timestamp > 0);
     const earliestTimestamp = [...activityTimestamps, ...closedTimestamps].sort((a, b) => a - b)[0];
@@ -100,6 +122,10 @@ export class TradeEnricher {
     const wins = closedPositions.filter((position) => Number(position.realizedPnl || 0) > 0).length;
     const losses = Math.max(0, closedPositions.length - wins);
     const winRate = closedPositions.length > 0 ? (wins / closedPositions.length) * 100 : 0;
+    const winningPnls = closedPositions
+      .map((position) => Number(position.realizedPnl || 0))
+      .filter((pnl) => pnl > 0);
+    const bestWinAmount = winningPnls.length > 0 ? Math.max(...winningPnls) : null;
 
     const traderStats: TraderStats = {
       totalPositionsValue,
@@ -110,7 +136,9 @@ export class TradeEnricher {
       winRateLabel: `${Math.round(winRate)}% (${wins}W-${losses}L)`,
       totalRealizedPnl,
       portfolioValue: Math.max(totalPositionsValue, portfolioValueFromApi),
+      bestWinAmount,
       bestWinStreak,
+      currentStreak,
       activeSince: earliestTimestamp ? new Date(earliestTimestamp * 1000).toISOString() : null,
       observedTradeCount: recentActivity.length,
     };
@@ -119,6 +147,11 @@ export class TradeEnricher {
       traderStats,
       recentTradeCount: recentActivity.length,
       positions,
+      closedPositions: closedPositions.map((position) => ({
+        title: position.title,
+        realizedPnl: Number(position.realizedPnl || 0),
+        timestamp: position.timestamp,
+      })),
     };
     this.traderStatsCache.set(key, snapshot);
     return snapshot;
@@ -129,7 +162,10 @@ export class TradeEnricher {
     if (cached) {
       return cached;
     }
-    const market = await this.gammaApi.getMarketBySlug(trade.slug).catch((error) => {
+    const market = await this.gammaApi.getMarketBySlug(trade.slug, {
+      eventSlug: trade.eventSlug,
+      conditionId: trade.conditionId,
+    }).catch((error) => {
       logger.warn(`Failed to fetch market for ${trade.slug}`, error);
       return null;
     });
@@ -146,6 +182,9 @@ export class TradeEnricher {
       eventSlug: trade.eventSlug,
       slug: trade.slug,
     };
+    if (!fallback.endDate && trade.title) {
+      fallback.endDate = this.extractDateFromTitle(trade.title);
+    }
     this.marketCache.set(trade.slug, fallback);
     return fallback;
   }
@@ -203,6 +242,61 @@ export class TradeEnricher {
     };
   }
 
+  private determineTopCategory(
+    positions: DataPosition[],
+    closedPositions: Array<{ title: string }>,
+  ): string | null {
+    const allTitles = [...positions.map((position) => position.title), ...closedPositions.map((position) => position.title)].filter(Boolean);
+
+    if (allTitles.length === 0) {
+      return null;
+    }
+
+    const scores: Record<string, number> = {};
+    for (const title of allTitles) {
+      const lower = title.toLowerCase();
+      for (const [category, keywords] of Object.entries(TradeEnricher.CATEGORY_KEYWORDS)) {
+        for (const keyword of keywords) {
+          if (lower.includes(keyword)) {
+            scores[category] = (scores[category] || 0) + 1;
+            break;
+          }
+        }
+      }
+    }
+
+    const sorted = Object.entries(scores).sort((a, b) => b[1] - a[1]);
+    return sorted[0]?.[0] ?? null;
+  }
+
+  private extractDateFromTitle(title: string): string {
+    const monthDayPattern = /\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2})/i;
+    const match = title.match(monthDayPattern);
+    if (!match) {
+      return '';
+    }
+    const year = new Date().getFullYear();
+    const parsed = new Date(`${match[1]} ${match[2]}, ${year}`);
+    if (Number.isNaN(parsed.getTime())) {
+      return '';
+    }
+    if (parsed < new Date()) {
+      parsed.setFullYear(year + 1);
+    }
+    return parsed.toISOString();
+  }
+
+  private countFreshWallets(addresses: string[]): number {
+    let count = 0;
+    for (const address of addresses) {
+      const cached = this.traderStatsCache.get(address);
+      if (cached && cached.recentTradeCount > 0 && cached.recentTradeCount < 20) {
+        count += 1;
+      }
+    }
+    return count;
+  }
+
   private calculateBestWinStreak(closedPositions: Array<{ realizedPnl: number; timestamp: number }>): number | null {
     if (closedPositions.length === 0) {
       return null;
@@ -218,5 +312,21 @@ export class TradeEnricher {
       }
     }
     return best || null;
+  }
+
+  private calculateCurrentStreak(closedPositions: Array<{ realizedPnl: number; timestamp: number }>): number | null {
+    if (closedPositions.length === 0) {
+      return null;
+    }
+    const sorted = [...closedPositions].sort((a, b) => b.timestamp - a.timestamp);
+    let streak = 0;
+    for (const position of sorted) {
+      if (Number(position.realizedPnl || 0) > 0) {
+        streak += 1;
+      } else {
+        break;
+      }
+    }
+    return streak > 0 ? streak : null;
   }
 }

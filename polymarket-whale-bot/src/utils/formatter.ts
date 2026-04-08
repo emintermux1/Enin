@@ -21,7 +21,7 @@ export function formatSignedUsd(value: number): string {
 }
 
 export function formatCompactUsd(value: number): string {
-  if (Math.abs(value) < 10_000_000) {
+  if (Math.abs(value) < 1_000_000) {
     return formatUsd(value);
   }
   return new Intl.NumberFormat('en-US', {
