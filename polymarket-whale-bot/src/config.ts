@@ -21,7 +21,7 @@ function readString(name: string, fallback = ''): string {
 export const config: AppConfig = {
   telegram: {
     botToken: readString('TELEGRAM_BOT_TOKEN'),
-    channelId: readString('TELEGRAM_CHANNEL_ID', '-1003756373077'),
+    channelId: readString('TELEGRAM_CHANNEL_ID'),
     referralUrl: readString('REFERRAL_URL', 'https://t.me/PolytechTradeBot?start=ref_cococooker'),
     referralButtonText: readString('REFERRAL_BUTTON_TEXT', '⚡ Trade on Polytech'),
   },
@@ -49,4 +49,8 @@ export const config: AppConfig = {
 
 if (!config.telegram.botToken) {
   throw new Error('Missing TELEGRAM_BOT_TOKEN in .env');
+}
+
+if (!config.telegram.channelId) {
+  throw new Error('Missing TELEGRAM_CHANNEL_ID in .env');
 }
