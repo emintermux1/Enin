@@ -243,6 +243,7 @@ export class ChannelPoster {
       ]
       builder.newLine()
       builder.addPremiumEmoji(EMOJI_MONEY, ` ${marketContextParts.join(' · ')}`)
+      builder.newLine()
     }
     builder.newLine()
     builder.addPremiumEmoji(
@@ -250,7 +251,7 @@ export class ChannelPoster {
       ` Resolves: ${formatResolveDate(trade.marketInfo.endDate)}`
     )
     builder.newLine()
-    builder.addText(`${trade.risk.emoji} Risk`)
+    builder.addText(`Risk ${trade.risk.emoji}`)
     builder.newLine().newLine()
     builder.addPremiumEmoji(EMOJI_TARGET, ` ${side} ${outcome}`)
     builder.newLine()
@@ -290,13 +291,19 @@ export class ChannelPoster {
     if (trade.traderStats.closedPositions >= 3) {
       traderLines.push({
         emoji: EMOJI_CHECK,
-        text: ` Win Rate: ${trade.traderStats.winRateLabel}`,
+        text: ` Win Rate: ${Math.round(trade.traderStats.winRate)}%`,
       })
     }
     traderLines.push({
       emoji: EMOJI_MONEY,
       text: ` P&L: ${formatSignedUsd(trade.traderStats.totalRealizedPnl)}`,
     })
+    if (trade.traderStats.bestWinAmount && trade.traderStats.bestWinAmount > 0) {
+      traderLines.push({
+        emoji: EMOJI_MONEYBAG,
+        text: ` Best Win: ${formatSignedUsd(trade.traderStats.bestWinAmount)}`,
+      })
+    }
     if (
       trade.traderStats.bestWinStreak &&
       trade.traderStats.bestWinStreak >= 3
@@ -307,6 +314,12 @@ export class ChannelPoster {
           text: ` Best Streak: ${trade.traderStats.bestWinStreak}W`,
         })
       }
+    }
+    if (trade.holderStats.traderIsTopHolder) {
+      traderLines.push({
+        emoji: null,
+        text: `👑 Top ${trade.holderStats.topHoldersOnSide}/${trade.holderStats.totalTopHolders} Holder`,
+      })
     }
     if (trade.topCategory) {
       traderLines.push({ emoji: null, text: `🏷️ ${trade.topCategory}` })

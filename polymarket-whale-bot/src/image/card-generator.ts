@@ -158,9 +158,9 @@ export class CardGenerator {
     const cardHeight = 672
     const cardRadius = 34
     const textLeftX = 76
-    const textMaxWidth = 480
+    const textMaxWidth = 620
     const textRightX = textLeftX + textMaxWidth
-    const barY = 560
+    const barY = 530
     const barHeight = cardY + cardHeight - barY
     const question = trade.marketInfo.question || trade.trade.title
     const displayName =
@@ -176,7 +176,7 @@ export class CardGenerator {
     const labelColor = LABEL_COLORS[trade.primaryType]
     const riskColor = trade.risk.color
     const riskBadgeBg = `${riskColor}33`
-    const titleLineHeight = 62
+    const titleLineHeight = 52
 
     ctx.fillStyle = '#060913'
     ctx.fillRect(0, 0, 1280, 720)
@@ -242,6 +242,13 @@ export class CardGenerator {
     ctx.font = '700 18px Inter, Arial, sans-serif'
     ctx.fillStyle = labelColor
     ctx.fillText(label, textLeftX, 78)
+    const labelWidth = ctx.measureText(label).width
+    if (trade.isFreshWallet) {
+      ctx.font = '700 16px Inter, Arial, sans-serif'
+      ctx.fillStyle = '#22c55e'
+      const freshX = textLeftX + labelWidth + 20
+      ctx.fillText('• NEW WALLET', freshX, 78)
+    }
     if ('letterSpacing' in ctx) {
       ctx.letterSpacing = '0px'
     }
@@ -266,10 +273,10 @@ export class CardGenerator {
     ctx.fillText(riskText, riskBadgeX + 12, riskBadgeY + riskBadgeHeight / 2)
     ctx.textBaseline = 'alphabetic'
 
-    ctx.font = '800 52px Inter, Arial, sans-serif'
+    ctx.font = '800 44px Inter, Arial, sans-serif'
     ctx.fillStyle = '#f8fafc'
-    const titleLines = wrapText(ctx, question, textMaxWidth, 2)
-    const titleY = 168
+    const titleLines = wrapText(ctx, question, textMaxWidth, 3)
+    const titleY = 148
     titleLines.forEach((line, index) => {
       ctx.fillText(line, textLeftX, titleY + index * titleLineHeight)
     })
@@ -285,7 +292,7 @@ export class CardGenerator {
     )
 
     ctx.fillStyle = '#f8fafc'
-    ctx.font = '800 48px Inter, Arial, sans-serif'
+    ctx.font = '800 56px Inter, Arial, sans-serif'
     const amountText = formatUsd(trade.trade.usdcSize)
     const amountY = 618
     ctx.fillText(amountText, textLeftX, amountY)
@@ -314,9 +321,21 @@ export class CardGenerator {
     )
     ctx.textBaseline = 'alphabetic'
 
-    const infoText = `at ${formatPriceCents(trade.trade.price)}    Win ${formatUsd(trade.potentialWin)}    ${formatMultiplier(trade.multiplier)}    ${truncateText(displayName, 16)}`
+    const infoParts = [
+      `at ${formatPriceCents(trade.trade.price)}`,
+      `Win ${formatUsd(trade.potentialWin)}`,
+    ]
+    if (trade.traderStats.bestWinAmount && trade.traderStats.bestWinAmount > 0) {
+      infoParts.push(`Best ${formatUsd(trade.traderStats.bestWinAmount)}`)
+    }
+    infoParts.push(formatMultiplier(trade.multiplier))
+    if (trade.traderStats.bestWinStreak) {
+      infoParts.push(`Streak: ${trade.traderStats.bestWinStreak}`)
+    }
+    infoParts.push(truncateText(displayName, 16))
+    const infoText = infoParts.join('     ')
     const infoMaxWidth = 1208 - (actionBadgeX + actionBadgeWidth + 28)
-    const infoFontSize = fitFontSize(ctx, infoText, infoMaxWidth, 22, 16, 600)
+    const infoFontSize = fitFontSize(ctx, infoText, infoMaxWidth, 22, 18, 600)
     ctx.font = `600 ${infoFontSize}px Inter, Arial, sans-serif`
     ctx.fillStyle = 'rgba(241,245,249,0.7)'
     ctx.textAlign = 'right'

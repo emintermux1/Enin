@@ -30,6 +30,7 @@ export interface TraderStats {
   winRateLabel: string;
   totalRealizedPnl: number;
   portfolioValue: number;
+  bestWinAmount: number | null;
   bestWinStreak: number | null;
   activeSince: string | null;
   observedTradeCount: number;

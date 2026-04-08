@@ -114,6 +114,10 @@ export class TradeEnricher {
     const wins = closedPositions.filter((position) => Number(position.realizedPnl || 0) > 0).length;
     const losses = Math.max(0, closedPositions.length - wins);
     const winRate = closedPositions.length > 0 ? (wins / closedPositions.length) * 100 : 0;
+    const winningPnls = closedPositions
+      .map((position) => Number(position.realizedPnl || 0))
+      .filter((pnl) => pnl > 0);
+    const bestWinAmount = winningPnls.length > 0 ? Math.max(...winningPnls) : null;
 
     const traderStats: TraderStats = {
       totalPositionsValue,
@@ -124,6 +128,7 @@ export class TradeEnricher {
       winRateLabel: `${Math.round(winRate)}% (${wins}W-${losses}L)`,
       totalRealizedPnl,
       portfolioValue: Math.max(totalPositionsValue, portfolioValueFromApi),
+      bestWinAmount,
       bestWinStreak,
       activeSince: earliestTimestamp ? new Date(earliestTimestamp * 1000).toISOString() : null,
       observedTradeCount: recentActivity.length,

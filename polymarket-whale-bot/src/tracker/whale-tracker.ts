@@ -45,8 +45,11 @@ export class WhaleTracker {
     let sampleTrade: PolymarketTrade | null = null;
     for (const wallet of wallets.slice(0, 10)) {
       const activity = await this.dataApi.getActivity(wallet.proxyWallet, 10).catch(() => []);
-      if (activity.length > 0) {
-        sampleTrade = activity[0] ?? null;
+      const eligibleTrade = activity.find(
+        (trade) => Number(trade.usdcSize || 0) >= this.config.tracking.minTradeSize,
+      );
+      if (eligibleTrade) {
+        sampleTrade = eligibleTrade;
         logger.info(`Smoke test activity OK: ${wallet.proxyWallet} returned ${activity.length} trades`);
         break;
       }
@@ -54,7 +57,9 @@ export class WhaleTracker {
     }
 
     if (!sampleTrade) {
-      throw new Error('Smoke test failed: unable to fetch sample activity from tracked wallets');
+      throw new Error(
+        `Smoke test failed: unable to fetch sample activity >= $${this.config.tracking.minTradeSize} from tracked wallets`,
+      );
     }
 
     const enriched = await this.tradeEnricher.enrichTrade(sampleTrade);
