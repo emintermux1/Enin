@@ -22,4 +22,15 @@ export class DedupCache {
     this.cache.set(key, true);
     return true;
   }
+
+  addManyIfNew(transactionHashes: string[]): boolean {
+    const keys = transactionHashes.map((transactionHash) => transactionHash.toLowerCase());
+    if (keys.some((key) => this.cache.has(key))) {
+      return false;
+    }
+    for (const key of keys) {
+      this.cache.set(key, true);
+    }
+    return true;
+  }
 }

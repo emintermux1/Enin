@@ -4,6 +4,8 @@ import { DataApi } from '../api/data-api';
 import { HashdiveApi, HashdiveTraderProfile } from '../api/hashdive-api';
 import { classifyTrader } from '../classifier/trader-classifier';
 import { classifyRisk } from '../classifier/risk-classifier';
+import { calculateInsiderScore } from '../classifier/insider-scorer';
+import { calculateUnusualScore } from '../classifier/unusual-scorer';
 import {
   DataPosition,
   EnrichedTrade,
@@ -74,24 +76,16 @@ export class TradeEnricher {
       (position) => position.conditionId === trade.conditionId && position.totalBought > trade.usdcSize * 1.5,
     );
 
-    const holderStats = await this.decorateInsiderCount(holders, trade.proxyWallet, statsSnapshot.traderStats);
-    const classification = classifyTrader({
-      trade,
-      traderStats: statsSnapshot.traderStats,
-      trackedWallet,
-      holderStats,
-      recentTradeCount: statsSnapshot.recentTradeCount,
-      convictionBuild,
-    });
-
     let effectiveWinRate = statsSnapshot.traderStats.winRate;
     let effectiveWins = statsSnapshot.traderStats.wins;
     let effectiveLosses = statsSnapshot.traderStats.losses;
     const hashdiveResolvedCount = (hashdiveProfile?.resolvedWins || 0) + (hashdiveProfile?.resolvedLosses || 0);
+    let effectiveClosedPositions = statsSnapshot.traderStats.closedPositions;
     if (hashdiveProfile && hashdiveResolvedCount >= 5) {
       effectiveWinRate = hashdiveProfile.resolvedWinRate;
       effectiveWins = hashdiveProfile.resolvedWins;
       effectiveLosses = hashdiveProfile.resolvedLosses;
+      effectiveClosedPositions = hashdiveResolvedCount;
       logger.info(
         `Hashdive resolved stats applied for ${trade.proxyWallet}: ${effectiveWins}W-${effectiveLosses}L (${Math.round(effectiveWinRate)}%)`,
       );
@@ -103,30 +97,71 @@ export class TradeEnricher {
       logger.info(`Hashdive profile unavailable for ${trade.proxyWallet}; using data-api fallback`);
     }
 
+    const effectiveTraderStats: TraderStats = {
+      ...statsSnapshot.traderStats,
+      closedPositions: effectiveClosedPositions,
+      winRate: effectiveWinRate,
+      wins: effectiveWins,
+      losses: effectiveLosses,
+      winRateLabel: `${Math.round(effectiveWinRate)}% (${effectiveWins}W-${effectiveLosses}L)`,
+    };
     const price = Math.max(trade.price || 0.01, 0.01);
     let topCategory = this.determineTopCategory(statsSnapshot.positions, statsSnapshot.closedPositions);
     if (!topCategory && hashdiveProfile?.topCategory) {
       topCategory = hashdiveProfile.topCategory;
     }
+    const isFreshWallet = statsSnapshot.recentTradeCount > 0 && statsSnapshot.recentTradeCount < 20;
+    const insiderScore = calculateInsiderScore({
+      winRate: effectiveWinRate,
+      closedPositions: effectiveClosedPositions,
+      isFreshWallet,
+      recentTradeCount: statsSnapshot.recentTradeCount,
+      tradePrice: price,
+      tradeSize: trade.usdcSize,
+      portfolioValue: effectiveTraderStats.portfolioValue,
+      totalRealizedPnl: effectiveTraderStats.totalRealizedPnl,
+      bestWinStreak: effectiveTraderStats.bestWinStreak,
+    });
+    const unusualScore = calculateUnusualScore({
+      tradeSize: trade.usdcSize,
+      marketVolume: marketInfo.volume,
+      marketLiquidity: marketInfo.liquidity,
+      tradePrice: price,
+      portfolioValue: effectiveTraderStats.portfolioValue,
+      isFreshWallet,
+      winRate: effectiveWinRate,
+      closedPositions: effectiveClosedPositions,
+    });
+    const holderStats = await this.decorateInsiderCount(holders, trade.proxyWallet, effectiveTraderStats);
+    const classification = classifyTrader({
+      trade,
+      traderStats: effectiveTraderStats,
+      trackedWallet,
+      holderStats,
+      recentTradeCount: statsSnapshot.recentTradeCount,
+      convictionBuild,
+    });
+    const traderTypes = [...classification.traderTypes];
+    let primaryType = classification.primaryType;
+    if (insiderScore.isInsider && !traderTypes.includes('INSIDER')) {
+      traderTypes.push('INSIDER');
+      if (primaryType !== 'WHALE') {
+        primaryType = 'INSIDER';
+      }
+    }
     const freshWalletsInMarket = this.countFreshWallets(holders.addresses);
 
     return {
       trade,
-      traderStats: {
-        ...statsSnapshot.traderStats,
-        winRate: effectiveWinRate,
-        wins: effectiveWins,
-        losses: effectiveLosses,
-        winRateLabel: `${Math.round(effectiveWinRate)}% (${effectiveWins}W-${effectiveLosses}L)`,
-      },
+      traderStats: effectiveTraderStats,
       marketInfo,
       holderStats,
-      traderTypes: classification.traderTypes,
-      primaryType: classification.primaryType,
+      traderTypes,
+      primaryType,
       risk: classifyRisk(price),
       potentialWin: trade.usdcSize / price,
       multiplier: 1 / price,
-      isFreshWallet: statsSnapshot.recentTradeCount > 0 && statsSnapshot.recentTradeCount < 20,
+      isFreshWallet,
       topCategory,
       freshWalletsInMarket,
       hashdiveProfile: hashdiveProfile
@@ -139,6 +174,8 @@ export class TradeEnricher {
             topCategory: hashdiveProfile.topCategory,
           }
         : undefined,
+      insiderScore,
+      unusualScore,
     };
   }
 

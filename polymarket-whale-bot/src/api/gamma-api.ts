@@ -1,7 +1,7 @@
 import { ApiConfig, MarketInfo } from '../types';
 import { HttpClient } from './http-client';
 
-interface GammaMarketResponse {
+export interface GammaMarketLookup {
   id: string;
   question: string;
   conditionId: string;
@@ -35,7 +35,7 @@ interface GammaEventResponse {
   volume?: number | string;
   liquidity?: number | string;
   tags?: GammaTag[];
-  markets?: GammaMarketResponse[];
+  markets?: GammaMarketLookup[];
 }
 
 interface GammaTag {
@@ -74,7 +74,7 @@ export class GammaApi {
     slug: string,
     options?: { eventSlug?: string; conditionId?: string }
   ): Promise<MarketInfo | null> {
-    const markets = await this.client.get<GammaMarketResponse[]>(`/markets?slug=${encodeURIComponent(slug)}`);
+    const markets = await this.client.get<GammaMarketLookup[]>(`/markets?slug=${encodeURIComponent(slug)}`);
     const market = markets[0];
     if (market) {
       const tags = await this.getMarketTags(market.id).catch(() => [] as string[]);
@@ -108,18 +108,40 @@ export class GammaApi {
     return this.buildMarketInfoFromEvent(event, slug, options?.conditionId);
   }
 
+  async findMarkets(options: {
+    slug?: string;
+    search?: string;
+    conditionId?: string;
+    limit?: number;
+  }): Promise<GammaMarketLookup[]> {
+    const params = new URLSearchParams();
+    if (options.slug) {
+      params.set('slug', options.slug);
+    }
+    if (options.search) {
+      params.set('search', options.search);
+    }
+    if (options.conditionId) {
+      params.set('conditionId', options.conditionId);
+    }
+    if (options.limit) {
+      params.set('limit', String(options.limit));
+    }
+    return this.client.get<GammaMarketLookup[]>(`/markets?${params.toString()}`);
+  }
+
   async getMarketTags(marketId: string): Promise<string[]> {
     const tags = await this.client.get<GammaTag[]>(`/markets/${marketId}/tags`);
     return tags.map((tag) => tag.label).filter(Boolean);
   }
 
   private resolveEndDate(
-    entity?: Pick<GammaMarketResponse, 'endDateIso' | 'endDate' | 'expirationDate' | 'closeTime'>
+    entity?: Pick<GammaMarketLookup, 'endDateIso' | 'endDate' | 'expirationDate' | 'closeTime'>
   ): string {
     return entity?.endDateIso || entity?.endDate || entity?.expirationDate || entity?.closeTime || '';
   }
 
-  private async getEventEndDate(market: GammaMarketResponse): Promise<string> {
+  private async getEventEndDate(market: GammaMarketLookup): Promise<string> {
     const eventSlug = market.eventSlug || market.events?.[0]?.slug;
     if (!eventSlug) {
       return '';

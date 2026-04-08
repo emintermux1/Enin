@@ -1,14 +1,130 @@
-🕵️ Insider Spotted
+🔥 Insider Spotted
 
-Will Paris Saint-Germain FC win on 2026-04-08?
-📅 Resolves: Apr 7 8:00 PM ET
+📈 Counter-Strike: NIP vs M80 (BO3) - ESL Pro League Stage 1
+💵 Vol: $880,440 · Liq: $0.00 · Esports · counter strike 2
 
-🎯 Buy Yes
-├ Amount: $1,001
-├ Price: 53¢
-└ To win: $1,888 (1.9x)
+📊 Resolves: Mar 1 7:00 PM ET
+🟡 Risk
 
-🥷 Trader: swisstony
-├ Positions: $1,078,564
-├ Win Rate: 100% (50W-0L)
-└ Portfolio: $1,598,244
+⚡ Buy M80
+├ 💰 Amount: $21,108
+├ 🪙 Price: 46¢
+└ 💵 To win: $45,887 (2.2x)
+
+🧑‍💼 Trader: gmanas · Copy Trade
+├ 📈 Positions: $0.00 · 50 bets
+├ ✅ Win Rate: 100%
+├ 💵 P&L: +$13,952,750
+├ 💰 Best Win: +$802,864
+├ 🔥 Last Streak: 50W
+└ 🏷️ Top Category: Basketball
+
+🎯 Insider Score: 55/100
+  • Elite win rate (90%+, 10+ bets)
+  • 50 win streak
+
+--- ENTITIES ---
+[
+  {
+    "type": "custom_emoji",
+    "offset": 0,
+    "length": 2,
+    "custom_emoji_id": "4969918262650340505"
+  },
+  {
+    "type": "custom_emoji",
+    "offset": 20,
+    "length": 2,
+    "custom_emoji_id": "5994378914636500516"
+  },
+  {
+    "type": "text_link",
+    "offset": 23,
+    "length": 57,
+    "url": "https://polymarket.com/event/cs2-nip-m80-2026-03-02"
+  },
+  {
+    "type": "custom_emoji",
+    "offset": 81,
+    "length": 2,
+    "custom_emoji_id": "5967390100357648692"
+  },
+  {
+    "type": "custom_emoji",
+    "offset": 141,
+    "length": 2,
+    "custom_emoji_id": "5875291072225087249"
+  },
+  {
+    "type": "custom_emoji",
+    "offset": 180,
+    "length": 1,
+    "custom_emoji_id": "5355160022894539220"
+  },
+  {
+    "type": "custom_emoji",
+    "offset": 192,
+    "length": 2,
+    "custom_emoji_id": "5897958754267174109"
+  },
+  {
+    "type": "custom_emoji",
+    "offset": 213,
+    "length": 2,
+    "custom_emoji_id": "5992430854909989581"
+  },
+  {
+    "type": "custom_emoji",
+    "offset": 229,
+    "length": 2,
+    "custom_emoji_id": "5967390100357648692"
+  },
+  {
+    "type": "custom_emoji",
+    "offset": 256,
+    "length": 5,
+    "custom_emoji_id": "5920344347152224466"
+  },
+  {
+    "type": "text_link",
+    "offset": 270,
+    "length": 6,
+    "url": "https://polymarket.com/profile/0xe90bec87d9ef430f27f9dcfe72c34b76967d5da2"
+  },
+  {
+    "type": "text_link",
+    "offset": 279,
+    "length": 10,
+    "url": "https://t.me/PolytechTradeBot?start=ref_cococooker"
+  },
+  {
+    "type": "custom_emoji",
+    "offset": 292,
+    "length": 2,
+    "custom_emoji_id": "5994378914636500516"
+  },
+  {
+    "type": "custom_emoji",
+    "offset": 324,
+    "length": 1,
+    "custom_emoji_id": "5852745384434077722"
+  },
+  {
+    "type": "custom_emoji",
+    "offset": 343,
+    "length": 2,
+    "custom_emoji_id": "5967390100357648692"
+  },
+  {
+    "type": "custom_emoji",
+    "offset": 366,
+    "length": 2,
+    "custom_emoji_id": "5897958754267174109"
+  },
+  {
+    "type": "custom_emoji",
+    "offset": 391,
+    "length": 2,
+    "custom_emoji_id": "4969918262650340505"
+  }
+]

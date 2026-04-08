@@ -98,6 +98,7 @@ class CaptionBuilder {
 export class ChannelPoster {
   private readonly bot: Telegraf
   private readonly cardGenerator = new CardGenerator()
+  private readonly dryRun = process.env.TELEGRAM_DRY_RUN === '1'
   private launched = false
 
   constructor(private readonly config: TelegramConfig) {
@@ -113,6 +114,11 @@ export class ChannelPoster {
     if (this.launched) {
       return
     }
+    if (this.dryRun) {
+      this.launched = true
+      logger.info('Telegram dry-run mode enabled')
+      return
+    }
     await this.bot.launch()
     this.launched = true
     logger.info(`Telegram posting target: ${this.config.channelId}`)
@@ -120,7 +126,9 @@ export class ChannelPoster {
 
   stop(reason = 'shutdown'): void {
     if (this.launched) {
-      this.bot.stop(reason)
+      if (!this.dryRun) {
+        this.bot.stop(reason)
+      }
       this.launched = false
     }
   }
@@ -139,6 +147,10 @@ export class ChannelPoster {
   }
 
   async postAlert(trade: EnrichedTrade): Promise<void> {
+    if (this.dryRun) {
+      logger.info(`Dry-run alert: ${trade.trade.title} - $${trade.trade.usdcSize}`)
+      return
+    }
     const { text, entities } = this.buildCaption(trade)
     const keyboard = this.buildKeyboard(trade)
     const image = await this.cardGenerator.generateCard(trade)
@@ -368,6 +380,20 @@ export class ChannelPoster {
     if (marketIntelligenceParts.length > 0) {
       builder.newLine()
       builder.addText(marketIntelligenceParts.join(' · '))
+    }
+
+    if (trade.insiderScore && trade.insiderScore.score >= 40) {
+      builder.newLine()
+      builder.addText(`🎯 Insider Score: ${trade.insiderScore.score}/100`)
+      for (const signal of trade.insiderScore.signals.slice(0, 2)) {
+        builder.newLine()
+        builder.addText(`  • ${signal}`)
+      }
+    }
+
+    if (trade.unusualScore && trade.unusualScore.score >= 40) {
+      builder.newLine()
+      builder.addText(`⚠️ Unusual: ${trade.unusualScore.signals[0] || ''}`)
     }
 
     return builder.build()

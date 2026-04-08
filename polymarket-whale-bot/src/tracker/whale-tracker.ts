@@ -7,6 +7,7 @@ import { WalletManager } from './wallet-manager';
 import { DedupCache } from './dedup-cache';
 import { logger } from '../utils/logger';
 import { CardGenerator } from '../image/card-generator';
+import { createSourceDedupKey, HashdiveDiscovery } from './hashdive-discovery';
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -18,6 +19,7 @@ export class WhaleTracker {
   private readonly walletManager: WalletManager;
   private readonly dedupCache = new DedupCache();
   private readonly tradeEnricher: TradeEnricher;
+  private readonly hashdiveDiscovery?: HashdiveDiscovery;
   private readonly lastSeenTimestamps = new Map<string, number>();
   private running = false;
   private processing = false;
@@ -35,6 +37,18 @@ export class WhaleTracker {
       ? new HashdiveApi(config.api.hashdiveApiKey)
       : undefined;
     this.tradeEnricher = new TradeEnricher(this.dataApi, this.gammaApi, this.walletManager, hashdiveApi);
+    if (hashdiveApi) {
+      this.hashdiveDiscovery = new HashdiveDiscovery({
+        hashdiveApi,
+        gammaApi: this.gammaApi,
+        walletManager: this.walletManager,
+        tradeEnricher: this.tradeEnricher,
+        dedupCache: this.dedupCache,
+        minTradeSize: this.config.tracking.minTradeSize,
+        pollIntervalMs: this.config.tracking.hashdivePollIntervalMs,
+        onTrade: this.onTrade,
+      });
+    }
   }
 
   async runStartupSmokeTest(cardGenerator: CardGenerator, outputPath: string): Promise<EnrichedTrade> {
@@ -86,6 +100,7 @@ export class WhaleTracker {
     this.timer = setInterval(() => {
       void this.tick();
     }, this.config.tracking.pollIntervalMs);
+    await this.hashdiveDiscovery?.start();
     void this.tick();
   }
 
@@ -95,6 +110,7 @@ export class WhaleTracker {
       clearInterval(this.timer);
       this.timer = null;
     }
+    this.hashdiveDiscovery?.stop();
   }
 
   private async tick(): Promise<void> {
@@ -164,7 +180,12 @@ export class WhaleTracker {
         const price = Number(trade.price || 0);
         return price >= 0.03 && price <= 0.93;
       })
-      .filter((trade) => this.dedupCache.addIfNew(trade.transactionHash))
+      .filter((trade) =>
+        this.dedupCache.addManyIfNew([
+          trade.transactionHash,
+          createSourceDedupKey(trade),
+        ]),
+      )
       .sort((a, b) => a.timestamp - b.timestamp);
 
     for (const trade of newTrades) {
