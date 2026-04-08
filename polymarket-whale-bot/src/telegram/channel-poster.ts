@@ -266,7 +266,7 @@ export class ChannelPoster {
       ` Resolves: ${formatResolveDate(trade.marketInfo.endDate)}`
     )
     builder.newLine()
-    builder.addText(`${trade.risk.emoji} Risk`)
+    builder.addText(`⚠️ Risk ${trade.risk.emoji}`)
     builder.newLine().newLine()
     builder.addPremiumEmoji(EMOJI_TARGET, ` ${side} ${outcome}`)
     builder.newLine()
@@ -324,20 +324,12 @@ export class ChannelPoster {
         text: ` Best Win: ${formatSignedUsd(trade.traderStats.bestWinAmount)}`,
       })
     }
-    if (trade.traderStats.currentStreak && trade.traderStats.currentStreak >= 2) {
+    const streak =
+      trade.traderStats.bestWinStreak || trade.traderStats.currentStreak
+    if (streak && streak >= 2) {
       traderLines.push({
         emoji: EMOJI_FIRE,
-        text: ` Last Streak: ${trade.traderStats.currentStreak}W`,
-      })
-    }
-    if (
-      trade.traderStats.bestWinStreak &&
-      trade.traderStats.bestWinStreak >= 3 &&
-      trade.traderStats.bestWinStreak !== trade.traderStats.currentStreak
-    ) {
-      traderLines.push({
-        emoji: EMOJI_FIRE,
-        text: ` Best Streak: ${trade.traderStats.bestWinStreak}W`,
+        text: ` Last Streak: ${streak}W`,
       })
     }
     if (trade.holderStats.traderIsTopHolder) {
@@ -382,13 +374,10 @@ export class ChannelPoster {
       builder.addText(marketIntelligenceParts.join(' · '))
     }
 
-    if (trade.insiderScore && trade.insiderScore.score >= 40) {
+    if (trade.insiderScore && trade.insiderScore.score >= 50) {
       builder.newLine()
-      builder.addText(`🎯 Insider Score: ${trade.insiderScore.score}/100`)
-      for (const signal of trade.insiderScore.signals.slice(0, 2)) {
-        builder.newLine()
-        builder.addText(`  • ${signal}`)
-      }
+      const topSignals = trade.insiderScore.signals.slice(0, 2).join(' · ')
+      builder.addText(`🎯 Score: ${trade.insiderScore.score}/100 — ${topSignals}`)
     }
 
     if (trade.unusualScore && trade.unusualScore.score >= 40) {

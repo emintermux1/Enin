@@ -65,12 +65,19 @@ export class TradeEnricher {
 
   async enrichTrade(trade: PolymarketTrade): Promise<EnrichedTrade> {
     const trackedWallet = this.walletManager.getWallet(trade.proxyWallet);
-    const [statsSnapshot, marketInfo, holders, hashdiveProfile] = await Promise.all([
+    const hashdiveProfilePromise = Promise.race([
+      this.getHashdiveProfile(trade.proxyWallet).catch((error) => {
+        logger.warn(`Hashdive profile fetch failed for ${trade.proxyWallet}`, error);
+        return null;
+      }),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000)),
+    ]);
+    const [statsSnapshot, marketInfo, holders] = await Promise.all([
       this.getTraderStats(trade.proxyWallet),
       this.getMarketInfo(trade),
       this.getHolderStats(trade),
-      this.getHashdiveProfile(trade.proxyWallet),
     ]);
+    const hashdiveProfile = await hashdiveProfilePromise;
 
     const convictionBuild = statsSnapshot.positions.some(
       (position) => position.conditionId === trade.conditionId && position.totalBought > trade.usdcSize * 1.5,

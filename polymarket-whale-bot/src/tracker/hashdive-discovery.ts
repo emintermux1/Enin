@@ -33,6 +33,7 @@ export interface HashdiveDiscoveryOptions {
 }
 
 export class HashdiveDiscovery {
+  private static readonly POLL_TIMEOUT_MS = 10_000;
   private timer: NodeJS.Timeout | null = null;
   private running = false;
   private processing = false;
@@ -67,10 +68,15 @@ export class HashdiveDiscovery {
     }
     this.processing = true;
     try {
-      const trades = await this.options.hashdiveApi.getLatestWhaleTrades(
-        this.options.minTradeSize,
-        50,
-      );
+      const trades = await Promise.race([
+        this.options.hashdiveApi.getLatestWhaleTrades(
+          this.options.minTradeSize,
+          50,
+        ),
+        new Promise<[]>(resolve =>
+          setTimeout(() => resolve([]), HashdiveDiscovery.POLL_TIMEOUT_MS),
+        ),
+      ]);
       logger.info(`Hashdive discovery poll returned ${trades.length} whale trades`);
       for (const rawTrade of [...trades].sort(
         (left, right) =>

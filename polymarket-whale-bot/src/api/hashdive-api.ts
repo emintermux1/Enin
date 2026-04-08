@@ -79,7 +79,7 @@ export class HashdiveApi {
     ttl: 1000 * 60 * 60,
   });
 
-  constructor(apiKey: string, timeoutMs = 10_000) {
+  constructor(apiKey: string, timeoutMs = 5_000) {
     this.apiKey = apiKey;
     this.client = new HttpClient('https://hashdive.com/api', {
       timeoutMs,
