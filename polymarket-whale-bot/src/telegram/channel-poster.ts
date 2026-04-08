@@ -300,6 +300,12 @@ export class ChannelPoster {
       emoji: EMOJI_MONEY,
       text: ` P&L: ${formatSignedUsd(trade.traderStats.totalRealizedPnl)}`,
     })
+    if (trade.hashdiveProfile && trade.hashdiveProfile.totalVolumeUsd > 0) {
+      traderLines.push({
+        emoji: EMOJI_COIN,
+        text: ` Volume: ${formatCompactUsd(trade.hashdiveProfile.totalVolumeUsd)}`,
+      })
+    }
     if (trade.traderStats.bestWinAmount && trade.traderStats.bestWinAmount > 0) {
       traderLines.push({
         emoji: EMOJI_MONEYBAG,

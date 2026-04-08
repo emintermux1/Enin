@@ -1,6 +1,7 @@
 import { AppConfig, EnrichedTrade, PolymarketTrade } from '../types';
 import { DataApi } from '../api/data-api';
 import { GammaApi } from '../api/gamma-api';
+import { HashdiveApi } from '../api/hashdive-api';
 import { TradeEnricher } from './trade-enricher';
 import { WalletManager } from './wallet-manager';
 import { DedupCache } from './dedup-cache';
@@ -30,7 +31,10 @@ export class WhaleTracker {
     this.dataApi = new DataApi(config.api);
     this.gammaApi = new GammaApi(config.api);
     this.walletManager = new WalletManager(this.dataApi, config.tracking);
-    this.tradeEnricher = new TradeEnricher(this.dataApi, this.gammaApi, this.walletManager);
+    const hashdiveApi = config.api.hashdiveApiKey
+      ? new HashdiveApi(config.api.hashdiveApiKey)
+      : undefined;
+    this.tradeEnricher = new TradeEnricher(this.dataApi, this.gammaApi, this.walletManager, hashdiveApi);
   }
 
   async runStartupSmokeTest(cardGenerator: CardGenerator, outputPath: string): Promise<EnrichedTrade> {

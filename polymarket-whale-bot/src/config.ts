@@ -38,6 +38,7 @@ export const config: AppConfig = {
     timeoutMs: 15_000,
     retryCount: 3,
     minRequestSpacingMs: 40,
+    hashdiveApiKey: readString('HASHDIVE_API_KEY', ''),
   },
   runtime: {
     sampleCardPath: path.resolve(process.cwd(), 'sample-card.png'),
