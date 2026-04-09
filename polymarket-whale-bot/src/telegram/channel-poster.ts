@@ -258,11 +258,10 @@ export class ChannelPoster {
     }
     builder.newLine().newLine()
     builder.addLink(question, marketUrl)
-    builder.newLine()
     if (trade.marketInfo.volume > 0) {
-      builder.addText(`Vol: ${formatCompactUsd(trade.marketInfo.volume)}`)
-      builder.newLine()
+      builder.addText(` · Vol: ${formatCompactUsd(trade.marketInfo.volume)}`)
     }
+    builder.newLine()
     builder.addPremiumEmoji(
       EMOJI_CALENDAR,
       ` Resolves: ${formatResolveDate(trade.marketInfo.endDate)}`
