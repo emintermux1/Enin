@@ -28,6 +28,7 @@ export const config: AppConfig = {
   tracking: {
     minTradeSize: readNumber('MIN_TRADE_SIZE', 10_000),
     pollIntervalMs: readNumber('POLL_INTERVAL_MS', 15_000),
+    firehosePollIntervalMs: readNumber('FIREHOSE_POLL_INTERVAL_MS', 5_000),
     hashdivePollIntervalMs: readNumber('HASHDIVE_POLL_INTERVAL_MS', 120_000),
     leaderboardRefreshHours: readNumber('LEADERBOARD_REFRESH_HOURS', 6),
     walletBatchSize: 20,

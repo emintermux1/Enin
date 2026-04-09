@@ -15,6 +15,7 @@ import { NewsCorrelator } from '../classifier/news-correlator';
 import { CoordinationDetector } from '../classifier/coordination-detector';
 import { PriceHistory } from './price-history';
 import { TelegramChannelScraper } from './telegram-channel-scraper';
+import { TradeFirehose } from './trade-firehose';
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -106,6 +107,7 @@ export class WhaleTracker {
   private readonly tradeEnricher: TradeEnricher;
   private readonly coordinationDetector: CoordinationDetector;
   private readonly hashdiveDiscovery?: HashdiveDiscovery;
+  private readonly tradeFirehose: TradeFirehose;
   private readonly channelScraper?: TelegramChannelScraper;
   private readonly walletTradeRepo?: WalletTradeRepo;
   private readonly priceHistory?: PriceHistory;
@@ -140,6 +142,16 @@ export class WhaleTracker {
       this.priceHistory,
     );
     this.coordinationDetector = new CoordinationDetector();
+    this.tradeFirehose = new TradeFirehose({
+      dataApi: this.dataApi,
+      tradeEnricher: this.tradeEnricher,
+      coordinationDetector: this.coordinationDetector,
+      dedupCache: this.dedupCache,
+      priceHistory: this.priceHistory,
+      minTradeSize: this.config.tracking.minTradeSize,
+      pollIntervalMs: this.config.tracking.firehosePollIntervalMs ?? 5_000,
+      onTrade: async (trade) => this.publishTrade(trade),
+    });
     if (hashdiveApi) {
       this.hashdiveDiscovery = new HashdiveDiscovery({
         hashdiveApi,
@@ -213,6 +225,7 @@ export class WhaleTracker {
     this.timer = setInterval(() => {
       void this.tick();
     }, this.config.tracking.pollIntervalMs);
+    await this.tradeFirehose.start();
     await this.hashdiveDiscovery?.start();
     await this.channelScraper?.start();
     void this.tick();
@@ -224,6 +237,7 @@ export class WhaleTracker {
       clearInterval(this.timer);
       this.timer = null;
     }
+    this.tradeFirehose.stop();
     this.hashdiveDiscovery?.stop();
     this.channelScraper?.stop();
   }
