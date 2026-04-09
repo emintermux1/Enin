@@ -449,11 +449,7 @@ export class CardGenerator {
     const question = alert.marketQuestion
     const pnlText = formatSignedUsd(alert.pnl)
     const resultLabel = alert.won ? 'Won' : 'Lost'
-    const entrySummary = `Entered at ${formatPriceCents(alert.entryPrice)} for ${formatUsd(alert.entryAmount)}`
     const outcomeSummary = `${alert.outcome} ${alert.won ? '✅' : '❌'}`
-    const payoutSummary = alert.won
-      ? `${formatUsd(alert.potentialWin)} payout`
-      : 'Position expired worthless'
     const traderLabel = truncateText(alert.traderName, 26)
     const originalLabel = truncateText(alert.originalAlertLabel, 22)
 
@@ -498,31 +494,34 @@ export class CardGenerator {
     ctx.fillText(outcomeSummary, 1057, 106)
     ctx.textAlign = 'left'
 
-    ctx.font = '800 52px Inter, Arial, sans-serif'
+    ctx.font = '800 44px Inter, Arial, sans-serif'
     ctx.fillStyle = '#f8fafc'
-    const questionLines = wrapText(ctx, question, 860, 3)
-    const questionY = 190
-    questionLines.forEach((line, index) => {
-      ctx.fillText(line, 78, questionY + index * 60)
+    const questionLines = wrapText(ctx, question, 1060, 2)
+    let y = 170
+    questionLines.forEach((line) => {
+      ctx.fillText(line, 78, y)
+      y += 52
     })
 
-    const pnlTop = questionY + questionLines.length * 60 + 48
-    ctx.font = '700 24px Inter, Arial, sans-serif'
+    y += 24
+    ctx.font = '700 22px Inter, Arial, sans-serif'
     ctx.fillStyle = 'rgba(226,232,240,0.82)'
-    ctx.fillText(`${resultLabel} on ${alert.outcome}`, 82, pnlTop)
+    ctx.fillText(`${resultLabel} on ${alert.outcome}`, 82, y)
 
-    const pnlFontSize = fitFontSize(ctx, pnlText, 700, 104, 72, 800)
+    y += 16
+    const pnlFontSize = fitFontSize(ctx, pnlText, 700, 88, 64, 800)
     ctx.font = `800 ${pnlFontSize}px Inter, Arial, sans-serif`
     ctx.fillStyle = alert.won ? '#4ade80' : '#f87171'
-    ctx.fillText(pnlText, 74, pnlTop + 108)
+    y += pnlFontSize
+    ctx.fillText(pnlText, 74, y)
 
-    ctx.font = '600 28px Inter, Arial, sans-serif'
-    ctx.fillStyle = 'rgba(248,250,252,0.88)'
-    ctx.fillText(`${entrySummary} → ${payoutSummary}`, 80, pnlTop + 160)
+    y += 40
+    const panelHeight = 130
+    const panelY = Math.max(y, 500)
 
-    fillRoundedRect(ctx, 76, 476, 1128, 154, 28, 'rgba(255,255,255,0.04)')
+    fillRoundedRect(ctx, 76, panelY, 1128, panelHeight, 28, 'rgba(255,255,255,0.04)')
     ctx.fillStyle = palette.primary
-    ctx.fillRect(76, 476, 8, 154)
+    ctx.fillRect(76, panelY, 8, panelHeight)
 
     const statLabels = [
       { label: 'Trader', value: traderLabel },
@@ -532,28 +531,28 @@ export class CardGenerator {
     ]
 
     const statColumns = [112, 398, 684, 936]
-    ctx.font = '700 18px Inter, Arial, sans-serif'
+    ctx.font = '700 16px Inter, Arial, sans-serif'
     ctx.fillStyle = 'rgba(148,163,184,0.9)'
     statLabels.forEach((stat, index) => {
-      ctx.fillText(stat.label.toUpperCase(), statColumns[index], 526)
+      ctx.fillText(stat.label.toUpperCase(), statColumns[index], panelY + 36)
     })
 
-    ctx.font = '700 28px Inter, Arial, sans-serif'
+    ctx.font = '700 26px Inter, Arial, sans-serif'
     ctx.fillStyle = '#f8fafc'
     statLabels.forEach((stat, index) => {
       const x = statColumns[index]
       const maxWidth = index === 3 ? 220 : 230
-      const size = fitFontSize(ctx, stat.value, maxWidth, 28, 20, 700)
+      const size = fitFontSize(ctx, stat.value, maxWidth, 26, 18, 700)
       ctx.font = `700 ${size}px Inter, Arial, sans-serif`
-      ctx.fillText(stat.value, x, 566)
+      ctx.fillText(stat.value, x, panelY + 70)
     })
 
-    ctx.font = '600 22px Inter, Arial, sans-serif'
+    ctx.font = '600 20px Inter, Arial, sans-serif'
     ctx.fillStyle = 'rgba(226,232,240,0.84)'
     ctx.fillText(
       `${formatUsd(alert.entryAmount)} at ${formatPriceCents(alert.entryPrice)} · ${formatMultiplier(alert.multiplier)} payout path`,
       112,
-      608
+      panelY + 106
     )
 
     this.applyGrain(ctx, 1280, 720, 10)
