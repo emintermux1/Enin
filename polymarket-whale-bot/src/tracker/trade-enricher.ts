@@ -117,7 +117,10 @@ export class TradeEnricher {
     if (!topCategory && hashdiveProfile?.topCategory) {
       topCategory = hashdiveProfile.topCategory;
     }
-    const isFreshWallet = statsSnapshot.recentTradeCount > 0 && statsSnapshot.recentTradeCount < 20;
+    const totalClosedPositions = hashdiveProfile
+      ? hashdiveProfile.totalTrades
+      : statsSnapshot.traderStats.closedPositions;
+    const isFreshWallet = totalClosedPositions >= 0 && totalClosedPositions < 10 && statsSnapshot.positions.length < 5;
     const insiderScore = calculateInsiderScore({
       winRate: effectiveWinRate,
       closedPositions: effectiveClosedPositions,
@@ -409,7 +412,8 @@ export class TradeEnricher {
     let count = 0;
     for (const address of addresses) {
       const cached = this.traderStatsCache.get(address);
-      if (cached && cached.recentTradeCount > 0 && cached.recentTradeCount < 20) {
+      const cachedTotalTrades = cached?.traderStats.closedPositions ?? -1;
+      if (cached && cachedTotalTrades >= 0 && cachedTotalTrades < 10) {
         count += 1;
       }
     }
