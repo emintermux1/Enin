@@ -103,11 +103,6 @@ export class ChannelPoster {
 
   constructor(private readonly config: TelegramConfig) {
     this.bot = new Telegraf(config.botToken)
-    this.bot.start(async (ctx) => {
-      await ctx.reply(
-        `Polymarket Whale Bot is online. Channel default: ${this.config.channelId}.`
-      )
-    })
   }
 
   async launch(): Promise<void> {
@@ -119,16 +114,14 @@ export class ChannelPoster {
       logger.info('Telegram dry-run mode enabled')
       return
     }
-    await this.bot.launch()
+    const botInfo = await this.bot.telegram.getMe()
+    logger.info(`Bot verified: @${botInfo.username} (${botInfo.id})`)
     this.launched = true
     logger.info(`Telegram posting target: ${this.config.channelId}`)
   }
 
   stop(reason = 'shutdown'): void {
     if (this.launched) {
-      if (!this.dryRun) {
-        this.bot.stop(reason)
-      }
       this.launched = false
     }
   }
