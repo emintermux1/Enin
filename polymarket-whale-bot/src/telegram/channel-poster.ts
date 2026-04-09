@@ -41,6 +41,11 @@ interface CaptionResult {
         length: number
         url: string
       }
+    | {
+        type: 'bold'
+        offset: number
+        length: number
+      }
   >
 }
 
@@ -77,6 +82,17 @@ class CaptionBuilder {
       offset,
       length: text.length,
       url,
+    })
+    return this
+  }
+
+  addBold(text: string): this {
+    const offset = this.text.length
+    this.text += text
+    this.entities.push({
+      type: 'bold',
+      offset,
+      length: text.length,
     })
     return this
   }
@@ -243,24 +259,34 @@ export class ChannelPoster {
     builder.newLine().newLine()
     builder.addPremiumEmoji(EMOJI_CHART_UP, ' ')
     builder.addLink(question, marketUrl)
-    if (trade.marketInfo.volume > 0) {
-      builder.addText(` · Vol: ${formatCompactUsd(trade.marketInfo.volume)}`)
-    }
     builder.newLine()
+    if (trade.marketInfo.volume > 0) {
+      builder.addText(`Vol: ${formatCompactUsd(trade.marketInfo.volume)}`)
+      builder.newLine()
+    }
     builder.addPremiumEmoji(
       EMOJI_CALENDAR,
       ` Resolves: ${formatResolveDate(trade.marketInfo.endDate)}`
     )
     builder.newLine()
+    if (trade.holderStats.topHoldersOnSide > 0) {
+      builder.addText(
+        `👥 Top holders: ${trade.holderStats.topHoldersOnSide}/${trade.holderStats.totalTopHolders} ${trade.holderStats.side}`
+      )
+      builder.newLine()
+    }
     builder.addText(`⚠️ Risk ${trade.risk.emoji}`)
     builder.newLine().newLine()
     builder.addPremiumEmoji(EMOJI_TARGET, ` ${side} ${outcome}`)
     builder.newLine()
     builder.addText('├ ')
-    builder.addPremiumEmoji(
-      EMOJI_MONEYBAG,
-      ` Amount: ${formatUsd(trade.trade.usdcSize)}`
-    )
+    const amountStr = formatUsd(trade.trade.usdcSize)
+    if (trade.trade.usdcSize >= 50000) {
+      builder.addPremiumEmoji(EMOJI_MONEYBAG, ' Amount: ')
+      builder.addBold(amountStr)
+    } else {
+      builder.addPremiumEmoji(EMOJI_MONEYBAG, ` Amount: ${amountStr}`)
+    }
     builder.newLine()
     builder.addText('├ ')
     builder.addPremiumEmoji(
@@ -312,12 +338,6 @@ export class ChannelPoster {
       traderLines.push({
         emoji: EMOJI_MONEYBAG,
         text: ` Best Win: ${formatSignedUsd(trade.traderStats.bestWinAmount)}`,
-      })
-    }
-    if (trade.holderStats.traderIsTopHolder) {
-      traderLines.push({
-        emoji: null,
-        text: `👑 Top ${trade.holderStats.topHoldersOnSide}/${trade.holderStats.totalTopHolders} Holder`,
       })
     }
     if (trade.topCategory) {
