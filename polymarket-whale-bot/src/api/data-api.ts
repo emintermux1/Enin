@@ -20,6 +20,10 @@ export class DataApi {
     return this.client.get<PolymarketTrade[]>(`/activity?user=${user}&limit=${limit}&type=TRADE&sortBy=TIMESTAMP&sortDirection=DESC`);
   }
 
+  async getRecentTrades(limit = 200): Promise<PolymarketTrade[]> {
+    return this.client.get<PolymarketTrade[]>(`/trades?limit=${limit}`);
+  }
+
   async getPositions(user: string, sizeThreshold = 1000, limit = 50): Promise<DataPosition[]> {
     return this.client.get<DataPosition[]>(`/positions?user=${user}&sizeThreshold=${sizeThreshold}&limit=${limit}`);
   }

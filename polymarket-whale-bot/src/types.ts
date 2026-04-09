@@ -267,6 +267,7 @@ export interface ScrapedChannelTrade {
 export interface TrackingConfig {
   minTradeSize: number;
   pollIntervalMs: number;
+  firehosePollIntervalMs: number;
   hashdivePollIntervalMs: number;
   leaderboardRefreshHours: number;
   walletBatchSize: number;
