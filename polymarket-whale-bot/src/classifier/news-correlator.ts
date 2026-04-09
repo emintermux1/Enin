@@ -12,6 +12,17 @@ export interface NewsCorrelation {
   strongestSignal: string;
 }
 
+export interface ForwardNewsCorrelation {
+  hasPostTradeNews: boolean;
+  articles: Array<{
+    title: string;
+    source: string;
+    url: string;
+    minutesAfter: number;
+  }>;
+  preNewsSignal: string;
+}
+
 const STOP_WORDS = new Set([
   'will', 'the', 'be', 'by', 'in', 'of', 'to', 'a', 'an', 'and', 'or', 'for',
   'on', 'at', 'is', 'it', 'this', 'that', 'with', 'from', 'before', 'after',
@@ -91,6 +102,53 @@ export class NewsCorrelator {
       hasRecentNews: recentArticles.length > 0,
       articles: recentArticles,
       strongestSignal,
+    };
+  }
+
+  async correlateForward(
+    marketQuestion: string,
+    tradeTimestamp: number,
+    forwardWindowMinutes = 120,
+  ): Promise<ForwardNewsCorrelation> {
+    const keywords = this.extractKeywords(marketQuestion);
+    if (!keywords || keywords.split(' ').length < 2) {
+      return { hasPostTradeNews: false, articles: [], preNewsSignal: '' };
+    }
+
+    const cacheKey = `fwd:${keywords.toLowerCase()}`;
+    let articles = this.cache.get(cacheKey);
+
+    if (!articles) {
+      articles = (await this.newsApi.searchNewsExpanded(keywords, 10)).slice(0, 5);
+      this.cache.set(cacheKey, articles);
+    }
+
+    const referenceTimestamp = tradeTimestamp > 0 ? tradeTimestamp : Math.floor(Date.now() / 1000);
+    const forwardCutoff = referenceTimestamp + forwardWindowMinutes * 60;
+
+    const postTradeArticles = articles
+      .filter((article) => article.publishedAt > referenceTimestamp && article.publishedAt <= forwardCutoff)
+      .map((article) => ({
+        title: article.title,
+        source: article.source,
+        url: article.url,
+        minutesAfter: Math.round((article.publishedAt - referenceTimestamp) / 60),
+      }))
+      .sort((a, b) => a.minutesAfter - b.minutesAfter)
+      .slice(0, 3);
+
+    let preNewsSignal = '';
+    if (postTradeArticles.length > 0) {
+      const best = postTradeArticles[0];
+      if (best) {
+        preNewsSignal = `Traded ${best.minutesAfter}min before ${best.source} reported`;
+      }
+    }
+
+    return {
+      hasPostTradeNews: postTradeArticles.length > 0,
+      articles: postTradeArticles,
+      preNewsSignal,
     };
   }
 }

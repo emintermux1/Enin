@@ -10,6 +10,7 @@ import { detectPressure } from '../classifier/pressure-detector';
 import { NewsCorrelator } from '../classifier/news-correlator';
 import { calculateUnusualScore } from '../classifier/unusual-scorer';
 import { WalletTradeRepo } from '../db/wallet-trade-repo';
+import { CumulativeInsiderProfile, InsiderTracker } from '../db/insider-tracker';
 import {
   DataPosition,
   EnrichedTrade,
@@ -68,6 +69,7 @@ export class TradeEnricher {
     private readonly hashdiveApi?: HashdiveApi,
     private readonly polygonscanApi?: PolygonscanApi,
     private readonly walletTradeRepo?: WalletTradeRepo,
+    private readonly insiderTracker?: InsiderTracker,
     private readonly newsCorrelator?: NewsCorrelator,
     private readonly priceHistory?: PriceHistory,
   ) {}
@@ -102,13 +104,29 @@ export class TradeEnricher {
           ]),
         )
       : Promise.resolve(null);
-    const [statsSnapshot, marketInfo, holders, hashdiveProfile, capitalInflow, newsCorrelation] = await Promise.all([
+    const forwardNewsPromise = this.newsCorrelator
+      ? marketInfoPromise.then((marketInfo) =>
+          Promise.race([
+            this.newsCorrelator!.correlateForward(marketInfo.question, trade.timestamp).catch((error) => {
+              logger.warn(`Forward news correlation failed for ${trade.slug}`, error);
+              return null;
+            }),
+            new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000)),
+          ]),
+        )
+      : Promise.resolve(null);
+    const cumulativeProfilePromise = this.insiderTracker
+      ? Promise.resolve().then(() => this.insiderTracker!.getProfile(trade.proxyWallet))
+      : Promise.resolve(null);
+    const [statsSnapshot, marketInfo, holders, hashdiveProfile, capitalInflow, newsCorrelation, forwardNews, priorCumulativeProfile] = await Promise.all([
       this.getTraderStats(trade.proxyWallet),
       marketInfoPromise,
       this.getHolderStats(trade),
       hashdiveProfilePromise,
       capitalInflowPromise,
       newsCorrelationPromise,
+      forwardNewsPromise,
+      cumulativeProfilePromise,
     ]);
 
     const convictionBuild = statsSnapshot.positions.some(
@@ -167,6 +185,7 @@ export class TradeEnricher {
     if (isFreshWallet) {
       logger.info(`Fresh wallet detected: ${trade.proxyWallet} (${totalClosedPositions} closed, ${statsSnapshot.positions.length} open)`);
     }
+    const eventProximityHours = this.calculateEventProximityHours(marketInfo.endDate, trade.timestamp);
     const insiderScore = calculateInsiderScore({
       winRate: effectiveWinRate,
       closedPositions: effectiveClosedPositions,
@@ -177,6 +196,10 @@ export class TradeEnricher {
       portfolioValue: effectiveTraderStats.portfolioValue,
       totalRealizedPnl: effectiveTraderStats.totalRealizedPnl,
       bestWinStreak: effectiveTraderStats.bestWinStreak,
+      preNewsTradeDetected: forwardNews?.hasPostTradeNews,
+      historicalPreNewsCount: priorCumulativeProfile?.preNewsCount,
+      cumulativeInsiderScore: priorCumulativeProfile?.totalScore,
+      eventProximityHours,
     });
     const unusualScore = calculateUnusualScore({
       tradeSize: trade.usdcSize,
@@ -216,6 +239,21 @@ export class TradeEnricher {
     const risk = classifyRisk(price);
     const potentialWin = trade.usdcSize / price;
     const multiplier = 1 / price;
+    if (this.insiderTracker && insiderScore.score >= 50) {
+      this.recordInsiderEvidence({
+        trade,
+        price,
+        winRate: effectiveWinRate,
+        closedPositions: effectiveClosedPositions,
+        isFreshWallet,
+        insiderScore,
+        priorCumulativeProfile,
+        forwardNews,
+      });
+    }
+    const cumulativeInsiderProfile = this.insiderTracker
+      ? this.insiderTracker.getProfile(trade.proxyWallet)
+      : null;
     const enrichedTrade: EnrichedTrade = {
       trade,
       traderStats: effectiveTraderStats,
@@ -268,6 +306,22 @@ export class TradeEnricher {
               minutesAgo,
             })),
             strongestSignal: newsCorrelation.strongestSignal,
+          }
+        : undefined,
+      preNewsSignal: forwardNews?.hasPostTradeNews && forwardNews.articles[0]
+        ? {
+            hasPostTradeNews: true,
+            minutesBeforeNews: forwardNews.articles[0].minutesAfter,
+            newsHeadline: forwardNews.articles[0].title,
+            newsSource: forwardNews.articles[0].source,
+          }
+        : undefined,
+      cumulativeInsiderProfile: cumulativeInsiderProfile
+        ? {
+            totalScore: cumulativeInsiderProfile.totalScore,
+            evidenceCount: cumulativeInsiderProfile.evidenceCount,
+            preNewsCount: cumulativeInsiderProfile.preNewsCount,
+            isSuspectedInsider: cumulativeInsiderProfile.isSuspectedInsider,
           }
         : undefined,
     };
@@ -554,6 +608,115 @@ export class TradeEnricher {
       }
     }
     return count;
+  }
+
+  private calculateEventProximityHours(endDate: string, tradeTimestamp: number): number | undefined {
+    if (!endDate) {
+      return undefined;
+    }
+    const endTimestampMs = new Date(endDate).getTime();
+    if (!Number.isFinite(endTimestampMs)) {
+      return undefined;
+    }
+    const tradeReference = tradeTimestamp > 0 ? tradeTimestamp : Math.floor(Date.now() / 1000);
+    const diffHours = (Math.floor(endTimestampMs / 1000) - tradeReference) / 3600;
+    if (diffHours <= 0) {
+      return undefined;
+    }
+    return Number(diffHours.toFixed(1));
+  }
+
+  private recordInsiderEvidence(params: {
+    trade: PolymarketTrade;
+    price: number;
+    winRate: number;
+    closedPositions: number;
+    isFreshWallet: boolean;
+    insiderScore: { score: number };
+    priorCumulativeProfile: CumulativeInsiderProfile | null;
+    forwardNews: Awaited<ReturnType<NewsCorrelator['correlateForward']>> | null;
+  }): void {
+    if (!this.insiderTracker) {
+      return;
+    }
+
+    const recordedSignals = new Set<string>();
+
+    if (params.forwardNews?.hasPostTradeNews && params.forwardNews.articles[0]) {
+      const article = params.forwardNews.articles[0];
+      this.insiderTracker.recordEvidence({
+        wallet: params.trade.proxyWallet,
+        signalType: 'pre_news_trade',
+        conditionId: params.trade.conditionId,
+        evidence: `Traded ${article.minutesAfter}min before ${article.source} reported "${article.title}"`,
+        scoreContribution: 30,
+        timestamp: params.trade.timestamp,
+      });
+      recordedSignals.add('pre_news_trade');
+    }
+
+    if (
+      (params.price <= 0.15 || params.price >= 0.85)
+      && params.closedPositions >= 3
+      && params.winRate >= 70
+    ) {
+      this.insiderTracker.recordEvidence({
+        wallet: params.trade.proxyWallet,
+        signalType: 'extreme_price_win',
+        conditionId: params.trade.conditionId,
+        evidence: `Extreme price entry at ${Math.round(params.price * 100)}¢ with ${Math.round(params.winRate)}% win rate`,
+        scoreContribution: 25,
+        timestamp: params.trade.timestamp,
+      });
+      recordedSignals.add('extreme_price_win');
+    }
+
+    if (params.isFreshWallet && params.trade.usdcSize >= 10_000) {
+      const scoreContribution = params.trade.usdcSize >= 25_000 ? 20 : 10;
+      this.insiderTracker.recordEvidence({
+        wallet: params.trade.proxyWallet,
+        signalType: 'fresh_wallet_big_win',
+        conditionId: params.trade.conditionId,
+        evidence: `Fresh wallet deployed ${Math.round(params.trade.usdcSize).toLocaleString('en-US')} USDC`,
+        scoreContribution,
+        timestamp: params.trade.timestamp,
+      });
+      recordedSignals.add('fresh_wallet_big_win');
+    }
+
+    const priorPreNewsCount = params.priorCumulativeProfile?.preNewsCount ?? 0;
+    if (priorPreNewsCount >= 3) {
+      this.insiderTracker.recordEvidence({
+        wallet: params.trade.proxyWallet,
+        signalType: 'repeated_pattern',
+        conditionId: params.trade.conditionId,
+        evidence: `${priorPreNewsCount} prior pre-news trades detected in 90d`,
+        scoreContribution: 20,
+        timestamp: params.trade.timestamp,
+      });
+      recordedSignals.add('repeated_pattern');
+    } else if (priorPreNewsCount >= 1) {
+      this.insiderTracker.recordEvidence({
+        wallet: params.trade.proxyWallet,
+        signalType: 'repeated_pattern',
+        conditionId: params.trade.conditionId,
+        evidence: `Prior pre-news trade on record (${priorPreNewsCount} in 90d)`,
+        scoreContribution: 10,
+        timestamp: params.trade.timestamp,
+      });
+      recordedSignals.add('repeated_pattern');
+    }
+
+    if (recordedSignals.size === 0) {
+      this.insiderTracker.recordEvidence({
+        wallet: params.trade.proxyWallet,
+        signalType: 'repeated_pattern',
+        conditionId: params.trade.conditionId,
+        evidence: `Composite insider score ${params.insiderScore.score}/100 on ${params.trade.title}`,
+        scoreContribution: 10,
+        timestamp: params.trade.timestamp,
+      });
+    }
   }
 
   private calculateBestWinStreak(closedPositions: Array<{ realizedPnl: number; timestamp: number }>): number | null {
