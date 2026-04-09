@@ -411,23 +411,23 @@ export class TradeEnricher {
       return [];
     });
     const holders = groups.flatMap((group) => group.holders ?? []);
-    const relevantHolders = holders.filter((holder) => holder.outcomeIndex === trade.outcomeIndex);
+    const sameSideHolders = holders.filter((holder) => holder.outcomeIndex === trade.outcomeIndex);
     const traderWalletNorm = normalizeWallet(trade.proxyWallet);
-    const traderRankIndex = relevantHolders.findIndex(
+    const traderRankIndex = sameSideHolders.findIndex(
       (holder) => normalizeWallet(holder.proxyWallet) === traderWalletNorm,
     );
     const traderHolderRank = traderRankIndex >= 0 ? traderRankIndex + 1 : null;
     const addresses = [...new Set(holders.map((holder) => normalizeWallet(holder.proxyWallet)).filter(Boolean))];
     const whalesInMarket = new Set(addresses.filter((address) => this.walletManager.isTracked(address))).size;
-    const totalTopHolders = new Set(holders.map((holder) => normalizeWallet(holder.proxyWallet)).filter(Boolean)).size || holders.length;
+    const totalTopHolders = Math.min(addresses.length, 20) || Math.min(holders.length, 20);
 
     return {
-      topHoldersOnSide: relevantHolders.length,
+      topHoldersOnSide: sameSideHolders.length,
       totalTopHolders,
-      side: trade.outcome || String(trade.outcomeIndex),
+      side: trade.outcome || (trade.outcomeIndex === 0 ? 'Yes' : 'No'),
       whalesInMarket,
       insidersInMarket: 0,
-      traderIsTopHolder: addresses.includes(normalizeWallet(trade.proxyWallet)),
+      traderIsTopHolder: addresses.includes(traderWalletNorm),
       traderHolderRank,
       addresses,
     };
