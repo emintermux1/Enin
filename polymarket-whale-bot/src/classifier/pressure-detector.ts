@@ -24,6 +24,6 @@ export function detectPressure(
     side,
     dominancePercent: Math.round(dominance),
     isHighPressure: isHigh,
-    label: isHigh ? `⚠️ Strong ${direction} Pressure (${topHoldersOnSide}/${totalTopHolders} top holders)` : '',
+    label: isHigh ? `⚠️ Strong ${direction} Pressure` : '',
   };
 }

@@ -58,6 +58,7 @@ export interface HolderStats {
   whalesInMarket: number;
   insidersInMarket: number;
   traderIsTopHolder: boolean;
+  traderHolderRank: number | null;
 }
 
 export type TraderType = 'WHALE' | 'INSIDER' | 'TOP_HOLDER' | 'CONVICTION_BUILD';

@@ -411,6 +411,11 @@ export class TradeEnricher {
     });
     const holders = groups.flatMap((group) => group.holders ?? []);
     const relevantHolders = holders.filter((holder) => holder.outcomeIndex === trade.outcomeIndex);
+    const traderWalletNorm = normalizeWallet(trade.proxyWallet);
+    const traderRankIndex = relevantHolders.findIndex(
+      (holder) => normalizeWallet(holder.proxyWallet) === traderWalletNorm,
+    );
+    const traderHolderRank = traderRankIndex >= 0 ? traderRankIndex + 1 : null;
     const addresses = [...new Set(holders.map((holder) => normalizeWallet(holder.proxyWallet)).filter(Boolean))];
     const whalesInMarket = new Set(addresses.filter((address) => this.walletManager.isTracked(address))).size;
     const totalTopHolders = new Set(holders.map((holder) => normalizeWallet(holder.proxyWallet)).filter(Boolean)).size || holders.length;
@@ -422,6 +427,7 @@ export class TradeEnricher {
       whalesInMarket,
       insidersInMarket: 0,
       traderIsTopHolder: addresses.includes(normalizeWallet(trade.proxyWallet)),
+      traderHolderRank,
       addresses,
     };
   }
@@ -448,6 +454,7 @@ export class TradeEnricher {
       whalesInMarket: holderStats.whalesInMarket,
       insidersInMarket: insiderAddresses.size,
       traderIsTopHolder: holderStats.traderIsTopHolder,
+      traderHolderRank: holderStats.traderHolderRank,
     };
   }
 
