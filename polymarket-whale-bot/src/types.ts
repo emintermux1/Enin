@@ -147,6 +147,18 @@ export interface EnrichedTrade {
     }>;
     strongestSignal: string;
   };
+  preNewsSignal?: {
+    hasPostTradeNews: boolean;
+    minutesBeforeNews: number;
+    newsHeadline: string;
+    newsSource: string;
+  };
+  cumulativeInsiderProfile?: {
+    totalScore: number;
+    evidenceCount: number;
+    preNewsCount: number;
+    isSuspectedInsider: boolean;
+  };
 }
 
 export interface LeaderboardEntry {

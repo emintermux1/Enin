@@ -5,6 +5,7 @@ import { GammaApi, GammaMarketLookup } from '../api/gamma-api';
 import { HashdiveApi } from '../api/hashdive-api';
 import { PolygonscanApi } from '../api/polygonscan-api';
 import { WalletTradeRepo } from '../db/wallet-trade-repo';
+import { InsiderTracker } from '../db/insider-tracker';
 import { TradeEnricher } from './trade-enricher';
 import { WalletManager } from './wallet-manager';
 import { DedupCache } from './dedup-cache';
@@ -94,6 +95,7 @@ function mapScrapedToPolymarketTrade(scraped: ScrapedChannelTrade): PolymarketTr
 interface WhaleTrackerOptions {
   database?: Database.Database;
   walletTradeRepo?: WalletTradeRepo;
+  insiderTracker?: InsiderTracker;
   polygonscanApi?: PolygonscanApi;
   newsCorrelator?: NewsCorrelator;
   priceHistory?: PriceHistory;
@@ -138,6 +140,7 @@ export class WhaleTracker {
       hashdiveApi,
       options.polygonscanApi,
       this.walletTradeRepo,
+      options.insiderTracker,
       options.newsCorrelator,
       this.priceHistory,
     );

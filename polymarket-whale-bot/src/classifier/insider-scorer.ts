@@ -14,6 +14,10 @@ export function calculateInsiderScore(params: {
   portfolioValue: number;
   totalRealizedPnl: number;
   bestWinStreak: number | null;
+  preNewsTradeDetected?: boolean;
+  historicalPreNewsCount?: number;
+  cumulativeInsiderScore?: number;
+  eventProximityHours?: number;
 }): InsiderScore {
   let score = 0;
   const signals: string[] = [];
@@ -59,6 +63,36 @@ export function calculateInsiderScore(params: {
   } else if (params.totalRealizedPnl > 10_000) {
     score += 5;
     signals.push('Profitable ($10K+ P&L)');
+  }
+
+  if (params.preNewsTradeDetected) {
+    score += 30;
+    signals.push('Traded before news broke');
+  }
+
+  if (params.historicalPreNewsCount && params.historicalPreNewsCount >= 3) {
+    score += 20;
+    signals.push(`${params.historicalPreNewsCount}x pre-news pattern detected`);
+  } else if (params.historicalPreNewsCount && params.historicalPreNewsCount >= 1) {
+    score += 10;
+    signals.push('Prior pre-news trade on record');
+  }
+
+  if (params.cumulativeInsiderScore && params.cumulativeInsiderScore >= 50) {
+    score += 15;
+    signals.push('Known suspected insider wallet');
+  } else if (params.cumulativeInsiderScore && params.cumulativeInsiderScore >= 25) {
+    score += 8;
+    signals.push('Wallet has prior insider signals');
+  }
+
+  if (
+    params.eventProximityHours !== undefined
+    && params.eventProximityHours <= 6
+    && (params.tradePrice <= 0.2 || params.tradePrice >= 0.8)
+  ) {
+    score += 15;
+    signals.push(`Trading ${params.eventProximityHours}h before resolution`);
   }
 
   return {

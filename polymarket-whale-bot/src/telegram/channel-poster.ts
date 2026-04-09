@@ -580,6 +580,13 @@ export class ChannelPoster {
       })
     }
 
+    if (trade.preNewsSignal?.hasPostTradeNews) {
+      signals.push({
+        priority: 95,
+        text: `⏰ Pre-news trade: positioned ${trade.preNewsSignal.minutesBeforeNews}min before ${trade.preNewsSignal.newsSource} reported`,
+      })
+    }
+
     if (trade.capitalInflow?.hasRecentInflow) {
       signals.push({
         priority: 80,
@@ -608,6 +615,13 @@ export class ChannelPoster {
       signals.push({
         priority: 50,
         text: `🔄 Repeat trader: ${trade.walletPattern.recentFrequency.toFixed(1)} trades/day`,
+      })
+    }
+
+    if (trade.cumulativeInsiderProfile?.isSuspectedInsider) {
+      signals.push({
+        priority: 45,
+        text: `🔍 Known insider pattern: ${trade.cumulativeInsiderProfile.preNewsCount}x pre-news trades`,
       })
     }
 

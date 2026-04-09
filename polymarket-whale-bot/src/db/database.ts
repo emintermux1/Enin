@@ -69,6 +69,18 @@ export function initDatabase(): Database.Database {
     `ALTER TABLE wallet_trades ADD COLUMN primary_type TEXT DEFAULT ''`,
     `ALTER TABLE wallet_trades ADD COLUMN potential_win REAL DEFAULT 0`,
     `ALTER TABLE wallet_trades ADD COLUMN multiplier REAL DEFAULT 0`,
+    `CREATE TABLE IF NOT EXISTS insider_evidence (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      wallet TEXT NOT NULL,
+      signal_type TEXT NOT NULL,
+      condition_id TEXT,
+      evidence TEXT,
+      score_contribution INTEGER NOT NULL,
+      timestamp INTEGER NOT NULL,
+      created_at INTEGER DEFAULT (unixepoch())
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_insider_evidence_wallet ON insider_evidence(wallet)`,
+    `CREATE INDEX IF NOT EXISTS idx_insider_evidence_timestamp ON insider_evidence(timestamp)`,
   ]
 
   for (const migration of migrations) {

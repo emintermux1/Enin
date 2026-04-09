@@ -2,6 +2,7 @@ import { config } from './config';
 import Database from 'better-sqlite3';
 import { initDatabase } from './db/database';
 import { WalletTradeRepo } from './db/wallet-trade-repo';
+import { InsiderTracker } from './db/insider-tracker';
 import { DataApi } from './api/data-api';
 import { GammaApi } from './api/gamma-api';
 import { PolygonscanApi } from './api/polygonscan-api';
@@ -40,6 +41,7 @@ async function main() {
 
   database = initDatabase();
   const walletTradeRepo = new WalletTradeRepo(database);
+  const insiderTracker = new InsiderTracker(database);
   const gammaApi = new GammaApi(config.api);
   const polygonscanApi = config.polygonscan.enabled
     ? new PolygonscanApi(config.polygonscan.apiKey)
@@ -64,6 +66,7 @@ async function main() {
   }, {
     database,
     walletTradeRepo,
+    insiderTracker,
     polygonscanApi,
     newsCorrelator,
     priceHistory,
