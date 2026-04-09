@@ -36,7 +36,7 @@ export const EMOJI_MONEYBAG: PremiumEmoji = { char: '💰', id: '589795875426717
 // Map trader types to their premium emoji
 import { TraderType } from '../types';
 
-export const TRADER_TYPE_PREMIUM: Record<TraderType, PremiumEmoji> = {
+export const TRADER_TYPE_PREMIUM: Partial<Record<TraderType, PremiumEmoji>> = {
   WHALE: EMOJI_WHALE,
   INSIDER: EMOJI_INSIDER,
   TOP_HOLDER: EMOJI_TOP_HOLDER,

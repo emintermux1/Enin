@@ -138,6 +138,7 @@ export class TradeEnricher {
 
     const effectiveTraderStats: TraderStats = {
       ...statsSnapshot.traderStats,
+      totalBets: statsSnapshot.positions.length + effectiveClosedPositions,
       closedPositions: effectiveClosedPositions,
       winRate: effectiveWinRate,
       wins: effectiveWins,
@@ -304,7 +305,7 @@ export class TradeEnricher {
     }
 
     const [positionsResult, closedResult, portfolioResult, recentActivityResult] = await Promise.allSettled([
-      this.dataApi.getPositions(wallet, 1000, 50),
+      this.dataApi.getPositions(wallet, 1, 200),
       this.dataApi.getClosedPositions(wallet, 200),
       this.dataApi.getPortfolioValue(wallet),
       this.dataApi.getActivity(wallet, 100),
@@ -322,19 +323,25 @@ export class TradeEnricher {
 
     const totalPositionsValue = positions.reduce((sum, position) => sum + Number(position.currentValue || 0), 0);
     const totalRealizedPnl = closedPositions.reduce((sum, position) => sum + Number(position.realizedPnl || 0), 0);
-    const wins = closedPositions.filter((position) => Number(position.realizedPnl || 0) > 0).length;
-    const losses = closedPositions.filter((position) => Number(position.realizedPnl || 0) <= 0).length;
-    if (closedPositions.length > 20 && wins === closedPositions.length) {
-      logger.warn(`Suspicious closed-position win rate for ${wallet}: ${wins}/${closedPositions.length} positions have positive realized PnL`);
+    const wins = closedPositions.filter((position) => Number(position.realizedPnl || 0) > 1).length;
+    const losses = closedPositions.filter((position) => Number(position.realizedPnl || 0) < -1).length;
+    const decisiveClosedPositions = wins + losses;
+    const rawWinRate = decisiveClosedPositions > 0 ? (wins / decisiveClosedPositions) * 100 : 0;
+    if (closedPositions.length >= 20 && decisiveClosedPositions >= 20 && rawWinRate === 100) {
+      logger.warn(
+        `Suspicious closed-position win rate for ${wallet}: ${wins} wins, ${losses} losses, ${closedPositions.length - decisiveClosedPositions} scratches across ${closedPositions.length} closed positions`,
+      );
     }
-    const winRate = closedPositions.length > 0 ? (wins / closedPositions.length) * 100 : 0;
+    const winRate = decisiveClosedPositions > 0 ? rawWinRate : 0;
     const winningPnls = closedPositions
       .map((position) => Number(position.realizedPnl || 0))
-      .filter((pnl) => pnl > 0);
+      .filter((pnl) => pnl > 1);
     const bestWinAmount = winningPnls.length > 0 ? Math.max(...winningPnls) : null;
 
     const traderStats: TraderStats = {
       totalPositionsValue,
+      livePositions: positions.length,
+      totalBets: closedPositions.length + positions.length,
       closedPositions: closedPositions.length,
       wins,
       losses,

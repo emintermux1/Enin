@@ -11,6 +11,7 @@ import { WhaleTracker } from './tracker/whale-tracker';
 import { PriceHistory } from './tracker/price-history';
 import { ResolutionChecker } from './tracker/resolution-checker';
 import { DailyLeaderboard } from './tracker/daily-leaderboard';
+import { MarketHeatmap } from './tracker/market-heatmap';
 import { ChannelPoster } from './telegram/channel-poster';
 import { logger } from './utils/logger';
 
@@ -47,6 +48,7 @@ async function main() {
   const priceHistory = new PriceHistory();
   const poster = new ChannelPoster(config.telegram);
   const dailyLeaderboard = new DailyLeaderboard(new DataApi(config.api), poster, database);
+  const marketHeatmap = new MarketHeatmap(poster, database);
   const tracker = new WhaleTracker(config, async (enrichedTrade) => {
     try {
       await poster.postAlert(enrichedTrade);
@@ -74,12 +76,14 @@ async function main() {
   await tracker.start();
   resolutionChecker.start();
   dailyLeaderboard.start();
+  marketHeatmap.start();
 
   const shutdown = () => {
     logger.info('Shutting down...');
     tracker.stop();
     resolutionChecker.stop();
     dailyLeaderboard.stop();
+    marketHeatmap.stop();
     poster.stop();
     database?.close();
     database = null;

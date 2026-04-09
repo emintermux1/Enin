@@ -42,7 +42,7 @@ function parseOutcomePrices(value: number[] | string[] | string | undefined): nu
 }
 
 function toTraderType(value: string): TraderType {
-  if (value === 'INSIDER' || value === 'TOP_HOLDER' || value === 'CONVICTION_BUILD') {
+  if (value === 'INSIDER' || value === 'SMART_MONEY' || value === 'TOP_HOLDER' || value === 'CONVICTION_BUILD') {
     return value
   }
   return 'WHALE'
