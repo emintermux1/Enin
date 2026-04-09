@@ -243,11 +243,11 @@ export class ChannelPoster {
     builder.newLine().newLine()
     builder.addPremiumEmoji(EMOJI_CHART_UP, ' ')
     builder.addLink(question, marketUrl)
+    builder.newLine()
     if (trade.marketInfo.volume > 0 || trade.marketInfo.liquidity > 0) {
       const marketContextParts = [
         `Vol: ${formatCompactUsd(trade.marketInfo.volume)}`,
         `Liq: ${formatCompactUsd(trade.marketInfo.liquidity)}`,
-        ...trade.marketInfo.tags.filter(Boolean).slice(0, 2),
       ]
       builder.newLine()
       builder.addPremiumEmoji(EMOJI_MONEY, ` ${marketContextParts.join(' · ')}`)
