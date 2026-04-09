@@ -37,6 +37,8 @@ export class HashdiveDiscovery {
   private timer: NodeJS.Timeout | null = null;
   private running = false;
   private processing = false;
+  private readonly startupTimestamp = Math.floor(Date.now() / 1000);
+  private lastPollTimestamp = 0;
 
   constructor(private readonly options: HashdiveDiscoveryOptions) {}
 
@@ -45,6 +47,7 @@ export class HashdiveDiscovery {
       return;
     }
     this.running = true;
+    this.lastPollTimestamp = this.startupTimestamp;
     logger.info(
       `Starting Hashdive discovery polling every ${this.options.pollIntervalMs}ms`,
     );
@@ -77,8 +80,20 @@ export class HashdiveDiscovery {
           setTimeout(() => resolve([]), HashdiveDiscovery.POLL_TIMEOUT_MS),
         ),
       ]);
-      logger.info(`Hashdive discovery poll returned ${trades.length} whale trades`);
-      for (const rawTrade of [...trades].sort(
+      const newTrades = trades.filter((trade) => {
+        const timestamp = Number(trade.timestamp || 0);
+        return timestamp > this.lastPollTimestamp;
+      });
+      logger.info(
+        `Hashdive discovery poll returned ${trades.length} whale trades, ${newTrades.length} new`,
+      );
+      if (trades.length > 0) {
+        const maxTimestamp = Math.max(...trades.map(trade => Number(trade.timestamp || 0)));
+        if (maxTimestamp > this.lastPollTimestamp) {
+          this.lastPollTimestamp = maxTimestamp;
+        }
+      }
+      for (const rawTrade of [...newTrades].sort(
         (left, right) =>
           Number(left.timestamp || 0) - Number(right.timestamp || 0),
       )) {
