@@ -450,8 +450,9 @@ export class ChannelPoster {
     )
     builder.newLine()
     if (trade.holderStats.topHoldersOnSide > 0 || trade.holderStats.oppositeSideHolders > 0) {
+      builder.newLine()
       builder.addText(
-        `👥 Top Holders: ${trade.holderStats.topHoldersOnSide} ${trade.holderStats.side} · ${trade.holderStats.oppositeSideHolders} ${trade.holderStats.oppositeSide}`
+        `👥 Top Holders: ${trade.holderStats.topHoldersOnSide}/20 ${trade.holderStats.side} · ${trade.holderStats.oppositeSideHolders}/20 ${trade.holderStats.oppositeSide}`
       )
       builder.newLine()
     }

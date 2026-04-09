@@ -46,14 +46,15 @@ export function classifyTrader(input: TraderClassificationInput): { traderTypes:
   const hasHighWinRate = input.traderStats.winRate >= 80 && input.traderStats.closedPositions >= 5;
   const freshHighValueWallet = input.recentTradeCount > 0 && input.recentTradeCount < 20 && input.traderStats.totalPositionsValue >= 100_000;
   const highPrecisionExtremeBuy = input.traderStats.winRate >= 75 && extremePrice;
-  const isSmartMoney =
-    input.traderStats.closedPositions >= 10 &&
-    input.traderStats.winRate >= 80 &&
-    input.traderStats.totalRealizedPnl > 10_000;
   const isWhale =
     input.traderStats.portfolioValue > 500_000 ||
     Boolean(input.trackedWallet?.allTimeTop50) ||
     input.trade.usdcSize > 50_000;
+  const isSmartMoney =
+    input.traderStats.closedPositions >= 10 &&
+    input.traderStats.winRate >= 80 &&
+    input.traderStats.totalRealizedPnl > 10_000 &&
+    input.trade.usdcSize >= 25_000;
 
   if (isWhale) {
     traderTypes.push('WHALE');

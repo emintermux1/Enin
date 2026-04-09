@@ -167,7 +167,7 @@ function parseSharedFields(
     positions: parseCurrency(text.match(/Positions:\s*([+\-]?\$[\d,]+(?:\.\d+)?)/i)?.[1]),
     winRate: text.match(/Win Rate:\s*([^\n]+)/i)?.[1]?.trim(),
     pnl: parseSignedCurrency(text.match(/Realized P\/L:\s*([+\-]?\$[\d,]+(?:\.\d+)?)/i)?.[1]),
-    topHolders: text.match(/(Top Holders:\s*\d+\s+[A-Za-z]+\s+[·•]\s+\d+\s+[A-Za-z]+|\d+\/\d+\s+Top Holders on\s+[A-Za-z]+\s+side)/i)?.[1],
+    topHolders: text.match(/(Top Holders:\s*\d+(?:\/\d+)?\s+[A-Za-z]+\s+[·•]\s+\d+(?:\/\d+)?\s+[A-Za-z]+|\d+\/\d+\s+Top Holders on\s+[A-Za-z]+\s+side)/i)?.[1],
     timestamp,
   };
 }
