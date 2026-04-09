@@ -166,6 +166,10 @@ export class CardGenerator {
     const outcome = trade.trade.outcome || String(trade.trade.outcomeIndex)
     const badgeColor = trade.trade.side === 'BUY' ? '#22c55e' : '#ef4444'
     const badgeTextColor = trade.trade.side === 'BUY' ? '#071014' : '#ffffff'
+    const priceMomentum =
+      trade.priceMomentum && Math.abs(trade.priceMomentum.changePercent) >= 10
+        ? trade.priceMomentum
+        : null
     const label = getTradeTypeLabel(trade.primaryType, trade.trade.side)
     const labelColor = LABEL_COLORS[trade.primaryType]
     const riskColor = trade.risk.color
@@ -348,10 +352,7 @@ export class CardGenerator {
     )
     ctx.textBaseline = 'alphabetic'
 
-    const infoParts = [
-      `at ${formatPriceCents(trade.trade.price)}`,
-      `Win ${formatUsd(trade.potentialWin)}`,
-    ]
+    const infoParts = [`Win ${formatUsd(trade.potentialWin)}`]
     if (trade.traderStats.bestWinAmount && trade.traderStats.bestWinAmount > 0) {
       infoParts.push(`Best ${formatUsd(trade.traderStats.bestWinAmount)}`)
     }
@@ -362,12 +363,35 @@ export class CardGenerator {
     infoParts.push(truncateText(displayName, 16))
     const infoText = infoParts.join('     ')
     const infoMaxWidth = 1208 - (actionBadgeX + actionBadgeWidth + 28)
-    const infoFontSize = fitFontSize(ctx, infoText, infoMaxWidth, 28, 20, 600)
+    const priceLabel = `at ${formatPriceCents(trade.trade.price)}`
+    const momentumLabel = priceMomentum
+      ? ` | ${priceMomentum.direction === 'up' ? '↑' : '↓'}${Math.abs(priceMomentum.changePercent)}% ${priceMomentum.periodLabel}`
+      : ''
+    const fullInfoText = `${priceLabel}${momentumLabel}${infoText ? `     ${infoText}` : ''}`
+    const infoFontSize = fitFontSize(ctx, fullInfoText, infoMaxWidth, 28, 20, 600)
     ctx.font = `600 ${infoFontSize}px Inter, Arial, sans-serif`
-    ctx.fillStyle = 'rgba(241,245,249,0.7)'
-    ctx.textAlign = 'right'
-    ctx.fillText(infoText, 1208, 620)
-    ctx.textAlign = 'left'
+    const segments = [
+      { text: priceLabel, color: 'rgba(241,245,249,0.7)' },
+      ...(momentumLabel
+        ? [{
+            text: momentumLabel,
+            color: priceMomentum?.direction === 'up' ? '#4ade80' : '#ef4444',
+          }]
+        : []),
+      ...(infoText
+        ? [{ text: `     ${infoText}`, color: 'rgba(241,245,249,0.7)' }]
+        : []),
+    ]
+    const totalInfoWidth = segments.reduce(
+      (width, segment) => width + ctx.measureText(segment.text).width,
+      0
+    )
+    let infoCursorX = 1208 - totalInfoWidth
+    for (const segment of segments) {
+      ctx.fillStyle = segment.color
+      ctx.fillText(segment.text, infoCursorX, 620)
+      infoCursorX += ctx.measureText(segment.text).width
+    }
     ctx.restore()
 
     this.applyGrain(ctx, 1280, 720, 8)

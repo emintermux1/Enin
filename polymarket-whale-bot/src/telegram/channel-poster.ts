@@ -289,10 +289,16 @@ export class ChannelPoster {
     }
     builder.newLine()
     builder.addText('├ ')
-    builder.addPremiumEmoji(
-      EMOJI_COIN,
-      ` Price: ${formatPriceCents(trade.trade.price)}`
-    )
+    let priceText = ` Price: ${formatPriceCents(trade.trade.price)}`
+    if (
+      trade.priceMomentum &&
+      Math.abs(trade.priceMomentum.changePercent) >= 10 &&
+      trade.priceMomentum.direction !== 'flat'
+    ) {
+      const arrow = trade.priceMomentum.direction === 'up' ? '↑' : '↓'
+      priceText += ` | ${arrow}${Math.abs(trade.priceMomentum.changePercent)}% ${trade.priceMomentum.periodLabel}`
+    }
+    builder.addPremiumEmoji(EMOJI_COIN, priceText)
     builder.newLine()
     builder.addText('└ ')
     builder.addPremiumEmoji(

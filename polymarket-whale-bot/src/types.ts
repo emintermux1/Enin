@@ -73,6 +73,11 @@ export interface EnrichedTrade {
   traderStats: TraderStats;
   marketInfo: MarketInfo;
   holderStats: HolderStats;
+  priceMomentum?: {
+    changePercent: number;
+    direction: 'up' | 'down' | 'flat';
+    periodLabel: string;
+  } | null;
   xUsername?: string;
   traderTypes: TraderType[];
   primaryType: TraderType;

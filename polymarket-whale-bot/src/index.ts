@@ -6,6 +6,7 @@ import { PolygonscanApi } from './api/polygonscan-api';
 import { NewsApi } from './api/news-api';
 import { NewsCorrelator } from './classifier/news-correlator';
 import { WhaleTracker } from './tracker/whale-tracker';
+import { PriceHistory } from './tracker/price-history';
 import { ChannelPoster } from './telegram/channel-poster';
 import { logger } from './utils/logger';
 
@@ -38,6 +39,7 @@ async function main() {
     ? new PolygonscanApi(config.polygonscan.apiKey)
     : undefined;
   const newsCorrelator = new NewsCorrelator(new NewsApi());
+  const priceHistory = new PriceHistory();
   const poster = new ChannelPoster(config.telegram);
   const tracker = new WhaleTracker(config, async (enrichedTrade) => {
     try {
@@ -51,6 +53,7 @@ async function main() {
     walletTradeRepo,
     polygonscanApi,
     newsCorrelator,
+    priceHistory,
   });
 
   const sampleTrade = await tracker.runStartupSmokeTest(poster.getCardGenerator(), config.runtime.sampleCardPath);
