@@ -19,7 +19,7 @@ export const EMOJI_TOP_HOLDER: PremiumEmoji = { char: '💰', id: '5897958754267
 export const EMOJI_CONVICTION: PremiumEmoji = { char: '📈', id: '6030861234432121355' };
 
 // Field emojis
-export const EMOJI_CALENDAR: PremiumEmoji = { char: '📊', id: '5875291072225087249' };
+export const EMOJI_CALENDAR: PremiumEmoji = { char: '📅', id: '5875291072225087249' };
 export const EMOJI_TARGET: PremiumEmoji = { char: '⚡', id: '5355160022894539220' };
 export const EMOJI_TRADER: PremiumEmoji = { char: '🧑‍💼', id: '5920344347152224466' };
 export const EMOJI_PORTFOLIO: PremiumEmoji = { char: '💼', id: '5967389567781703494' };

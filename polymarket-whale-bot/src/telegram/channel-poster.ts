@@ -257,7 +257,6 @@ export class ChannelPoster {
       builder.addText(' | 🆕 Fresh Wallet Detected')
     }
     builder.newLine().newLine()
-    builder.addPremiumEmoji(EMOJI_CHART_UP, ' ')
     builder.addLink(question, marketUrl)
     builder.newLine()
     if (trade.marketInfo.volume > 0) {

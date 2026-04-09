@@ -413,13 +413,7 @@ export class TradeEnricher {
     const relevantHolders = holders.filter((holder) => holder.outcomeIndex === trade.outcomeIndex);
     const addresses = [...new Set(holders.map((holder) => normalizeWallet(holder.proxyWallet)).filter(Boolean))];
     const whalesInMarket = new Set(addresses.filter((address) => this.walletManager.isTracked(address))).size;
-    const totalTopHolders = Math.max(
-      20,
-      ...groups
-        .filter((group) => (group.holders ?? []).some((holder) => holder.outcomeIndex === trade.outcomeIndex))
-        .map((group) => group.holders.length),
-      relevantHolders.length,
-    );
+    const totalTopHolders = new Set(holders.map((holder) => normalizeWallet(holder.proxyWallet)).filter(Boolean)).size || holders.length;
 
     return {
       topHoldersOnSide: relevantHolders.length,
