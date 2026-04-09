@@ -158,6 +158,17 @@ export interface LeaderboardEntry {
   verifiedBadge?: boolean;
 }
 
+export interface LeaderboardTrader {
+  rank: number;
+  name: string;
+  wallet: string;
+  xUsername?: string;
+  pnl: number;
+  wins: number;
+  totalBets: number;
+  livePositions: number;
+}
+
 export interface LeaderboardQuery {
   category: 'OVERALL' | 'POLITICS' | 'SPORTS' | 'CRYPTO' | 'CULTURE' | 'ECONOMICS' | 'TECH' | 'FINANCE';
   timePeriod: 'DAY' | 'WEEK' | 'MONTH' | 'ALL';
