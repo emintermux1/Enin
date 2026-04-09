@@ -244,7 +244,7 @@ export class ChannelPoster {
     builder.addPremiumEmoji(EMOJI_CHART_UP, ' ')
     builder.addLink(question, marketUrl)
     if (trade.marketInfo.volume > 0) {
-      builder.addText(` · ${formatCompactUsd(trade.marketInfo.volume)}`)
+      builder.addText(` · Vol: ${formatCompactUsd(trade.marketInfo.volume)}`)
     }
     builder.newLine()
     builder.addPremiumEmoji(
