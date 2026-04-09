@@ -3,6 +3,7 @@ import path from 'node:path'
 import axios from 'axios'
 import { LRUCache } from 'lru-cache'
 import { EnrichedTrade, TraderType } from '../types'
+import { getTradeTypeLabel } from '../classifier/trader-classifier'
 import {
   formatMultiplier,
   formatPriceCents,
@@ -20,13 +21,6 @@ type CanvasModule = {
     options: { family: string; weight?: string }
   ) => void
   GlobalFonts?: { registerFromPath: (path: string, family: string) => boolean }
-}
-
-const CARD_LABELS: Record<TraderType, string> = {
-  WHALE: 'WHALE ALERT',
-  INSIDER: 'INSIDER SPOTTED',
-  TOP_HOLDER: 'TOP HOLDER',
-  CONVICTION_BUILD: 'CONVICTION BUILD',
 }
 
 const LABEL_COLORS: Record<TraderType, string> = {
@@ -172,7 +166,7 @@ export class CardGenerator {
     const outcome = trade.trade.outcome || String(trade.trade.outcomeIndex)
     const badgeColor = trade.trade.side === 'BUY' ? '#22c55e' : '#ef4444'
     const badgeTextColor = trade.trade.side === 'BUY' ? '#071014' : '#ffffff'
-    const label = CARD_LABELS[trade.primaryType]
+    const label = getTradeTypeLabel(trade.primaryType, trade.trade.side)
     const labelColor = LABEL_COLORS[trade.primaryType]
     const riskColor = trade.risk.color
     const riskBadgeBg = `${riskColor}33`
