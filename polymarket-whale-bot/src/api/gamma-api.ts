@@ -6,16 +6,21 @@ export interface GammaMarketLookup {
   question: string;
   conditionId: string;
   slug: string;
+  active?: boolean;
+  archived?: boolean;
+  closed?: boolean;
   endDate?: string;
   endDateIso?: string;
   expirationDate?: string;
   closeTime?: string;
+  closedTime?: string;
   liquidity?: number | string;
   liquidityNum?: number;
   image?: string;
   icon?: string;
   outcomes?: string[] | string;
   outcomePrices?: number[] | string[] | string;
+  updatedAt?: string;
   volume?: number | string;
   volumeNum?: number;
   eventSlug?: string;
@@ -112,7 +117,12 @@ export class GammaApi {
     slug?: string;
     search?: string;
     conditionId?: string;
+    active?: boolean;
+    archived?: boolean;
+    closed?: boolean;
     limit?: number;
+    order?: string;
+    ascending?: boolean;
   }): Promise<GammaMarketLookup[]> {
     const params = new URLSearchParams();
     if (options.slug) {
@@ -124,10 +134,46 @@ export class GammaApi {
     if (options.conditionId) {
       params.set('conditionId', options.conditionId);
     }
+    if (typeof options.active === 'boolean') {
+      params.set('active', String(options.active));
+    }
+    if (typeof options.archived === 'boolean') {
+      params.set('archived', String(options.archived));
+    }
+    if (typeof options.closed === 'boolean') {
+      params.set('closed', String(options.closed));
+    }
     if (options.limit) {
       params.set('limit', String(options.limit));
     }
+    if (options.order) {
+      params.set('order', options.order);
+    }
+    if (typeof options.ascending === 'boolean') {
+      params.set('ascending', String(options.ascending));
+    }
     return this.client.get<GammaMarketLookup[]>(`/markets?${params.toString()}`);
+  }
+
+  async getRecentlyResolvedMarkets(hoursBack = 2, limit = 100): Promise<GammaMarketLookup[]> {
+    const markets = await this.findMarkets({
+      closed: true,
+      archived: false,
+      limit,
+      order: 'updatedAt',
+      ascending: false,
+    });
+    const cutoff = Date.now() - hoursBack * 60 * 60 * 1000;
+    return markets.filter((market) => {
+      const updatedAt = Date.parse(market.updatedAt || market.closedTime || market.closeTime || '');
+      if (!Number.isFinite(updatedAt) || updatedAt < cutoff) {
+        return false;
+      }
+      const outcomePrices = parseArray<number | string>(market.outcomePrices, [])
+        .map((value) => Number(value))
+        .filter((value) => Number.isFinite(value));
+      return outcomePrices.some((value) => value >= 0.99);
+    });
   }
 
   async getMarketTags(marketId: string): Promise<string[]> {

@@ -2,12 +2,13 @@ import fs from 'node:fs'
 import path from 'node:path'
 import axios from 'axios'
 import { LRUCache } from 'lru-cache'
-import { EnrichedTrade, TraderType } from '../types'
+import { EnrichedTrade, ResolutionAlert, TraderType } from '../types'
 import { getTradeTypeLabel } from '../classifier/trader-classifier'
 import {
   formatMultiplier,
   formatPriceCents,
   formatResolveDate,
+  formatSignedUsd,
   formatUsd,
   truncateText,
 } from '../utils/formatter'
@@ -121,6 +122,22 @@ function fitFontSize(
     }
   }
   return minSize
+}
+
+function formatShares(value: number): string {
+  return new Intl.NumberFormat('en-US', {
+    maximumFractionDigits: 0,
+  }).format(value)
+}
+
+function formatCalledAgo(daysAgo: number): string {
+  if (daysAgo <= 0) {
+    return 'Called today'
+  }
+  if (daysAgo === 1) {
+    return 'Called 1 day ago'
+  }
+  return `Called ${daysAgo} days ago`
 }
 
 export class CardGenerator {
@@ -400,6 +417,146 @@ export class CardGenerator {
     ctx.restore()
 
     this.applyGrain(ctx, 1280, 720, 8)
+
+    return this.canvasToBuffer(canvas)
+  }
+
+  async generatePnlCard(alert: ResolutionAlert): Promise<Buffer | null> {
+    const canvasModule = await this.getCanvasModule()
+    if (!canvasModule) {
+      return null
+    }
+
+    this.ensureFonts(canvasModule)
+
+    const canvas = canvasModule.createCanvas(1280, 720)
+    const ctx = canvas.getContext('2d')
+    const palette = alert.won
+      ? {
+          primary: '#22c55e',
+          secondary: '#16a34a',
+          glow: 'rgba(34,197,94,0.28)',
+          panel: '#08140f',
+          chip: 'rgba(34,197,94,0.14)',
+        }
+      : {
+          primary: '#ef4444',
+          secondary: '#dc2626',
+          glow: 'rgba(239,68,68,0.26)',
+          panel: '#18090b',
+          chip: 'rgba(239,68,68,0.14)',
+        }
+    const question = alert.marketQuestion
+    const pnlText = formatSignedUsd(alert.pnl)
+    const resultLabel = alert.won ? 'Won' : 'Lost'
+    const entrySummary = `Entered at ${formatPriceCents(alert.entryPrice)} for ${formatUsd(alert.entryAmount)}`
+    const outcomeSummary = `${alert.outcome} ${alert.won ? '✅' : '❌'}`
+    const payoutSummary = alert.won
+      ? `${formatUsd(alert.potentialWin)} payout`
+      : 'Position expired worthless'
+    const traderLabel = truncateText(alert.traderName, 26)
+    const originalLabel = truncateText(alert.originalAlertLabel, 22)
+
+    const background = ctx.createLinearGradient(0, 0, 1280, 720)
+    background.addColorStop(0, '#04070d')
+    background.addColorStop(0.45, '#07110c')
+    background.addColorStop(1, '#020406')
+    ctx.fillStyle = background
+    ctx.fillRect(0, 0, 1280, 720)
+
+    const aura = ctx.createRadialGradient(960, 160, 80, 960, 160, 540)
+    aura.addColorStop(0, palette.glow)
+    aura.addColorStop(1, 'rgba(0,0,0,0)')
+    ctx.fillStyle = aura
+    ctx.fillRect(0, 0, 1280, 720)
+
+    const sideAura = ctx.createRadialGradient(180, 620, 40, 180, 620, 420)
+    sideAura.addColorStop(0, 'rgba(255,255,255,0.08)')
+    sideAura.addColorStop(1, 'rgba(255,255,255,0)')
+    ctx.fillStyle = sideAura
+    ctx.fillRect(0, 0, 1280, 720)
+
+    fillRoundedRect(ctx, 28, 28, 1224, 664, 36, 'rgba(255,255,255,0.04)')
+    fillRoundedRect(ctx, 44, 44, 1192, 632, 30, palette.panel)
+
+    const panelGradient = ctx.createLinearGradient(44, 44, 1236, 676)
+    panelGradient.addColorStop(0, 'rgba(255,255,255,0.03)')
+    panelGradient.addColorStop(0.55, 'rgba(255,255,255,0.015)')
+    panelGradient.addColorStop(1, 'rgba(255,255,255,0.01)')
+    ctx.fillStyle = panelGradient
+    fillRoundedRect(ctx, 44, 44, 1192, 632, 30, ctx.fillStyle as string)
+
+    fillRoundedRect(ctx, 74, 76, 260, 44, 22, palette.chip)
+    ctx.font = '800 22px Inter, Arial, sans-serif'
+    ctx.fillStyle = '#f8fafc'
+    ctx.fillText('✅ MARKET RESOLVED', 96, 105)
+
+    fillRoundedRect(ctx, 950, 78, 214, 42, 21, 'rgba(255,255,255,0.06)')
+    ctx.font = '700 20px Inter, Arial, sans-serif'
+    ctx.fillStyle = '#dbe4ee'
+    ctx.textAlign = 'center'
+    ctx.fillText(outcomeSummary, 1057, 106)
+    ctx.textAlign = 'left'
+
+    ctx.font = '800 52px Inter, Arial, sans-serif'
+    ctx.fillStyle = '#f8fafc'
+    const questionLines = wrapText(ctx, question, 860, 3)
+    const questionY = 190
+    questionLines.forEach((line, index) => {
+      ctx.fillText(line, 78, questionY + index * 60)
+    })
+
+    const pnlTop = questionY + questionLines.length * 60 + 48
+    ctx.font = '700 24px Inter, Arial, sans-serif'
+    ctx.fillStyle = 'rgba(226,232,240,0.82)'
+    ctx.fillText(`${resultLabel} on ${alert.outcome}`, 82, pnlTop)
+
+    const pnlFontSize = fitFontSize(ctx, pnlText, 700, 104, 72, 800)
+    ctx.font = `800 ${pnlFontSize}px Inter, Arial, sans-serif`
+    ctx.fillStyle = alert.won ? '#4ade80' : '#f87171'
+    ctx.fillText(pnlText, 74, pnlTop + 108)
+
+    ctx.font = '600 28px Inter, Arial, sans-serif'
+    ctx.fillStyle = 'rgba(248,250,252,0.88)'
+    ctx.fillText(`${entrySummary} → ${payoutSummary}`, 80, pnlTop + 160)
+
+    fillRoundedRect(ctx, 76, 476, 1128, 154, 28, 'rgba(255,255,255,0.04)')
+    ctx.fillStyle = palette.primary
+    ctx.fillRect(76, 476, 8, 154)
+
+    const statLabels = [
+      { label: 'Trader', value: traderLabel },
+      { label: 'Original', value: originalLabel },
+      { label: 'Shares', value: formatShares(alert.shares) },
+      { label: 'Called', value: formatCalledAgo(alert.daysAgo) },
+    ]
+
+    const statColumns = [112, 398, 684, 936]
+    ctx.font = '700 18px Inter, Arial, sans-serif'
+    ctx.fillStyle = 'rgba(148,163,184,0.9)'
+    statLabels.forEach((stat, index) => {
+      ctx.fillText(stat.label.toUpperCase(), statColumns[index], 526)
+    })
+
+    ctx.font = '700 28px Inter, Arial, sans-serif'
+    ctx.fillStyle = '#f8fafc'
+    statLabels.forEach((stat, index) => {
+      const x = statColumns[index]
+      const maxWidth = index === 3 ? 220 : 230
+      const size = fitFontSize(ctx, stat.value, maxWidth, 28, 20, 700)
+      ctx.font = `700 ${size}px Inter, Arial, sans-serif`
+      ctx.fillText(stat.value, x, 566)
+    })
+
+    ctx.font = '600 22px Inter, Arial, sans-serif'
+    ctx.fillStyle = 'rgba(226,232,240,0.84)'
+    ctx.fillText(
+      `${formatUsd(alert.entryAmount)} at ${formatPriceCents(alert.entryPrice)} · ${formatMultiplier(alert.multiplier)} payout path`,
+      112,
+      608
+    )
+
+    this.applyGrain(ctx, 1280, 720, 10)
 
     return this.canvasToBuffer(canvas)
   }

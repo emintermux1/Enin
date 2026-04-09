@@ -9,6 +9,11 @@ export interface WalletTradeRecord {
   outcome: string
   marketQuestion: string
   timestamp: number
+  alerted: number
+  traderName: string
+  primaryType: string
+  potentialWin: number
+  multiplier: number
 }
 
 export interface WalletPattern {
@@ -31,6 +36,11 @@ interface WalletTradeRow {
   outcome: string
   marketQuestion: string
   timestamp: number
+  alerted: number
+  traderName: string
+  primaryType: string
+  potentialWin: number
+  multiplier: number
 }
 
 interface WalletTradePatternRow {
@@ -45,11 +55,27 @@ export class WalletTradeRepo {
   private readonly insertStmt: Database.Statement
   private readonly getByWalletStmt: Database.Statement
   private readonly getPatternStmt: Database.Statement
+  private readonly markAlertedStmt: Database.Statement
+  private readonly getAlertedTradesForConditionStmt: Database.Statement
 
   constructor(private readonly db: Database.Database) {
     this.insertStmt = db.prepare(`
-      INSERT OR IGNORE INTO wallet_trades (wallet, condition_id, side, amount, price, outcome, market_question, timestamp)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT OR IGNORE INTO wallet_trades (
+        wallet,
+        condition_id,
+        side,
+        amount,
+        price,
+        outcome,
+        market_question,
+        timestamp,
+        alerted,
+        trader_name,
+        primary_type,
+        potential_win,
+        multiplier
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
     this.getByWalletStmt = db.prepare(`
       SELECT
@@ -60,7 +86,12 @@ export class WalletTradeRepo {
         price,
         outcome,
         market_question AS marketQuestion,
-        timestamp
+        timestamp,
+        alerted,
+        trader_name AS traderName,
+        primary_type AS primaryType,
+        potential_win AS potentialWin,
+        multiplier
       FROM wallet_trades
       WHERE wallet = ?
       ORDER BY timestamp DESC
@@ -71,6 +102,30 @@ export class WalletTradeRepo {
       FROM wallet_trades
       WHERE wallet = ? AND timestamp > ?
       ORDER BY timestamp DESC
+    `)
+    this.markAlertedStmt = db.prepare(`
+      UPDATE wallet_trades
+      SET alerted = 1
+      WHERE wallet = ? AND condition_id = ? AND timestamp = ?
+    `)
+    this.getAlertedTradesForConditionStmt = db.prepare(`
+      SELECT
+        wallet,
+        condition_id AS conditionId,
+        side,
+        amount,
+        price,
+        outcome,
+        market_question AS marketQuestion,
+        timestamp,
+        alerted,
+        trader_name AS traderName,
+        primary_type AS primaryType,
+        potential_win AS potentialWin,
+        multiplier
+      FROM wallet_trades
+      WHERE condition_id = ? AND alerted = 1
+      ORDER BY amount DESC
     `)
   }
 
@@ -84,11 +139,24 @@ export class WalletTradeRepo {
       trade.outcome,
       trade.marketQuestion,
       trade.timestamp,
+      trade.alerted,
+      trade.traderName,
+      trade.primaryType,
+      trade.potentialWin,
+      trade.multiplier,
     )
   }
 
   getRecentTrades(wallet: string, limit = 100): WalletTradeRecord[] {
     return this.getByWalletStmt.all(wallet.toLowerCase(), limit) as WalletTradeRecord[]
+  }
+
+  markAlerted(wallet: string, conditionId: string, timestamp: number): void {
+    this.markAlertedStmt.run(wallet.toLowerCase(), conditionId, timestamp)
+  }
+
+  getAlertedTradesForCondition(conditionId: string): WalletTradeRecord[] {
+    return this.getAlertedTradesForConditionStmt.all(conditionId) as WalletTradeRecord[]
   }
 
   analyzePattern(wallet: string, lookbackDays = 30): WalletPattern {
