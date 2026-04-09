@@ -15,7 +15,7 @@ export function detectPressure(
   tradeSide: 'BUY' | 'SELL',
 ): PressureSignal {
   const dominance = totalTopHolders > 0 ? (topHoldersOnSide / totalTopHolders) * 100 : 0;
-  const isHigh = dominance >= 60 && topHoldersOnSide >= 10;
+  const isHighPressure = dominance >= 60 && topHoldersOnSide >= 10;
   const direction = tradeSide === 'BUY' ? 'Buy' : 'Sell';
 
   return {
@@ -23,7 +23,7 @@ export function detectPressure(
     totalTopHolders,
     side,
     dominancePercent: Math.round(dominance),
-    isHighPressure: isHigh,
-    label: isHigh ? `⚠️ Strong ${direction} Pressure` : '',
+    isHighPressure,
+    label: isHighPressure ? `⚠️ Strong ${direction} Pressure` : '',
   };
 }

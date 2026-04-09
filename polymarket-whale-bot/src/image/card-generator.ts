@@ -170,7 +170,12 @@ export class CardGenerator {
       trade.priceMomentum && Math.abs(trade.priceMomentum.changePercent) >= 10
         ? trade.priceMomentum
         : null
-    const label = getTradeTypeLabel(trade.primaryType, trade.trade.side)
+    const label = getTradeTypeLabel(
+      trade.primaryType,
+      trade.trade.side,
+      trade.isFreshWallet,
+      trade.risk.level
+    )
     const labelColor = LABEL_COLORS[trade.primaryType]
     const riskColor = trade.risk.color
     const riskBadgeBg = `${riskColor}33`
