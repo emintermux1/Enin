@@ -3,8 +3,12 @@ name: build-and-test
 on:
   push:
     branches: ['canary']
+    paths-ignore:
+      - 'polymarket-whale-bot/**'
   pull_request:
     types: [opened, synchronize]
+    paths-ignore:
+      - 'polymarket-whale-bot/**'
 
 env:
   NAPI_CLI_VERSION: 2.14.7

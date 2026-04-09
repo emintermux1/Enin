@@ -55,6 +55,8 @@ export interface HolderStats {
   topHoldersOnSide: number;
   totalTopHolders: number;
   side: string;
+  oppositeSideHolders: number;
+  oppositeSide: string;
   whalesInMarket: number;
   insidersInMarket: number;
   traderIsTopHolder: boolean;

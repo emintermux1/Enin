@@ -314,9 +314,9 @@ export class ChannelPoster {
       ` Resolves: ${formatResolveDate(trade.marketInfo.endDate)}`
     )
     builder.newLine()
-    if (trade.holderStats.topHoldersOnSide > 0) {
+    if (trade.holderStats.topHoldersOnSide > 0 || trade.holderStats.oppositeSideHolders > 0) {
       builder.addText(
-        `👥 ${trade.holderStats.topHoldersOnSide}/${trade.holderStats.totalTopHolders} Top Holders on ${trade.holderStats.side} side`
+        `👥 Top Holders: ${trade.holderStats.topHoldersOnSide} ${trade.holderStats.side} · ${trade.holderStats.oppositeSideHolders} ${trade.holderStats.oppositeSide}`
       )
       builder.newLine()
     }

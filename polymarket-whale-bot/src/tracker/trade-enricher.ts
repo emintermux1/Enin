@@ -427,6 +427,7 @@ export class TradeEnricher {
     });
     const holders = groups.flatMap((group) => group.holders ?? []);
     const sameSideHolders = holders.filter((holder) => holder.outcomeIndex === trade.outcomeIndex);
+    const oppositeSideHolders = holders.filter((holder) => holder.outcomeIndex !== trade.outcomeIndex);
     const traderWalletNorm = normalizeWallet(trade.proxyWallet);
     const traderRankIndex = sameSideHolders.findIndex(
       (holder) => normalizeWallet(holder.proxyWallet) === traderWalletNorm,
@@ -434,12 +435,16 @@ export class TradeEnricher {
     const traderHolderRank = traderRankIndex >= 0 ? traderRankIndex + 1 : null;
     const addresses = [...new Set(holders.map((holder) => normalizeWallet(holder.proxyWallet)).filter(Boolean))];
     const whalesInMarket = new Set(addresses.filter((address) => this.walletManager.isTracked(address))).size;
-    const totalTopHolders = 20;
+    const side = trade.outcome || (trade.outcomeIndex === 0 ? 'Yes' : 'No');
+    const sideLower = side.toLowerCase();
+    const oppositeSide = sideLower === 'yes' ? 'No' : sideLower === 'no' ? 'Yes' : 'Opposite';
 
     return {
       topHoldersOnSide: sameSideHolders.length,
-      totalTopHolders,
-      side: trade.outcome || (trade.outcomeIndex === 0 ? 'Yes' : 'No'),
+      totalTopHolders: addresses.length,
+      side,
+      oppositeSideHolders: oppositeSideHolders.length,
+      oppositeSide,
       whalesInMarket,
       insidersInMarket: 0,
       traderIsTopHolder: traderHolderRank !== null,
@@ -467,6 +472,8 @@ export class TradeEnricher {
       topHoldersOnSide: holderStats.topHoldersOnSide,
       totalTopHolders: holderStats.totalTopHolders,
       side: holderStats.side,
+      oppositeSideHolders: holderStats.oppositeSideHolders,
+      oppositeSide: holderStats.oppositeSide,
       whalesInMarket: holderStats.whalesInMarket,
       insidersInMarket: insiderAddresses.size,
       traderIsTopHolder: holderStats.traderIsTopHolder,

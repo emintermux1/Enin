@@ -533,11 +533,23 @@ export class WhaleTracker {
       updated.traderStats.winRateLabel = scrapedTrade.winRate;
     }
 
-    const topHolderMatch = scrapedTrade.topHolders?.match(/(\d+)\/(\d+)\s+Top Holders on\s+([A-Za-z]+)\s+side/i);
-    if (topHolderMatch && updated.holderStats.topHoldersOnSide === 0) {
-      updated.holderStats.topHoldersOnSide = Number(topHolderMatch[1]);
-      updated.holderStats.totalTopHolders = Number(topHolderMatch[2]);
-      updated.holderStats.side = topHolderMatch[3] ?? updated.holderStats.side;
+    const topHolderSplitMatch = scrapedTrade.topHolders?.match(
+      /Top Holders:\s*(\d+)\s+([A-Za-z]+)\s+[·•]\s+(\d+)\s+([A-Za-z]+)/i,
+    );
+    if (topHolderSplitMatch && updated.holderStats.topHoldersOnSide === 0 && updated.holderStats.oppositeSideHolders === 0) {
+      updated.holderStats.topHoldersOnSide = Number(topHolderSplitMatch[1]);
+      updated.holderStats.side = topHolderSplitMatch[2] ?? updated.holderStats.side;
+      updated.holderStats.oppositeSideHolders = Number(topHolderSplitMatch[3]);
+      updated.holderStats.oppositeSide = topHolderSplitMatch[4] ?? updated.holderStats.oppositeSide;
+      updated.holderStats.totalTopHolders =
+        updated.holderStats.topHoldersOnSide + updated.holderStats.oppositeSideHolders;
+    }
+
+    const topHolderLegacyMatch = scrapedTrade.topHolders?.match(/(\d+)\/(\d+)\s+Top Holders on\s+([A-Za-z]+)\s+side/i);
+    if (topHolderLegacyMatch && updated.holderStats.topHoldersOnSide === 0) {
+      updated.holderStats.topHoldersOnSide = Number(topHolderLegacyMatch[1]);
+      updated.holderStats.totalTopHolders = Number(topHolderLegacyMatch[2]);
+      updated.holderStats.side = topHolderLegacyMatch[3] ?? updated.holderStats.side;
     }
 
     return updated;
