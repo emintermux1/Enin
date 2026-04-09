@@ -364,66 +364,86 @@ export class ChannelPoster {
       builder.newLine()
     }
 
-    if (trade.insiderScore && trade.insiderScore.score >= 50) {
-      builder.newLine()
-      const topSignals = trade.insiderScore.signals.slice(0, 2).join(' · ')
-      builder.addText(`🎯 Score: ${trade.insiderScore.score}/100 — ${topSignals}`)
+    interface SignalEntry {
+      priority: number
+      text: string
     }
 
-    if (trade.unusualScore && trade.unusualScore.score >= 40) {
-      builder.newLine()
-      builder.addText(`⚠️ Unusual: ${trade.unusualScore.signals[0] || ''}`)
-    }
+    const signals: SignalEntry[] = []
 
     if (trade.coordinationSignal?.isCoordinated) {
-      builder.newLine()
-      builder.addText(
-        `🧠 Multi-Wallet: ${trade.coordinationSignal.walletsOnSameSide} wallets ${trade.trade.side === 'BUY' ? 'bought' : 'sold'} same side in ${trade.coordinationSignal.timeWindowMinutes}min (${formatCompactUsd(trade.coordinationSignal.totalAmount)} total)`
-      )
+      signals.push({
+        priority: 100,
+        text: `🧠 Multi-Wallet: ${trade.coordinationSignal.walletsOnSameSide} wallets ${trade.trade.side === 'BUY' ? 'buying' : 'selling'} same side (${formatCompactUsd(trade.coordinationSignal.totalAmount)} total)`,
+      })
     }
 
-    if (trade.pressureSignal?.isHighPressure) {
-      builder.newLine()
-      builder.addText(trade.pressureSignal.label)
+    if (trade.newsCorrelation?.hasRecentNews && trade.newsCorrelation.articles[0]) {
+      const article = trade.newsCorrelation.articles[0]
+      const headline =
+        article.title.length > 55
+          ? `${article.title.slice(0, 55)}…`
+          : article.title
+      signals.push({
+        priority: 90,
+        text: `📰 "${headline}" — ${article.minutesAgo < 60 ? `${article.minutesAgo}min ago` : `${Math.round(article.minutesAgo / 60)}h ago`}`,
+      })
     }
 
     if (trade.capitalInflow?.hasRecentInflow) {
-      builder.newLine()
-      builder.addText(
-        `💸 Fresh Capital: +${formatCompactUsd(trade.capitalInflow.totalInflow)} USDC inflow in last 24h`
-      )
+      signals.push({
+        priority: 80,
+        text: `💸 +${formatCompactUsd(trade.capitalInflow.totalInflow)} USDC inflow detected (last 24h)`,
+      })
+    }
+
+    if (trade.unusualScore && trade.unusualScore.score >= 40 && trade.unusualScore.signals[0]) {
+      signals.push({
+        priority: 70,
+        text: `⚠️ ${trade.unusualScore.signals[0]}`,
+      })
+    }
+
+    if (trade.pressureSignal?.isHighPressure) {
+      const pctLabel =
+        trade.pressureSignal.dominancePercent >= 80 ? 'Aggressive' : 'Strong'
+      const dir = trade.trade.side === 'BUY' ? 'Buy' : 'Sell'
+      signals.push({
+        priority: 60,
+        text: `⚠️ ${pctLabel} ${dir} Pressure`,
+      })
     }
 
     if (trade.walletPattern?.isRepeatTrader) {
-      builder.newLine()
-      builder.addText(
-        `🔄 Repeat Pattern: ${trade.walletPattern.recentFrequency.toFixed(1)} trades/day, same market type`
-      )
+      signals.push({
+        priority: 50,
+        text: `🔄 Repeat trader: ${trade.walletPattern.recentFrequency.toFixed(1)} trades/day`,
+      })
     }
 
-    if (trade.newsCorrelation?.hasRecentNews) {
+    if (trade.insiderScore && trade.insiderScore.score >= 50) {
+      const topSignal = trade.insiderScore.signals[0] || ''
+      signals.push({
+        priority: 40,
+        text: `🎯 Score: ${trade.insiderScore.score}/100 — ${topSignal}`,
+      })
+    }
+
+    signals.sort((a, b) => b.priority - a.priority)
+    for (const signal of signals.slice(0, 2)) {
       builder.newLine()
-      const article = trade.newsCorrelation.articles[0]
-      if (article) {
-        builder.addText(
-          `📰 News: "${article.title.slice(0, 60)}${article.title.length > 60 ? '…' : ''}" — ${trade.newsCorrelation.strongestSignal}`
-        )
-      }
+      builder.addText(signal.text)
     }
 
     const marketIntelligenceParts: string[] = []
     if (trade.holderStats.whalesInMarket > 0) {
-      const whaleWord =
-        trade.holderStats.whalesInMarket === 1 ? 'Whale' : 'Whales'
       marketIntelligenceParts.push(
-        `🐋 ${trade.holderStats.whalesInMarket} ${whaleWord}`
+        `🐋 ${trade.holderStats.whalesInMarket} ${trade.holderStats.whalesInMarket === 1 ? 'Whale' : 'Whales'}`
       )
     }
     if (trade.holderStats.insidersInMarket > 0) {
-      const insiderWord =
-        trade.holderStats.insidersInMarket === 1 ? 'Insider' : 'Insiders'
       marketIntelligenceParts.push(
-        `🕵️ ${trade.holderStats.insidersInMarket} ${insiderWord}`
+        `🕵️ ${trade.holderStats.insidersInMarket} ${trade.holderStats.insidersInMarket === 1 ? 'Insider' : 'Insiders'}`
       )
     }
     if (trade.freshWalletsInMarket > 0) {
