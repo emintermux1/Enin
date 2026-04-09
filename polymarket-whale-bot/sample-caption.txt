@@ -1,26 +1,23 @@
-🔥 Insider Spotted
+🔥 Insider Entry
 
-📈 Will US withdraw from NATO by April 30?
-Vol: $1.7M
-📊 Resolves: Apr 29 8:00 PM ET
-👥 Top holders: 20/20 No
-⚠️ Risk 🟢
+Counter-Strike: NIP vs M80 (BO3) - ESL Pro League Stage 1 · Vol: $880,440
+📅 Resolves: Mar 1 7:00 PM ET
+👥 Top holders: 1/21 M80
+⚠️ Risk 🟡
 
-⚡ Buy No
-├ 💰 Amount: $28,848
-├ 🪙 Price: 96¢
-└ 💵 To win: $30,019 (1.0x)
+⚡ Buy M80
+├ Amount: $21,108
+├ Price: 46¢
+└ To win: $45,887 (2.2x)
 
-🧑‍💼 Trader: ImJustKen · 𝕏 · Copy Trade
-├ 📈 Positions: $116,708 · 50 bets
-├ ✅ Win Rate: 100%
-├ 💵 P&L: +$8,574,866
-├ 💰 Best Win: +$1,403,042
-├ 👑 Top 20/20 Holder
-└ 🏷️ Top Category: Politics
+🧑‍💼 Trader: gmanas · Copy Trade
+├ Positions: $0.00 · 50 bets
+├ Win Rate: 100%
+├ P&L: +$13,952,750
+├ Best Win: +$802,864
+└ 🏷️ Top Category: Basketball
 
-🐋 5 Whales · 🕵️ 1 Insider
-🎯 Score: 80/100 — Elite win rate (90%+, 10+ bets) · Extreme price bet
+🎯 Score: 55/100 — Elite win rate (90%+, 10+ bets)
 
 --- ENTITIES ---
 [
@@ -31,93 +28,39 @@ Vol: $1.7M
     "custom_emoji_id": "4969918262650340505"
   },
   {
-    "type": "custom_emoji",
-    "offset": 20,
-    "length": 2,
-    "custom_emoji_id": "5994378914636500516"
-  },
-  {
     "type": "text_link",
-    "offset": 23,
-    "length": 39,
-    "url": "https://polymarket.com/event/will-us-withdraw-from-nato-before-2027"
+    "offset": 18,
+    "length": 57,
+    "url": "https://polymarket.com/event/cs2-nip-m80-2026-03-02"
   },
   {
     "type": "custom_emoji",
-    "offset": 74,
+    "offset": 92,
     "length": 2,
     "custom_emoji_id": "5875291072225087249"
   },
   {
     "type": "custom_emoji",
-    "offset": 142,
+    "offset": 159,
     "length": 1,
     "custom_emoji_id": "5355160022894539220"
   },
   {
     "type": "custom_emoji",
-    "offset": 153,
-    "length": 2,
-    "custom_emoji_id": "5897958754267174109"
-  },
-  {
-    "type": "custom_emoji",
-    "offset": 174,
-    "length": 2,
-    "custom_emoji_id": "5992430854909989581"
-  },
-  {
-    "type": "custom_emoji",
-    "offset": 190,
-    "length": 2,
-    "custom_emoji_id": "5967390100357648692"
-  },
-  {
-    "type": "custom_emoji",
-    "offset": 217,
+    "offset": 226,
     "length": 5,
     "custom_emoji_id": "5920344347152224466"
   },
   {
     "type": "text_link",
-    "offset": 231,
-    "length": 9,
-    "url": "https://polymarket.com/profile/0x9d84ce0306f8551e02efef1680475fc0f1dc1344"
+    "offset": 240,
+    "length": 6,
+    "url": "https://polymarket.com/profile/0xe90bec87d9ef430f27f9dcfe72c34b76967d5da2"
   },
   {
     "type": "text_link",
-    "offset": 243,
-    "length": 2,
-    "url": "https://x.com/Domahhhh"
-  },
-  {
-    "type": "text_link",
-    "offset": 248,
+    "offset": 249,
     "length": 10,
     "url": "https://t.me/PolytechTradeBot?start=ref_cococooker"
-  },
-  {
-    "type": "custom_emoji",
-    "offset": 261,
-    "length": 2,
-    "custom_emoji_id": "5994378914636500516"
-  },
-  {
-    "type": "custom_emoji",
-    "offset": 296,
-    "length": 1,
-    "custom_emoji_id": "5852745384434077722"
-  },
-  {
-    "type": "custom_emoji",
-    "offset": 315,
-    "length": 2,
-    "custom_emoji_id": "5967390100357648692"
-  },
-  {
-    "type": "custom_emoji",
-    "offset": 337,
-    "length": 2,
-    "custom_emoji_id": "5897958754267174109"
   }
 ]

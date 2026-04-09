@@ -280,14 +280,14 @@ export class ChannelPoster {
     builder.addText('├ ')
     const amountStr = formatUsd(trade.trade.usdcSize)
     if (trade.trade.usdcSize >= 50000) {
-      builder.addPremiumEmoji(EMOJI_MONEYBAG, ' Amount: ')
+      builder.addText('Amount: ')
       builder.addBold(amountStr)
     } else {
-      builder.addPremiumEmoji(EMOJI_MONEYBAG, ` Amount: ${amountStr}`)
+      builder.addText(`Amount: ${amountStr}`)
     }
     builder.newLine()
     builder.addText('├ ')
-    let priceText = ` Price: ${formatPriceCents(trade.trade.price)}`
+    let priceText = `Price: ${formatPriceCents(trade.trade.price)}`
     if (
       trade.priceMomentum &&
       Math.abs(trade.priceMomentum.changePercent) >= 10 &&
@@ -296,12 +296,11 @@ export class ChannelPoster {
       const arrow = trade.priceMomentum.direction === 'up' ? '↑' : '↓'
       priceText += ` | ${arrow}${Math.abs(trade.priceMomentum.changePercent)}% ${trade.priceMomentum.periodLabel}`
     }
-    builder.addPremiumEmoji(EMOJI_COIN, priceText)
+    builder.addText(priceText)
     builder.newLine()
     builder.addText('└ ')
-    builder.addPremiumEmoji(
-      EMOJI_MONEY,
-      ` To win: ${formatUsd(trade.potentialWin)} (${formatMultiplier(trade.multiplier)})`
+    builder.addText(
+      `To win: ${formatUsd(trade.potentialWin)} (${formatMultiplier(trade.multiplier)})`
     )
     builder.newLine().newLine()
     builder.addPremiumEmoji(EMOJI_TRADER, ' Trader: ')
@@ -319,29 +318,29 @@ export class ChannelPoster {
 
     const traderLines: Array<{ emoji: PremiumEmoji | null; text: string }> = []
     traderLines.push({
-      emoji: EMOJI_CHART_UP,
-      text: ` Positions: ${formatCompactUsd(trade.traderStats.totalPositionsValue)} · ${trade.traderStats.closedPositions} bets`,
+      emoji: null,
+      text: `Positions: ${formatCompactUsd(trade.traderStats.totalPositionsValue)} · ${trade.traderStats.closedPositions} bets`,
     })
     if (trade.traderStats.closedPositions >= 3) {
       traderLines.push({
-        emoji: EMOJI_CHECK,
-        text: ` Win Rate: ${Math.round(trade.traderStats.winRate)}%`,
+        emoji: null,
+        text: `Win Rate: ${Math.round(trade.traderStats.winRate)}%`,
       })
     }
     traderLines.push({
-      emoji: EMOJI_MONEY,
-      text: ` P&L: ${formatSignedUsd(trade.traderStats.totalRealizedPnl)}`,
+      emoji: null,
+      text: `P&L: ${formatSignedUsd(trade.traderStats.totalRealizedPnl)}`,
     })
     if (trade.hashdiveProfile && trade.hashdiveProfile.totalVolumeUsd > 0) {
       traderLines.push({
-        emoji: EMOJI_COIN,
-        text: ` Volume: ${formatCompactUsd(trade.hashdiveProfile.totalVolumeUsd)}`,
+        emoji: null,
+        text: `Volume: ${formatCompactUsd(trade.hashdiveProfile.totalVolumeUsd)}`,
       })
     }
     if (trade.traderStats.bestWinAmount && trade.traderStats.bestWinAmount > 0) {
       traderLines.push({
-        emoji: EMOJI_MONEYBAG,
-        text: ` Best Win: ${formatSignedUsd(trade.traderStats.bestWinAmount)}`,
+        emoji: null,
+        text: `Best Win: ${formatSignedUsd(trade.traderStats.bestWinAmount)}`,
       })
     }
     if (trade.holderStats.traderIsTopHolder && trade.holderStats.traderHolderRank) {
