@@ -159,7 +159,7 @@ export class DailyLeaderboard {
   private async enrichTrader(entry: LeaderboardEntry): Promise<LeaderboardTrader> {
     const wallet = entry.proxyWallet
     const [positions, closedPositions] = await Promise.all([
-      this.dataApi.getPositions(wallet, 500, 50).catch(() => []),
+      this.dataApi.getPositions(wallet, 500, 200).catch(() => []),
       this.dataApi.getClosedPositions(wallet, 200).catch(() => []),
     ])
     const wins = closedPositions.filter((position) => Number(position.realizedPnl || 0) > 0).length
