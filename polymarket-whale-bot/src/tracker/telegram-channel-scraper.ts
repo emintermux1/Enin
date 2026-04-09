@@ -223,8 +223,26 @@ export class TelegramChannelScraper {
           logger.warn('Telegram channel scrape failed', result.reason);
           continue;
         }
-        for (const trade of result.value) {
-          await this.onTrade(trade);
+        const { channel, trades, latestMessageId } = result.value;
+        let lastProcessedMessageId = this.lastMessageIds.get(channel) ?? 0;
+        try {
+          for (const trade of trades) {
+            await this.onTrade(trade);
+            lastProcessedMessageId = Number(trade.messageId);
+          }
+          if (trades.length > 0 && latestMessageId > lastProcessedMessageId) {
+            lastProcessedMessageId = latestMessageId;
+          }
+        } catch (error) {
+          if (lastProcessedMessageId > 0) {
+            this.lastMessageIds.set(channel, lastProcessedMessageId);
+          }
+          logger.warn(`Telegram channel trade processing failed for ${channel}`, error);
+          continue;
+        }
+
+        if (trades.length > 0 && lastProcessedMessageId > 0) {
+          this.lastMessageIds.set(channel, lastProcessedMessageId);
         }
       }
     } finally {
@@ -232,7 +250,11 @@ export class TelegramChannelScraper {
     }
   }
 
-  private async scrapeChannel(channel: ScrapedChannelSource): Promise<ScrapedChannelTrade[]> {
+  private async scrapeChannel(channel: ScrapedChannelSource): Promise<{
+    channel: ScrapedChannelSource;
+    trades: ScrapedChannelTrade[];
+    latestMessageId: number;
+  }> {
     const html = await this.client.get<string>(`/s/${channel}`, {
       responseType: 'text',
     });
@@ -244,14 +266,18 @@ export class TelegramChannelScraper {
     if (lastSeenMessageId === undefined) {
       this.lastMessageIds.set(channel, latestMessageId);
       logger.info(`Initialized Telegram scraper baseline for ${channel} at message ${latestMessageId}`);
-      return [];
+      return {
+        channel,
+        trades: [],
+        latestMessageId,
+      };
     }
 
-    if (latestMessageId > lastSeenMessageId) {
-      this.lastMessageIds.set(channel, latestMessageId);
-    }
-
-    return parsed.filter((trade) => Number(trade.messageId) > lastSeenMessageId);
+    return {
+      channel,
+      trades: parsed.filter((trade) => Number(trade.messageId) > lastSeenMessageId),
+      latestMessageId,
+    };
   }
 
   private parseMessages(html: string, channel: ScrapedChannelSource): ScrapedChannelTrade[] {
