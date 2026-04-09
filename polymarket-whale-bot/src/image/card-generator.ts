@@ -561,82 +561,12 @@ export class CardGenerator {
   }
 
   async generateLeaderboardCard(): Promise<Buffer | null> {
-    const canvasModule = await this.getCanvasModule()
-    if (!canvasModule) {
+    const imagePath = path.resolve(__dirname, '../../assets/leaderboard-bg.png')
+    try {
+      return await fs.promises.readFile(imagePath)
+    } catch {
       return null
     }
-
-    this.ensureFonts(canvasModule)
-
-    const canvas = canvasModule.createCanvas(1280, 720)
-    const ctx = canvas.getContext('2d')
-
-    const background = ctx.createLinearGradient(0, 0, 1280, 720)
-    background.addColorStop(0, '#04070d')
-    background.addColorStop(0.45, '#071a0f')
-    background.addColorStop(1, '#020406')
-    ctx.fillStyle = background
-    ctx.fillRect(0, 0, 1280, 720)
-
-    const centerGlow = ctx.createRadialGradient(640, 360, 80, 640, 360, 520)
-    centerGlow.addColorStop(0, 'rgba(34,197,94,0.22)')
-    centerGlow.addColorStop(0.45, 'rgba(16,185,129,0.08)')
-    centerGlow.addColorStop(1, 'rgba(0,0,0,0)')
-    ctx.fillStyle = centerGlow
-    ctx.fillRect(0, 0, 1280, 720)
-
-    const topGlow = ctx.createRadialGradient(1040, 120, 40, 1040, 120, 260)
-    topGlow.addColorStop(0, 'rgba(250,204,21,0.15)')
-    topGlow.addColorStop(1, 'rgba(0,0,0,0)')
-    ctx.fillStyle = topGlow
-    ctx.fillRect(0, 0, 1280, 720)
-
-    fillRoundedRect(ctx, 44, 44, 1192, 632, 34, 'rgba(255,255,255,0.03)')
-    fillRoundedRect(ctx, 64, 64, 1152, 592, 28, 'rgba(3,8,13,0.72)')
-
-    const panelGradient = ctx.createLinearGradient(64, 64, 1216, 656)
-    panelGradient.addColorStop(0, 'rgba(255,255,255,0.03)')
-    panelGradient.addColorStop(1, 'rgba(255,255,255,0.01)')
-    ctx.fillStyle = panelGradient
-    fillRoundedRect(ctx, 64, 64, 1152, 592, 28, ctx.fillStyle as string)
-
-    ctx.strokeStyle = 'rgba(74,222,128,0.22)'
-    ctx.lineWidth = 2
-    roundedRect(ctx, 64, 64, 1152, 592, 28)
-    ctx.stroke()
-
-    ctx.fillStyle = 'rgba(74,222,128,0.08)'
-    ctx.beginPath()
-    ctx.arc(640, 360, 170, 0, Math.PI * 2)
-    ctx.fill()
-
-    ctx.strokeStyle = 'rgba(74,222,128,0.18)'
-    ctx.lineWidth = 4
-    ctx.beginPath()
-    ctx.arc(640, 360, 198, 0.15 * Math.PI, 0.85 * Math.PI)
-    ctx.stroke()
-
-    ctx.beginPath()
-    ctx.arc(640, 360, 198, 1.15 * Math.PI, 1.85 * Math.PI)
-    ctx.stroke()
-
-    ctx.font = '900 70px Inter, Arial, sans-serif'
-    ctx.textAlign = 'center'
-    ctx.fillStyle = '#f8fafc'
-    ctx.fillText('DAILY TOP TRADERS', 640, 320)
-
-    ctx.font = '700 32px Inter, Arial, sans-serif'
-    ctx.fillStyle = 'rgba(226,232,240,0.82)'
-    ctx.fillText('🐋 Whales & Insiders Leaderboard', 640, 382)
-
-    ctx.font = '700 20px Inter, Arial, sans-serif'
-    ctx.fillStyle = 'rgba(148,163,184,0.9)'
-    ctx.fillText('Updated every 6 hours', 640, 434)
-
-    ctx.textAlign = 'left'
-    this.applyGrain(ctx, 1280, 720, 10)
-
-    return this.canvasToBuffer(canvas)
   }
 
   async generateCompactCard(trade: EnrichedTrade): Promise<Buffer | null> {
