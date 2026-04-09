@@ -29,9 +29,13 @@ export const config: AppConfig = {
     minTradeSize: readNumber('MIN_TRADE_SIZE', 10_000),
     pollIntervalMs: readNumber('POLL_INTERVAL_MS', 15_000),
     hashdivePollIntervalMs: readNumber('HASHDIVE_POLL_INTERVAL_MS', 120_000),
-    maxTrackedWallets: readNumber('MAX_TRACKED_WALLETS', 200),
     leaderboardRefreshHours: readNumber('LEADERBOARD_REFRESH_HOURS', 6),
     walletBatchSize: 20,
+  },
+  scraping: {
+    enabled: true,
+    pollIntervalMs: readNumber('SCRAPE_POLL_INTERVAL_MS', 60_000),
+    channels: ['polymarket_whale', 'polymarket_whales'],
   },
   api: {
     gammaApiUrl: readString('GAMMA_API_URL', 'https://gamma-api.polymarket.com'),

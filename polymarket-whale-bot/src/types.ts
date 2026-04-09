@@ -238,13 +238,44 @@ export interface TelegramConfig {
   referralButtonText: string;
 }
 
+export type ScrapedChannelSource = 'polymarket_whale' | 'polymarket_whales';
+
+export interface ScrapedChannelTrade {
+  source: ScrapedChannelSource;
+  messageId: string;
+  tradeType: string;
+  marketQuestion: string;
+  marketUrl?: string;
+  marketSlug?: string;
+  eventSlug?: string;
+  side: 'BUY' | 'SELL';
+  outcome: string;
+  amount: number;
+  price: number;
+  toWin?: number;
+  shares?: number;
+  resolveDate?: string;
+  traderName: string;
+  walletAddress?: string;
+  positions?: number;
+  winRate?: string;
+  pnl?: number;
+  topHolders?: string;
+  timestamp: number;
+}
+
 export interface TrackingConfig {
   minTradeSize: number;
   pollIntervalMs: number;
   hashdivePollIntervalMs: number;
-  maxTrackedWallets: number;
   leaderboardRefreshHours: number;
   walletBatchSize: number;
+}
+
+export interface ScrapingConfig {
+  enabled: boolean;
+  pollIntervalMs: number;
+  channels: ScrapedChannelSource[];
 }
 
 export interface ApiConfig {
@@ -259,6 +290,7 @@ export interface ApiConfig {
 export interface AppConfig {
   telegram: TelegramConfig;
   tracking: TrackingConfig;
+  scraping: ScrapingConfig;
   api: ApiConfig;
   polygonscan: {
     apiKey: string;

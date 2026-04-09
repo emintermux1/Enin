@@ -91,8 +91,7 @@ export class WalletManager {
     }
 
     const trimmed = [...wallets.values()]
-      .sort((a, b) => (b.pnl + b.vol) - (a.pnl + a.vol))
-      .slice(0, this.tracking.maxTrackedWallets);
+      .sort((a, b) => (b.pnl + b.vol) - (a.pnl + a.vol));
 
     this.wallets = new Map(trimmed.map((wallet) => [wallet.proxyWallet, wallet]));
     this.lastRefreshAt = Date.now();
