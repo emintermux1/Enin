@@ -486,25 +486,46 @@ export class TradeEnricher {
       logger.warn(`Failed to fetch holders for ${trade.conditionId}`, error);
       return [];
     });
-    const holders = groups.flatMap((group) => group.holders ?? []);
-    const sameSideHolders = holders.filter((holder) => holder.outcomeIndex === trade.outcomeIndex);
-    const oppositeSideHolders = holders.filter((holder) => holder.outcomeIndex !== trade.outcomeIndex);
+    let sameSideShares = 0;
+    let oppositeSideShares = 0;
+    const allHolders: Array<{ proxyWallet: string; outcomeIndex: number; amount: number }> = [];
+
+    for (const group of groups) {
+      const holders = group.holders ?? [];
+      for (const holder of holders) {
+        allHolders.push({
+          proxyWallet: holder.proxyWallet,
+          outcomeIndex: holder.outcomeIndex,
+          amount: Number(holder.amount || 0),
+        });
+        if (holder.outcomeIndex === trade.outcomeIndex) {
+          sameSideShares += Number(holder.amount || 0);
+        } else {
+          oppositeSideShares += Number(holder.amount || 0);
+        }
+      }
+    }
+
+    const totalShares = sameSideShares + oppositeSideShares;
+    const sameSidePercent = totalShares > 0 ? Math.round((sameSideShares / totalShares) * 20) : 0;
+    const oppositeSidePercent = totalShares > 0 ? 20 - sameSidePercent : 0;
     const traderWalletNorm = normalizeWallet(trade.proxyWallet);
-    const traderRankIndex = sameSideHolders.findIndex(
-      (holder) => normalizeWallet(holder.proxyWallet) === traderWalletNorm,
-    );
+    const allAddresses = allHolders.map((holder) => normalizeWallet(holder.proxyWallet)).filter(Boolean);
+    const traderRankIndex = allHolders
+      .filter((holder) => holder.outcomeIndex === trade.outcomeIndex)
+      .findIndex((holder) => normalizeWallet(holder.proxyWallet) === traderWalletNorm);
     const traderHolderRank = traderRankIndex >= 0 ? traderRankIndex + 1 : null;
-    const addresses = [...new Set(holders.map((holder) => normalizeWallet(holder.proxyWallet)).filter(Boolean))];
+    const addresses = [...new Set(allAddresses)];
     const whalesInMarket = new Set(addresses.filter((address) => this.walletManager.isTracked(address))).size;
     const side = trade.outcome || (trade.outcomeIndex === 0 ? 'Yes' : 'No');
     const sideLower = side.toLowerCase();
     const oppositeSide = sideLower === 'yes' ? 'No' : sideLower === 'no' ? 'Yes' : 'Opposite';
 
     return {
-      topHoldersOnSide: sameSideHolders.length,
-      totalTopHolders: addresses.length,
+      topHoldersOnSide: sameSidePercent,
+      totalTopHolders: 20,
       side,
-      oppositeSideHolders: oppositeSideHolders.length,
+      oppositeSideHolders: oppositeSidePercent,
       oppositeSide,
       whalesInMarket,
       insidersInMarket: 0,
