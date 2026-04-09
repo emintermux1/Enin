@@ -212,25 +212,10 @@ export class TradeEnricher {
       }
     }
     const freshWalletsInMarket = this.countFreshWallets(holders.addresses);
-
-    if (this.walletTradeRepo) {
-      try {
-        this.walletTradeRepo.record({
-          wallet: trade.proxyWallet,
-          conditionId: trade.conditionId,
-          side: trade.side,
-          amount: trade.usdcSize,
-          price,
-          outcome: trade.outcome || String(trade.outcomeIndex),
-          marketQuestion: marketInfo.question || trade.title,
-          timestamp: trade.timestamp,
-        });
-      } catch (error) {
-        logger.warn(`Wallet trade persistence failed for ${trade.proxyWallet}`, error);
-      }
-    }
-
-    return {
+    const risk = classifyRisk(price);
+    const potentialWin = trade.usdcSize / price;
+    const multiplier = 1 / price;
+    const enrichedTrade: EnrichedTrade = {
       trade,
       traderStats: effectiveTraderStats,
       marketInfo,
@@ -245,9 +230,9 @@ export class TradeEnricher {
       xUsername: trackedWallet?.xUsername || undefined,
       traderTypes,
       primaryType,
-      risk: classifyRisk(price),
-      potentialWin: trade.usdcSize / price,
-      multiplier: 1 / price,
+      risk,
+      potentialWin,
+      multiplier,
       isFreshWallet,
       topCategory,
       freshWalletsInMarket,
@@ -285,6 +270,30 @@ export class TradeEnricher {
           }
         : undefined,
     };
+
+    if (this.walletTradeRepo) {
+      try {
+        this.walletTradeRepo.record({
+          wallet: trade.proxyWallet,
+          conditionId: trade.conditionId,
+          side: trade.side,
+          amount: trade.usdcSize,
+          price,
+          outcome: trade.outcome || String(trade.outcomeIndex),
+          marketQuestion: marketInfo.question || trade.title,
+          timestamp: trade.timestamp,
+          alerted: 0,
+          traderName: trade.name || trade.pseudonym || trade.proxyWallet.slice(0, 10),
+          primaryType,
+          potentialWin,
+          multiplier,
+        });
+      } catch (error) {
+        logger.warn(`Wallet trade persistence failed for ${trade.proxyWallet}`, error);
+      }
+    }
+
+    return enrichedTrade;
   }
 
   private async getTraderStats(wallet: string): Promise<TraderStatsSnapshot> {

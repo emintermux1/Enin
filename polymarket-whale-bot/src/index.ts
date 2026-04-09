@@ -2,11 +2,13 @@ import { config } from './config';
 import Database from 'better-sqlite3';
 import { initDatabase } from './db/database';
 import { WalletTradeRepo } from './db/wallet-trade-repo';
+import { GammaApi } from './api/gamma-api';
 import { PolygonscanApi } from './api/polygonscan-api';
 import { NewsApi } from './api/news-api';
 import { NewsCorrelator } from './classifier/news-correlator';
 import { WhaleTracker } from './tracker/whale-tracker';
 import { PriceHistory } from './tracker/price-history';
+import { ResolutionChecker } from './tracker/resolution-checker';
 import { ChannelPoster } from './telegram/channel-poster';
 import { logger } from './utils/logger';
 
@@ -35,6 +37,7 @@ async function main() {
 
   database = initDatabase();
   const walletTradeRepo = new WalletTradeRepo(database);
+  const gammaApi = new GammaApi(config.api);
   const polygonscanApi = config.polygonscan.enabled
     ? new PolygonscanApi(config.polygonscan.apiKey)
     : undefined;
@@ -44,6 +47,11 @@ async function main() {
   const tracker = new WhaleTracker(config, async (enrichedTrade) => {
     try {
       await poster.postAlert(enrichedTrade);
+      walletTradeRepo.markAlerted(
+        enrichedTrade.trade.proxyWallet,
+        enrichedTrade.trade.conditionId,
+        enrichedTrade.trade.timestamp,
+      );
       logger.info(`Posted alert: ${enrichedTrade.trade.title} - $${enrichedTrade.trade.usdcSize}`);
     } catch (error) {
       logger.error('Failed to post alert:', error);
@@ -55,15 +63,18 @@ async function main() {
     newsCorrelator,
     priceHistory,
   });
+  const resolutionChecker = new ResolutionChecker(gammaApi, walletTradeRepo, poster);
 
   const sampleTrade = await tracker.runStartupSmokeTest(poster.getCardGenerator(), config.runtime.sampleCardPath);
   await poster.writeSampleOutput(sampleTrade, config.runtime.sampleCaptionPath);
   await poster.launch();
   await tracker.start();
+  resolutionChecker.start();
 
   const shutdown = () => {
     logger.info('Shutting down...');
     tracker.stop();
+    resolutionChecker.stop();
     poster.stop();
     database?.close();
     database = null;

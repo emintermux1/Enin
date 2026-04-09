@@ -57,6 +57,24 @@ export function initDatabase(): Database.Database {
     CREATE INDEX IF NOT EXISTS idx_market_volumes_timestamp ON market_volumes(timestamp);
   `)
 
+  const migrations = [
+    `ALTER TABLE wallet_trades ADD COLUMN alerted INTEGER DEFAULT 0`,
+    `ALTER TABLE wallet_trades ADD COLUMN trader_name TEXT DEFAULT ''`,
+    `ALTER TABLE wallet_trades ADD COLUMN primary_type TEXT DEFAULT ''`,
+    `ALTER TABLE wallet_trades ADD COLUMN potential_win REAL DEFAULT 0`,
+    `ALTER TABLE wallet_trades ADD COLUMN multiplier REAL DEFAULT 0`,
+  ]
+
+  for (const migration of migrations) {
+    try {
+      db.exec(migration)
+    } catch {
+      continue
+    }
+  }
+
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_wallet_trades_alerted ON wallet_trades(alerted);`)
+
   logger.info(`SQLite database initialized at ${DB_PATH}`)
   return db
 }

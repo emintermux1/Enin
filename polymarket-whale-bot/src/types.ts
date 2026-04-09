@@ -240,6 +240,28 @@ export interface TelegramConfig {
   referralButtonText: string;
 }
 
+export interface ResolutionAlert {
+  marketQuestion: string;
+  marketSlug: string;
+  outcome: string;
+  won: boolean;
+  pnl: number;
+  entryAmount: number;
+  entryPrice: number;
+  shares: number;
+  traderName: string;
+  traderWallet: string;
+  primaryType: TraderType;
+  daysAgo: number;
+  resolvedAt: string;
+  originalAlertLabel: string;
+  multiplier: number;
+  potentialWin: number;
+  whalesInMarket: number;
+  insidersInMarket: number;
+  freshWalletsInMarket: number;
+}
+
 export type ScrapedChannelSource = 'polymarket_whale' | 'polymarket_whales';
 
 export interface ScrapedChannelTrade {

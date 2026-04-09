@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import { Markup, Telegraf } from 'telegraf'
 import { CardGenerator } from '../image/card-generator'
-import { EnrichedTrade, TelegramConfig } from '../types'
+import { EnrichedTrade, ResolutionAlert, TelegramConfig, TraderType } from '../types'
 import {
   formatCompactUsd,
   formatMultiplier,
@@ -111,6 +111,23 @@ class CaptionBuilder {
   }
 }
 
+function formatCalledAgo(daysAgo: number): string {
+  if (daysAgo <= 0) {
+    return 'today'
+  }
+  if (daysAgo === 1) {
+    return '1 day ago'
+  }
+  return `${daysAgo} days ago`
+}
+
+function toTraderType(value: string): TraderType {
+  if (value === 'INSIDER' || value === 'TOP_HOLDER' || value === 'CONVICTION_BUILD') {
+    return value
+  }
+  return 'WHALE'
+}
+
 export class ChannelPoster {
   private readonly bot: Telegraf
   private readonly cardGenerator = new CardGenerator()
@@ -161,25 +178,58 @@ export class ChannelPoster {
       return
     }
     const { text, entities } = this.buildCaption(trade)
-    const keyboard = this.buildKeyboard(trade)
     const image = await this.cardGenerator.generateCard(trade)
+    await this.sendPost({
+      text,
+      entities,
+      image,
+      eventSlug:
+        trade.marketInfo.eventSlug ||
+        trade.trade.eventSlug ||
+        trade.marketInfo.slug ||
+        trade.trade.slug,
+    })
+  }
+
+  async postResolutionCard(alert: ResolutionAlert): Promise<void> {
+    if (this.dryRun) {
+      logger.info(`Dry-run resolution card: ${alert.marketQuestion} - ${formatSignedUsd(alert.pnl)}`)
+      return
+    }
+    const { text, entities } = this.buildResolutionCaption(alert)
+    const image = await this.cardGenerator.generatePnlCard(alert)
+    await this.sendPost({
+      text,
+      entities,
+      image,
+      eventSlug: alert.marketSlug,
+    })
+  }
+
+  private async sendPost(params: {
+    text: string
+    entities: CaptionResult['entities']
+    image: Buffer | null
+    eventSlug: string
+  }): Promise<void> {
+    const keyboard = this.buildMarketKeyboard(params.eventSlug)
 
     try {
-      if (image) {
+      if (params.image) {
         await this.bot.telegram.sendPhoto(
           this.config.channelId,
-          { source: image },
+          { source: params.image },
           {
-            caption: text,
-            caption_entities: entities,
+            caption: params.text,
+            caption_entities: params.entities,
             reply_markup: keyboard.reply_markup,
           } as any
         )
         return
       }
 
-      await this.bot.telegram.sendMessage(this.config.channelId, text, {
-        entities,
+      await this.bot.telegram.sendMessage(this.config.channelId, params.text, {
+        entities: params.entities,
         reply_markup: keyboard.reply_markup,
         link_preview_options: { is_disabled: true },
       } as any)
@@ -193,14 +243,14 @@ export class ChannelPoster {
         logger.warn(
           'Premium custom emoji not supported, falling back to standard emoji'
         )
-        if (image) {
+        if (params.image) {
           await this.bot.telegram.sendPhoto(
             this.config.channelId,
-            { source: image },
-            { caption: text, reply_markup: keyboard.reply_markup }
+            { source: params.image },
+            { caption: params.text, reply_markup: keyboard.reply_markup }
           )
         } else {
-          await this.bot.telegram.sendMessage(this.config.channelId, text, {
+          await this.bot.telegram.sendMessage(this.config.channelId, params.text, {
             reply_markup: keyboard.reply_markup,
             link_preview_options: { is_disabled: true },
           })
@@ -211,12 +261,7 @@ export class ChannelPoster {
     }
   }
 
-  private buildKeyboard(trade: EnrichedTrade) {
-    const eventSlug =
-      trade.marketInfo.eventSlug ||
-      trade.trade.eventSlug ||
-      trade.marketInfo.slug ||
-      trade.trade.slug
+  private buildMarketKeyboard(eventSlug: string) {
     return Markup.inlineKeyboard([
       [
         Markup.button.url(
@@ -414,7 +459,7 @@ export class ChannelPoster {
       })
     }
 
-    if (trade.pressureSignal?.isHighPressure) {
+    if (trade.pressureSignal?.isHighPressure && trade.trade.usdcSize >= 50_000) {
       const pctLabel =
         trade.pressureSignal.dominancePercent >= 80 ? 'Aggressive' : 'Strong'
       const dir = trade.trade.side === 'BUY' ? 'Buy' : 'Sell'
@@ -467,6 +512,65 @@ export class ChannelPoster {
     }
     if (marketIntelligenceParts.length > 0) {
       builder.newLine()
+      builder.addText(marketIntelligenceParts.join(' · '))
+    }
+
+    return builder.build()
+  }
+
+  private buildResolutionCaption(alert: ResolutionAlert): CaptionResult {
+    const builder = new CaptionBuilder()
+    const traderType = toTraderType(alert.primaryType)
+    const originalLabel = getTradeTypeLabel(traderType, 'BUY')
+    const marketUrl = `https://polymarket.com/event/${alert.marketSlug}`
+    const traderUrl = `https://polymarket.com/profile/${alert.traderWallet}`
+    const marketIntelligenceParts: string[] = []
+
+    if (alert.whalesInMarket > 0) {
+      marketIntelligenceParts.push(
+        `🐋 ${alert.whalesInMarket} ${alert.whalesInMarket === 1 ? 'Whale' : 'Whales'}`
+      )
+    }
+    if (alert.insidersInMarket > 0) {
+      marketIntelligenceParts.push(
+        `🕵️ ${alert.insidersInMarket} ${alert.insidersInMarket === 1 ? 'Insider' : 'Insiders'}`
+      )
+    }
+    if (alert.freshWalletsInMarket > 0) {
+      marketIntelligenceParts.push(`🆕 ${alert.freshWalletsInMarket} Fresh`)
+    }
+
+    builder.addPremiumEmoji(EMOJI_CHECK, ' Market Resolved — ')
+    builder.addBold(alert.pnl >= 0 ? 'PROFIT' : 'LOSS')
+    builder.newLine().newLine()
+
+    builder.addPremiumEmoji(EMOJI_CHART_UP, ' ')
+    builder.addLink(alert.marketQuestion, marketUrl)
+    builder.addText(` → ${alert.outcome} ${alert.won ? '✅' : '❌'}`)
+    builder.newLine()
+    builder.addText(`Resolved: ${formatResolveDate(alert.resolvedAt)}`)
+    builder.newLine().newLine()
+
+    builder.addPremiumEmoji(EMOJI_MONEYBAG, ` PnL: ${formatSignedUsd(alert.pnl)}`)
+    builder.newLine()
+    builder.addText(`├ Entry: ${formatUsd(alert.entryAmount)} at ${formatPriceCents(alert.entryPrice)}`)
+    builder.newLine()
+    builder.addText(`├ Shares: ${new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(alert.shares)}`)
+    builder.newLine()
+    builder.addText(`└ Payout: ${formatMultiplier(alert.multiplier)}`)
+    builder.newLine().newLine()
+
+    builder.addPremiumEmoji(EMOJI_TRADER, ' Trader: ')
+    builder.addLink(alert.traderName, traderUrl)
+    builder.addText(' · ')
+    builder.addLink('Copy Trade', this.config.referralUrl)
+    builder.newLine()
+    builder.addText(`├ Called ${formatCalledAgo(alert.daysAgo)}`)
+    builder.newLine()
+    builder.addText(`└ Original: ${alert.originalAlertLabel || originalLabel}`)
+
+    if (marketIntelligenceParts.length > 0) {
+      builder.newLine().newLine()
       builder.addText(marketIntelligenceParts.join(' · '))
     }
 
