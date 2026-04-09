@@ -2,11 +2,13 @@ import { LRUCache } from 'lru-cache';
 import { GammaApi } from '../api/gamma-api';
 import { DataApi } from '../api/data-api';
 import { HashdiveApi, HashdiveTraderProfile } from '../api/hashdive-api';
+import { PolygonscanApi } from '../api/polygonscan-api';
 import { classifyTrader } from '../classifier/trader-classifier';
 import { classifyRisk } from '../classifier/risk-classifier';
 import { calculateInsiderScore } from '../classifier/insider-scorer';
 import { detectPressure } from '../classifier/pressure-detector';
 import { calculateUnusualScore } from '../classifier/unusual-scorer';
+import { WalletTradeRepo } from '../db/wallet-trade-repo';
 import {
   DataPosition,
   EnrichedTrade,
@@ -62,6 +64,8 @@ export class TradeEnricher {
     private readonly gammaApi: GammaApi,
     private readonly walletManager: WalletManager,
     private readonly hashdiveApi?: HashdiveApi,
+    private readonly polygonscanApi?: PolygonscanApi,
+    private readonly walletTradeRepo?: WalletTradeRepo,
   ) {}
 
   async enrichTrade(trade: PolymarketTrade): Promise<EnrichedTrade> {
@@ -73,12 +77,22 @@ export class TradeEnricher {
       }),
       new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000)),
     ]);
+    const capitalInflowPromise = this.polygonscanApi
+      ? Promise.race([
+          this.polygonscanApi.detectFreshInflow(trade.proxyWallet).catch((error) => {
+            logger.warn(`Polygonscan inflow detection failed for ${trade.proxyWallet}`, error);
+            return null;
+          }),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000)),
+        ])
+      : Promise.resolve(null);
     const [statsSnapshot, marketInfo, holders] = await Promise.all([
       this.getTraderStats(trade.proxyWallet),
       this.getMarketInfo(trade),
       this.getHolderStats(trade),
     ]);
     const hashdiveProfile = await hashdiveProfilePromise;
+    const capitalInflow = await capitalInflowPromise;
 
     const convictionBuild = statsSnapshot.positions.some(
       (position) => position.conditionId === trade.conditionId && position.totalBought > trade.usdcSize * 1.5,
@@ -169,6 +183,23 @@ export class TradeEnricher {
     }
     const freshWalletsInMarket = this.countFreshWallets(holders.addresses);
 
+    if (this.walletTradeRepo) {
+      try {
+        this.walletTradeRepo.record({
+          wallet: trade.proxyWallet,
+          conditionId: trade.conditionId,
+          side: trade.side,
+          amount: trade.usdcSize,
+          price,
+          outcome: trade.outcome || String(trade.outcomeIndex),
+          marketQuestion: marketInfo.question || trade.title,
+          timestamp: trade.timestamp,
+        });
+      } catch (error) {
+        logger.warn(`Wallet trade persistence failed for ${trade.proxyWallet}`, error);
+      }
+    }
+
     return {
       trade,
       traderStats: effectiveTraderStats,
@@ -196,6 +227,14 @@ export class TradeEnricher {
       insiderScore,
       unusualScore,
       pressureSignal,
+      capitalInflow: capitalInflow
+        ? {
+            hasRecentInflow: capitalInflow.hasRecentInflow,
+            totalInflow: capitalInflow.totalInflow,
+            largestInflow: capitalInflow.largestInflow,
+            inflowCount: capitalInflow.inflowCount,
+          }
+        : undefined,
     };
   }
 

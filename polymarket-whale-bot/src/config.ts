@@ -41,6 +41,10 @@ export const config: AppConfig = {
     minRequestSpacingMs: 40,
     hashdiveApiKey: readString('HASHDIVE_API_KEY', ''),
   },
+  polygonscan: {
+    apiKey: readString('POLYGONSCAN_API_KEY', ''),
+    enabled: Boolean(readString('POLYGONSCAN_API_KEY', '')),
+  },
   runtime: {
     sampleCardPath: path.resolve(process.cwd(), 'sample-card.png'),
     sampleCaptionPath: path.resolve(process.cwd(), 'sample-caption.txt'),
