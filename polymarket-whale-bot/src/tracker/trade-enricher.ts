@@ -20,6 +20,7 @@ import {
 } from '../types';
 import { WalletManager } from './wallet-manager';
 import { logger } from '../utils/logger';
+import { PriceHistory } from './price-history';
 
 interface TraderStatsSnapshot {
   traderStats: TraderStats;
@@ -68,6 +69,7 @@ export class TradeEnricher {
     private readonly polygonscanApi?: PolygonscanApi,
     private readonly walletTradeRepo?: WalletTradeRepo,
     private readonly newsCorrelator?: NewsCorrelator,
+    private readonly priceHistory?: PriceHistory,
   ) {}
 
   async enrichTrade(trade: PolymarketTrade): Promise<EnrichedTrade> {
@@ -143,6 +145,16 @@ export class TradeEnricher {
       winRateLabel: `${Math.round(effectiveWinRate)}% (${effectiveWins}W-${effectiveLosses}L)`,
     };
     const price = Math.max(trade.price || 0.01, 0.01);
+    if (this.priceHistory) {
+      const marketKey = trade.conditionId || trade.slug;
+      this.priceHistory.record(marketKey, price);
+      const tradeOutcomeIdx = trade.outcomeIndex ?? 0;
+      const outcomePrice = marketInfo.outcomePrices[tradeOutcomeIdx];
+      if (outcomePrice) {
+        this.priceHistory.record(marketKey, outcomePrice);
+      }
+    }
+    const priceMomentum = this.priceHistory?.getMomentum(trade.conditionId || trade.slug, price) ?? null;
     let topCategory = this.determineTopCategory(statsSnapshot.positions, statsSnapshot.closedPositions);
     if (!topCategory && hashdiveProfile?.topCategory) {
       topCategory = hashdiveProfile.topCategory;
@@ -220,6 +232,13 @@ export class TradeEnricher {
       traderStats: effectiveTraderStats,
       marketInfo,
       holderStats,
+      priceMomentum: priceMomentum
+        ? {
+            changePercent: priceMomentum.changePercent,
+            direction: priceMomentum.direction,
+            periodLabel: priceMomentum.periodLabel,
+          }
+        : null,
       xUsername: trackedWallet?.xUsername || undefined,
       traderTypes,
       primaryType,

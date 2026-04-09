@@ -13,6 +13,7 @@ import { CardGenerator } from '../image/card-generator';
 import { createSourceDedupKey, HashdiveDiscovery } from './hashdive-discovery';
 import { NewsCorrelator } from '../classifier/news-correlator';
 import { CoordinationDetector } from '../classifier/coordination-detector';
+import { PriceHistory } from './price-history';
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -23,6 +24,7 @@ interface WhaleTrackerOptions {
   walletTradeRepo?: WalletTradeRepo;
   polygonscanApi?: PolygonscanApi;
   newsCorrelator?: NewsCorrelator;
+  priceHistory?: PriceHistory;
 }
 
 export class WhaleTracker {
@@ -34,6 +36,7 @@ export class WhaleTracker {
   private readonly coordinationDetector: CoordinationDetector;
   private readonly hashdiveDiscovery?: HashdiveDiscovery;
   private readonly walletTradeRepo?: WalletTradeRepo;
+  private readonly priceHistory?: PriceHistory;
   private readonly lastSeenTimestamps = new Map<string, number>();
   private running = false;
   private processing = false;
@@ -50,6 +53,7 @@ export class WhaleTracker {
     this.walletManager = new WalletManager(this.dataApi, config.tracking);
     this.walletTradeRepo = options.walletTradeRepo
       ?? (options.database ? new WalletTradeRepo(options.database) : undefined);
+    this.priceHistory = options.priceHistory;
     const hashdiveApi = config.api.hashdiveApiKey
       ? new HashdiveApi(config.api.hashdiveApiKey)
       : undefined;
@@ -61,6 +65,7 @@ export class WhaleTracker {
       options.polygonscanApi,
       this.walletTradeRepo,
       options.newsCorrelator,
+      this.priceHistory,
     );
     this.coordinationDetector = new CoordinationDetector();
     if (hashdiveApi) {
@@ -194,6 +199,11 @@ export class WhaleTracker {
     });
     if (trades.length === 0) {
       return;
+    }
+    if (this.priceHistory) {
+      for (const trade of trades) {
+        this.priceHistory.record(trade.conditionId || trade.slug, trade.price);
+      }
     }
 
     const lastSeen = this.lastSeenTimestamps.get(wallet) ?? Math.floor(Date.now() / 1000);
