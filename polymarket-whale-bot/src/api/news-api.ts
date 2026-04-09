@@ -11,6 +11,10 @@ export interface NewsArticle {
 
 export class NewsApi {
   private readonly userAgent = 'Mozilla/5.0 (compatible; PolyBot/1.0)';
+  private readonly additionalFeeds = [
+    { name: 'ZeroHedge', url: 'https://feeds.feedburner.com/zerohedge/feed' },
+    { name: 'WalterBloomberg', url: 'https://rsshub.app/telegram/channel/WalterBloomberg' },
+  ];
 
   async searchNews(query: string, limit = 5): Promise<NewsArticle[]> {
     try {
@@ -28,6 +32,29 @@ export class NewsApi {
       logger.warn(`Google News RSS fetch failed for "${query}": ${error}`);
       return [];
     }
+  }
+
+  async searchNewsExpanded(query: string, limit = 5): Promise<NewsArticle[]> {
+    const [googleResults, ...feedResults] = await Promise.all([
+      this.searchNews(query, limit),
+      ...this.additionalFeeds.map((feed) => this.fetchFeed(feed.url, feed.name, query, 3)),
+    ]);
+
+    const allArticles = [...googleResults, ...feedResults.flat()];
+    const seen = new Set<string>();
+    const deduped = allArticles.filter((article) => {
+      const key = article.title.toLowerCase().slice(0, 30);
+      if (seen.has(key)) {
+        return false;
+      }
+
+      seen.add(key);
+      return true;
+    });
+
+    return deduped
+      .sort((a, b) => b.publishedAt - a.publishedAt)
+      .slice(0, limit);
   }
 
   private parseRss(xml: string, limit: number): NewsArticle[] {
@@ -61,6 +88,39 @@ export class NewsApi {
     }
 
     return articles.sort((a, b) => b.publishedAt - a.publishedAt);
+  }
+
+  private async fetchFeed(
+    feedUrl: string,
+    sourceName: string,
+    query: string,
+    limit: number,
+  ): Promise<NewsArticle[]> {
+    try {
+      const response = await axios.get(feedUrl, {
+        timeout: 8000,
+        headers: { 'User-Agent': this.userAgent },
+        responseType: 'text',
+      });
+
+      const articles = this.parseRss(response.data, 20);
+      const keywords = query
+        .toLowerCase()
+        .split(/\s+/)
+        .filter((word) => word.length > 3);
+      const filtered = articles.filter((article) => {
+        const text = `${article.title} ${article.snippet}`.toLowerCase();
+        return keywords.some((keyword) => text.includes(keyword));
+      });
+
+      return filtered.slice(0, limit).map((article) => ({
+        ...article,
+        source: sourceName,
+      }));
+    } catch (error) {
+      logger.warn(`Additional RSS fetch failed for "${sourceName}" and "${query}": ${error}`);
+      return [];
+    }
   }
 
   private extractTag(xml: string, tag: string): string {

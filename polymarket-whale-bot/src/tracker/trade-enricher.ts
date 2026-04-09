@@ -272,9 +272,10 @@ export class TradeEnricher {
       newsCorrelation: newsCorrelation
         ? {
             hasRecentNews: newsCorrelation.hasRecentNews,
-            articles: newsCorrelation.articles.map(({ title, source, minutesAgo }) => ({
+            articles: newsCorrelation.articles.map(({ title, source, url, minutesAgo }) => ({
               title,
               source,
+              url,
               minutesAgo,
             })),
             strongestSignal: newsCorrelation.strongestSignal,

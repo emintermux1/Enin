@@ -138,6 +138,7 @@ export interface EnrichedTrade {
     articles: Array<{
       title: string;
       source: string;
+      url: string;
       minutesAgo: number;
     }>;
     strongestSignal: string;
