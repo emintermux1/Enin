@@ -15,7 +15,7 @@ export class DailyLeaderboard {
   private readonly refreshIntervalMs = 6 * 60 * 60 * 1000
   private readonly minPnl = 100_000
   private readonly minLoss = -100_000
-  private readonly leaderboardFetchLimit = 100
+  private readonly leaderboardFetchLimit = 30
 
   constructor(
     private readonly dataApi: DataApi,
@@ -86,8 +86,8 @@ export class DailyLeaderboard {
         .sort((a, b) => Number(a.pnl || 0) - Number(b.pnl || 0))
         .slice(0, 5)
 
-      if (winnerEntries.length === 0) {
-        logger.info('Daily leaderboard: no traders with $100K+ daily PnL')
+      if (winnerEntries.length === 0 && loserEntries.length === 0) {
+        logger.info('Daily leaderboard: no traders with ±$100K daily PnL')
         return
       }
 
@@ -122,7 +122,7 @@ export class DailyLeaderboard {
           if (!trader) {
             return null
           }
-          return { ...trader, rank: index + 6 }
+          return { ...trader, rank: winners.length + index + 1 }
         })
         .filter((trader): trader is LeaderboardTrader => Boolean(trader))
 
@@ -159,7 +159,7 @@ export class DailyLeaderboard {
   private async enrichTrader(entry: LeaderboardEntry): Promise<LeaderboardTrader> {
     const wallet = entry.proxyWallet
     const [positions, closedPositions] = await Promise.all([
-      this.dataApi.getPositions(wallet, 1, 50).catch(() => []),
+      this.dataApi.getPositions(wallet, 500, 50).catch(() => []),
       this.dataApi.getClosedPositions(wallet, 200).catch(() => []),
     ])
     const wins = closedPositions.filter((position) => Number(position.realizedPnl || 0) > 0).length
