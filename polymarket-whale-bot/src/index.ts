@@ -3,6 +3,8 @@ import Database from 'better-sqlite3';
 import { initDatabase } from './db/database';
 import { WalletTradeRepo } from './db/wallet-trade-repo';
 import { PolygonscanApi } from './api/polygonscan-api';
+import { NewsApi } from './api/news-api';
+import { NewsCorrelator } from './classifier/news-correlator';
 import { WhaleTracker } from './tracker/whale-tracker';
 import { ChannelPoster } from './telegram/channel-poster';
 import { logger } from './utils/logger';
@@ -35,6 +37,7 @@ async function main() {
   const polygonscanApi = config.polygonscan.enabled
     ? new PolygonscanApi(config.polygonscan.apiKey)
     : undefined;
+  const newsCorrelator = new NewsCorrelator(new NewsApi());
   const poster = new ChannelPoster(config.telegram);
   const tracker = new WhaleTracker(config, async (enrichedTrade) => {
     try {
@@ -47,6 +50,7 @@ async function main() {
     database,
     walletTradeRepo,
     polygonscanApi,
+    newsCorrelator,
   });
 
   const sampleTrade = await tracker.runStartupSmokeTest(poster.getCardGenerator(), config.runtime.sampleCardPath);

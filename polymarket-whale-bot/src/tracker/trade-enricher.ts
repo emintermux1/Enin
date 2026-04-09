@@ -7,6 +7,7 @@ import { classifyTrader } from '../classifier/trader-classifier';
 import { classifyRisk } from '../classifier/risk-classifier';
 import { calculateInsiderScore } from '../classifier/insider-scorer';
 import { detectPressure } from '../classifier/pressure-detector';
+import { NewsCorrelator } from '../classifier/news-correlator';
 import { calculateUnusualScore } from '../classifier/unusual-scorer';
 import { WalletTradeRepo } from '../db/wallet-trade-repo';
 import {
@@ -66,10 +67,12 @@ export class TradeEnricher {
     private readonly hashdiveApi?: HashdiveApi,
     private readonly polygonscanApi?: PolygonscanApi,
     private readonly walletTradeRepo?: WalletTradeRepo,
+    private readonly newsCorrelator?: NewsCorrelator,
   ) {}
 
   async enrichTrade(trade: PolymarketTrade): Promise<EnrichedTrade> {
     const trackedWallet = this.walletManager.getWallet(trade.proxyWallet);
+    const marketInfoPromise = this.getMarketInfo(trade);
     const hashdiveProfilePromise = Promise.race([
       this.getHashdiveProfile(trade.proxyWallet).catch((error) => {
         logger.warn(`Hashdive profile fetch failed for ${trade.proxyWallet}`, error);
@@ -86,13 +89,25 @@ export class TradeEnricher {
           new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000)),
         ])
       : Promise.resolve(null);
-    const [statsSnapshot, marketInfo, holders] = await Promise.all([
+    const newsCorrelationPromise = this.newsCorrelator
+      ? marketInfoPromise.then((marketInfo) =>
+          Promise.race([
+            this.newsCorrelator!.correlate(marketInfo.question, trade.timestamp).catch((error) => {
+              logger.warn(`News correlation failed for ${trade.slug}`, error);
+              return null;
+            }),
+            new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000)),
+          ]),
+        )
+      : Promise.resolve(null);
+    const [statsSnapshot, marketInfo, holders, hashdiveProfile, capitalInflow, newsCorrelation] = await Promise.all([
       this.getTraderStats(trade.proxyWallet),
-      this.getMarketInfo(trade),
+      marketInfoPromise,
       this.getHolderStats(trade),
+      hashdiveProfilePromise,
+      capitalInflowPromise,
+      newsCorrelationPromise,
     ]);
-    const hashdiveProfile = await hashdiveProfilePromise;
-    const capitalInflow = await capitalInflowPromise;
 
     const convictionBuild = statsSnapshot.positions.some(
       (position) => position.conditionId === trade.conditionId && position.totalBought > trade.usdcSize * 1.5,
@@ -233,6 +248,17 @@ export class TradeEnricher {
             totalInflow: capitalInflow.totalInflow,
             largestInflow: capitalInflow.largestInflow,
             inflowCount: capitalInflow.inflowCount,
+          }
+        : undefined,
+      newsCorrelation: newsCorrelation
+        ? {
+            hasRecentNews: newsCorrelation.hasRecentNews,
+            articles: newsCorrelation.articles.map(({ title, source, minutesAgo }) => ({
+              title,
+              source,
+              minutesAgo,
+            })),
+            strongestSignal: newsCorrelation.strongestSignal,
           }
         : undefined,
     };

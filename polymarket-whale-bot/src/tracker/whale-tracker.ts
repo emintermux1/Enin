@@ -11,6 +11,7 @@ import { DedupCache } from './dedup-cache';
 import { logger } from '../utils/logger';
 import { CardGenerator } from '../image/card-generator';
 import { createSourceDedupKey, HashdiveDiscovery } from './hashdive-discovery';
+import { NewsCorrelator } from '../classifier/news-correlator';
 import { CoordinationDetector } from '../classifier/coordination-detector';
 
 function delay(ms: number) {
@@ -21,6 +22,7 @@ interface WhaleTrackerOptions {
   database?: Database.Database;
   walletTradeRepo?: WalletTradeRepo;
   polygonscanApi?: PolygonscanApi;
+  newsCorrelator?: NewsCorrelator;
 }
 
 export class WhaleTracker {
@@ -58,6 +60,7 @@ export class WhaleTracker {
       hashdiveApi,
       options.polygonscanApi,
       this.walletTradeRepo,
+      options.newsCorrelator,
     );
     this.coordinationDetector = new CoordinationDetector();
     if (hashdiveApi) {

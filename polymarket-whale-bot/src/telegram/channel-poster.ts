@@ -396,6 +396,16 @@ export class ChannelPoster {
       )
     }
 
+    if (trade.newsCorrelation?.hasRecentNews) {
+      builder.newLine()
+      const article = trade.newsCorrelation.articles[0]
+      if (article) {
+        builder.addText(
+          `📰 News: "${article.title.slice(0, 60)}${article.title.length > 60 ? '…' : ''}" — ${trade.newsCorrelation.strongestSignal}`
+        )
+      }
+    }
+
     const marketIntelligenceParts: string[] = []
     if (trade.holderStats.whalesInMarket > 0) {
       const whaleWord =

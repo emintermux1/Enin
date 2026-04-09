@@ -127,6 +127,15 @@ export interface EnrichedTrade {
     repeatMarkets: string[];
     prefersHighRisk: boolean;
   };
+  newsCorrelation?: {
+    hasRecentNews: boolean;
+    articles: Array<{
+      title: string;
+      source: string;
+      minutesAgo: number;
+    }>;
+    strongestSignal: string;
+  };
 }
 
 export interface LeaderboardEntry {
