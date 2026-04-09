@@ -35,7 +35,7 @@ export interface HashdiveDiscoveryOptions {
 }
 
 export class HashdiveDiscovery {
-  private static readonly POLL_TIMEOUT_MS = 10_000;
+  private static readonly POLL_TIMEOUT_MS = 45_000;
   private timer: NodeJS.Timeout | null = null;
   private running = false;
   private processing = false;

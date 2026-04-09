@@ -78,7 +78,7 @@ export class TradeEnricher {
         logger.warn(`Hashdive profile fetch failed for ${trade.proxyWallet}`, error);
         return null;
       }),
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000)),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 15000)),
     ]);
     const capitalInflowPromise = this.polygonscanApi
       ? Promise.race([
