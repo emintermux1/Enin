@@ -114,6 +114,19 @@ export interface EnrichedTrade {
     isHighPressure: boolean;
     label: string;
   };
+  capitalInflow?: {
+    hasRecentInflow: boolean;
+    totalInflow: number;
+    largestInflow: number;
+    inflowCount: number;
+  };
+  walletPattern?: {
+    totalTrades: number;
+    recentFrequency: number;
+    isRepeatTrader: boolean;
+    repeatMarkets: string[];
+    prefersHighRisk: boolean;
+  };
 }
 
 export interface LeaderboardEntry {
@@ -233,6 +246,10 @@ export interface AppConfig {
   telegram: TelegramConfig;
   tracking: TrackingConfig;
   api: ApiConfig;
+  polygonscan: {
+    apiKey: string;
+    enabled: boolean;
+  };
   runtime: {
     sampleCardPath: string;
     sampleCaptionPath: string;

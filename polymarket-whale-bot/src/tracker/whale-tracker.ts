@@ -1,7 +1,10 @@
 import { AppConfig, EnrichedTrade, PolymarketTrade } from '../types';
+import Database from 'better-sqlite3';
 import { DataApi } from '../api/data-api';
 import { GammaApi } from '../api/gamma-api';
 import { HashdiveApi } from '../api/hashdive-api';
+import { PolygonscanApi } from '../api/polygonscan-api';
+import { WalletTradeRepo } from '../db/wallet-trade-repo';
 import { TradeEnricher } from './trade-enricher';
 import { WalletManager } from './wallet-manager';
 import { DedupCache } from './dedup-cache';
@@ -14,6 +17,12 @@ function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+interface WhaleTrackerOptions {
+  database?: Database.Database;
+  walletTradeRepo?: WalletTradeRepo;
+  polygonscanApi?: PolygonscanApi;
+}
+
 export class WhaleTracker {
   private readonly dataApi: DataApi;
   private readonly gammaApi: GammaApi;
@@ -22,6 +31,7 @@ export class WhaleTracker {
   private readonly tradeEnricher: TradeEnricher;
   private readonly coordinationDetector: CoordinationDetector;
   private readonly hashdiveDiscovery?: HashdiveDiscovery;
+  private readonly walletTradeRepo?: WalletTradeRepo;
   private readonly lastSeenTimestamps = new Map<string, number>();
   private running = false;
   private processing = false;
@@ -31,14 +41,24 @@ export class WhaleTracker {
   constructor(
     private readonly config: AppConfig,
     private readonly onTrade: (trade: EnrichedTrade) => Promise<void>,
+    options: WhaleTrackerOptions = {},
   ) {
     this.dataApi = new DataApi(config.api);
     this.gammaApi = new GammaApi(config.api);
     this.walletManager = new WalletManager(this.dataApi, config.tracking);
+    this.walletTradeRepo = options.walletTradeRepo
+      ?? (options.database ? new WalletTradeRepo(options.database) : undefined);
     const hashdiveApi = config.api.hashdiveApiKey
       ? new HashdiveApi(config.api.hashdiveApiKey)
       : undefined;
-    this.tradeEnricher = new TradeEnricher(this.dataApi, this.gammaApi, this.walletManager, hashdiveApi);
+    this.tradeEnricher = new TradeEnricher(
+      this.dataApi,
+      this.gammaApi,
+      this.walletManager,
+      hashdiveApi,
+      options.polygonscanApi,
+      this.walletTradeRepo,
+    );
     this.coordinationDetector = new CoordinationDetector();
     if (hashdiveApi) {
       this.hashdiveDiscovery = new HashdiveDiscovery({
@@ -50,7 +70,7 @@ export class WhaleTracker {
         dedupCache: this.dedupCache,
         minTradeSize: this.config.tracking.minTradeSize,
         pollIntervalMs: this.config.tracking.hashdivePollIntervalMs,
-        onTrade: this.onTrade,
+        onTrade: async (trade) => this.publishTrade(trade),
       });
     }
   }
@@ -84,7 +104,7 @@ export class WhaleTracker {
       );
     }
 
-    const enriched = await this.tradeEnricher.enrichTrade(sampleTrade);
+    const enriched = await this.decorateTrade(await this.tradeEnricher.enrichTrade(sampleTrade));
     const saved = await cardGenerator.saveSampleCard(enriched, outputPath);
     if (!saved) {
       logger.warn('Canvas unavailable — bot will post text-only alerts (no card images)');
@@ -193,15 +213,41 @@ export class WhaleTracker {
       .sort((a, b) => a.timestamp - b.timestamp);
 
     for (const trade of newTrades) {
-      const enriched = await this.tradeEnricher.enrichTrade(trade);
+      const enriched = await this.decorateTrade(await this.tradeEnricher.enrichTrade(trade));
       enriched.coordinationSignal = this.coordinationDetector.recordAndCheck(
         trade.conditionId,
         trade.proxyWallet,
         trade.side,
         trade.usdcSize,
       );
-      await this.onTrade(enriched);
+      await this.publishTrade(enriched);
       await delay(100);
     }
+  }
+
+  private async publishTrade(trade: EnrichedTrade): Promise<void> {
+    const enriched = trade.walletPattern ? trade : await this.decorateTrade(trade);
+    await this.onTrade(enriched);
+  }
+
+  private async decorateTrade(trade: EnrichedTrade): Promise<EnrichedTrade> {
+    if (!this.walletTradeRepo) {
+      return trade;
+    }
+
+    try {
+      const pattern = this.walletTradeRepo.analyzePattern(trade.trade.proxyWallet);
+      trade.walletPattern = {
+        totalTrades: pattern.totalTrades,
+        recentFrequency: pattern.recentFrequency,
+        isRepeatTrader: pattern.isRepeatTrader,
+        repeatMarkets: pattern.repeatMarkets,
+        prefersHighRisk: pattern.prefersHighRisk,
+      };
+    } catch (error) {
+      logger.warn(`Wallet pattern analysis failed for ${trade.trade.proxyWallet}`, error);
+    }
+
+    return trade;
   }
 }

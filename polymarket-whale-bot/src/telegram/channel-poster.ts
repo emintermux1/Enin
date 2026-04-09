@@ -382,6 +382,20 @@ export class ChannelPoster {
       builder.addText(trade.pressureSignal.label)
     }
 
+    if (trade.capitalInflow?.hasRecentInflow) {
+      builder.newLine()
+      builder.addText(
+        `💸 Fresh Capital: +${formatCompactUsd(trade.capitalInflow.totalInflow)} USDC inflow in last 24h`
+      )
+    }
+
+    if (trade.walletPattern?.isRepeatTrader) {
+      builder.newLine()
+      builder.addText(
+        `🔄 Repeat Pattern: ${trade.walletPattern.recentFrequency.toFixed(1)} trades/day, same market type`
+      )
+    }
+
     const marketIntelligenceParts: string[] = []
     if (trade.holderStats.whalesInMarket > 0) {
       const whaleWord =
