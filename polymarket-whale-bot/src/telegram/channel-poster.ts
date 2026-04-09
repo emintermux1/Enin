@@ -314,14 +314,6 @@ export class ChannelPoster {
         text: ` Best Win: ${formatSignedUsd(trade.traderStats.bestWinAmount)}`,
       })
     }
-    const streak =
-      trade.traderStats.bestWinStreak || trade.traderStats.currentStreak
-    if (streak && streak >= 2) {
-      traderLines.push({
-        emoji: EMOJI_FIRE,
-        text: ` Last Streak: ${streak}W`,
-      })
-    }
     if (trade.holderStats.traderIsTopHolder) {
       traderLines.push({
         emoji: null,
