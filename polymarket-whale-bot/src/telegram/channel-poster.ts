@@ -261,7 +261,7 @@ export class ChannelPoster {
     if (trade.marketInfo.volume > 0) {
       builder.addText(` · Vol: ${formatCompactUsd(trade.marketInfo.volume)}`)
     }
-    builder.newLine()
+    builder.newLine().newLine()
     builder.addPremiumEmoji(
       EMOJI_CALENDAR,
       ` Resolves: ${formatResolveDate(trade.marketInfo.endDate)}`
@@ -365,6 +365,9 @@ export class ChannelPoster {
     interface SignalEntry {
       priority: number
       text: string
+      url?: string
+      linkText?: string
+      suffix?: string
     }
 
     const signals: SignalEntry[] = []
@@ -382,9 +385,16 @@ export class ChannelPoster {
         article.title.length > 55
           ? `${article.title.slice(0, 55)}…`
           : article.title
+      const timeAgo =
+        article.minutesAgo < 60
+          ? `${article.minutesAgo}min ago`
+          : `${Math.round(article.minutesAgo / 60)}h ago`
       signals.push({
         priority: 90,
-        text: `📰 "${headline}" — ${article.minutesAgo < 60 ? `${article.minutesAgo}min ago` : `${Math.round(article.minutesAgo / 60)}h ago`}`,
+        text: `📰 "${headline}" — ${timeAgo}`,
+        url: article.url || undefined,
+        linkText: headline,
+        suffix: ` — ${timeAgo}`,
       })
     }
 
@@ -430,7 +440,13 @@ export class ChannelPoster {
     signals.sort((a, b) => b.priority - a.priority)
     for (const signal of signals.slice(0, 2)) {
       builder.newLine()
-      builder.addText(signal.text)
+      if (signal.url) {
+        builder.addText('📰 ')
+        builder.addLink(signal.linkText!, signal.url)
+        builder.addText(signal.suffix!)
+      } else {
+        builder.addText(signal.text)
+      }
     }
 
     const marketIntelligenceParts: string[] = []

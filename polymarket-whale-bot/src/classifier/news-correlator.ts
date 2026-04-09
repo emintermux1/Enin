@@ -62,7 +62,7 @@ export class NewsCorrelator {
     let articles = this.cache.get(cacheKey);
 
     if (!articles) {
-      articles = (await this.newsApi.searchNews(keywords, 5)).slice(0, 3);
+      articles = (await this.newsApi.searchNewsExpanded(keywords, 5)).slice(0, 3);
       this.cache.set(cacheKey, articles);
     }
 
