@@ -29,7 +29,29 @@ export class DataApi {
   }
 
   async getClosedPositions(user: string, limit = 200): Promise<ClosedPosition[]> {
-    return this.client.get<ClosedPosition[]>(`/closed-positions?user=${user}&limit=${limit}`);
+    const allPositions: ClosedPosition[] = [];
+    let offset = 0;
+    const pageSize = 50;
+    const maxPages = Math.ceil(limit / pageSize);
+
+    for (let page = 0; page < maxPages; page += 1) {
+      const positions = await this.client.get<ClosedPosition[]>(
+        `/closed-positions?user=${user}&limit=${pageSize}&offset=${offset}&sortBy=TIMESTAMP&sortDirection=DESC`,
+      );
+      allPositions.push(...positions);
+
+      if (positions.length < pageSize) {
+        break;
+      }
+
+      offset += pageSize;
+
+      if (page < maxPages - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+    }
+
+    return allPositions.slice(0, limit);
   }
 
   async getHolders(conditionId: string, limit = 20, minBalance = 1): Promise<HolderGroup[]> {

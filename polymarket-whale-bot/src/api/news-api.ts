@@ -1,6 +1,19 @@
 import axios from 'axios';
 import { logger } from '../utils/logger';
 
+const SPAM_KEYWORDS = [
+  'referral code', 'referral link', 'ref code', 'promo code', 'coupon code',
+  'sign up bonus', 'signup bonus', 'bonus by', 'bonus code', 'use code',
+  'discount code', 'affiliate', 'sponsored', 'ad:', '[ad]', 'partner link',
+  'free trial', 'subscribe now', 'click here', 'limited offer', 'special offer',
+  'earn money', 'make money', 'join now', 'register now', 'giveaway',
+];
+
+export function isSpamHeadline(title: string): boolean {
+  const lower = title.toLowerCase();
+  return SPAM_KEYWORDS.some((keyword) => lower.includes(keyword));
+}
+
 export interface NewsArticle {
   title: string;
   source: string;
@@ -78,6 +91,10 @@ export class NewsApi {
       const cleanTitle = title.replace(/\s*-\s*[^-]+$/, '').trim();
       const cleanSnippet = description.replace(/<[^>]*>/g, '').trim().slice(0, 200);
 
+      if (isSpamHeadline(cleanTitle)) {
+        continue;
+      }
+
       articles.push({
         title: cleanTitle,
         source,
@@ -110,7 +127,7 @@ export class NewsApi {
         .filter((word) => word.length > 3);
       const filtered = articles.filter((article) => {
         const text = `${article.title} ${article.snippet}`.toLowerCase();
-        return keywords.some((keyword) => text.includes(keyword));
+        return keywords.some((keyword) => text.includes(keyword)) && !isSpamHeadline(article.title);
       });
 
       return filtered.slice(0, limit).map((article) => ({

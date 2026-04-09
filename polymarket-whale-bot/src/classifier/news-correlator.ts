@@ -1,5 +1,5 @@
 import { LRUCache } from 'lru-cache';
-import { NewsApi, NewsArticle } from '../api/news-api';
+import { isSpamHeadline, NewsApi, NewsArticle } from '../api/news-api';
 
 export interface NewsCorrelation {
   hasRecentNews: boolean;
@@ -73,9 +73,13 @@ export class NewsCorrelator {
     let articles = this.cache.get(cacheKey);
 
     if (!articles) {
-      articles = (await this.newsApi.searchNewsExpanded(keywords, 5)).slice(0, 3);
+      articles = (await this.newsApi.searchNewsExpanded(keywords, 5))
+        .filter((article) => !isSpamHeadline(article.title))
+        .slice(0, 3);
       this.cache.set(cacheKey, articles);
     }
+
+    articles = articles.filter((article) => !isSpamHeadline(article.title));
 
     const referenceTimestamp = tradeTimestamp > 0 ? tradeTimestamp : Math.floor(Date.now() / 1000);
     const cutoff = referenceTimestamp - maxAgeMinutes * 60;
@@ -119,9 +123,13 @@ export class NewsCorrelator {
     let articles = this.cache.get(cacheKey);
 
     if (!articles) {
-      articles = (await this.newsApi.searchNewsExpanded(keywords, 10)).slice(0, 5);
+      articles = (await this.newsApi.searchNewsExpanded(keywords, 10))
+        .filter((article) => !isSpamHeadline(article.title))
+        .slice(0, 5);
       this.cache.set(cacheKey, articles);
     }
+
+    articles = articles.filter((article) => !isSpamHeadline(article.title));
 
     const referenceTimestamp = tradeTimestamp > 0 ? tradeTimestamp : Math.floor(Date.now() / 1000);
     const forwardCutoff = referenceTimestamp + forwardWindowMinutes * 60;
