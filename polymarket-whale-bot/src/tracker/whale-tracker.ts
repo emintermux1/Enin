@@ -8,6 +8,7 @@ import { DedupCache } from './dedup-cache';
 import { logger } from '../utils/logger';
 import { CardGenerator } from '../image/card-generator';
 import { createSourceDedupKey, HashdiveDiscovery } from './hashdive-discovery';
+import { CoordinationDetector } from '../classifier/coordination-detector';
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -19,6 +20,7 @@ export class WhaleTracker {
   private readonly walletManager: WalletManager;
   private readonly dedupCache = new DedupCache();
   private readonly tradeEnricher: TradeEnricher;
+  private readonly coordinationDetector: CoordinationDetector;
   private readonly hashdiveDiscovery?: HashdiveDiscovery;
   private readonly lastSeenTimestamps = new Map<string, number>();
   private running = false;
@@ -37,12 +39,14 @@ export class WhaleTracker {
       ? new HashdiveApi(config.api.hashdiveApiKey)
       : undefined;
     this.tradeEnricher = new TradeEnricher(this.dataApi, this.gammaApi, this.walletManager, hashdiveApi);
+    this.coordinationDetector = new CoordinationDetector();
     if (hashdiveApi) {
       this.hashdiveDiscovery = new HashdiveDiscovery({
         hashdiveApi,
         gammaApi: this.gammaApi,
         walletManager: this.walletManager,
         tradeEnricher: this.tradeEnricher,
+        coordinationDetector: this.coordinationDetector,
         dedupCache: this.dedupCache,
         minTradeSize: this.config.tracking.minTradeSize,
         pollIntervalMs: this.config.tracking.hashdivePollIntervalMs,
@@ -190,6 +194,12 @@ export class WhaleTracker {
 
     for (const trade of newTrades) {
       const enriched = await this.tradeEnricher.enrichTrade(trade);
+      enriched.coordinationSignal = this.coordinationDetector.recordAndCheck(
+        trade.conditionId,
+        trade.proxyWallet,
+        trade.side,
+        trade.usdcSize,
+      );
       await this.onTrade(enriched);
       await delay(100);
     }

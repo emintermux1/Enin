@@ -11,7 +11,7 @@ import {
   formatUsd,
 } from '../utils/formatter'
 import { logger } from '../utils/logger'
-import { TRADER_TYPE_META } from '../classifier/trader-classifier'
+import { getTradeTypeLabel } from '../classifier/trader-classifier'
 import {
   TRADER_TYPE_PREMIUM,
   EMOJI_CALENDAR,
@@ -235,7 +235,7 @@ export class ChannelPoster {
 
   private buildCaption(trade: EnrichedTrade): CaptionResult {
     const typeEmoji = TRADER_TYPE_PREMIUM[trade.primaryType]
-    const typeMeta = TRADER_TYPE_META[trade.primaryType]
+    const dynamicLabel = getTradeTypeLabel(trade.primaryType, trade.trade.side)
     const displayName =
       trade.trade.name ||
       trade.trade.pseudonym ||
@@ -252,7 +252,7 @@ export class ChannelPoster {
 
     const builder = new CaptionBuilder()
 
-    builder.addPremiumEmoji(typeEmoji, ` ${typeMeta.label}`)
+    builder.addPremiumEmoji(typeEmoji, ` ${dynamicLabel}`)
     if (trade.isFreshWallet) {
       builder.addText(' | 🆕 Fresh Wallet Detected')
     }
@@ -359,6 +359,29 @@ export class ChannelPoster {
       builder.newLine()
     }
 
+    if (trade.insiderScore && trade.insiderScore.score >= 50) {
+      builder.newLine()
+      const topSignals = trade.insiderScore.signals.slice(0, 2).join(' · ')
+      builder.addText(`🎯 Score: ${trade.insiderScore.score}/100 — ${topSignals}`)
+    }
+
+    if (trade.unusualScore && trade.unusualScore.score >= 40) {
+      builder.newLine()
+      builder.addText(`⚠️ Unusual: ${trade.unusualScore.signals[0] || ''}`)
+    }
+
+    if (trade.coordinationSignal?.isCoordinated) {
+      builder.newLine()
+      builder.addText(
+        `🧠 Multi-Wallet: ${trade.coordinationSignal.walletsOnSameSide} wallets ${trade.trade.side === 'BUY' ? 'bought' : 'sold'} same side in ${trade.coordinationSignal.timeWindowMinutes}min (${formatCompactUsd(trade.coordinationSignal.totalAmount)} total)`
+      )
+    }
+
+    if (trade.pressureSignal?.isHighPressure) {
+      builder.newLine()
+      builder.addText(trade.pressureSignal.label)
+    }
+
     const marketIntelligenceParts: string[] = []
     if (trade.holderStats.whalesInMarket > 0) {
       const whaleWord =
@@ -380,17 +403,6 @@ export class ChannelPoster {
     if (marketIntelligenceParts.length > 0) {
       builder.newLine()
       builder.addText(marketIntelligenceParts.join(' · '))
-    }
-
-    if (trade.insiderScore && trade.insiderScore.score >= 50) {
-      builder.newLine()
-      const topSignals = trade.insiderScore.signals.slice(0, 2).join(' · ')
-      builder.addText(`🎯 Score: ${trade.insiderScore.score}/100 — ${topSignals}`)
-    }
-
-    if (trade.unusualScore && trade.unusualScore.score >= 40) {
-      builder.newLine()
-      builder.addText(`⚠️ Unusual: ${trade.unusualScore.signals[0] || ''}`)
     }
 
     return builder.build()

@@ -100,6 +100,20 @@ export interface EnrichedTrade {
     signals: string[];
     isUnusual: boolean;
   };
+  coordinationSignal?: {
+    walletsOnSameSide: number;
+    totalAmount: number;
+    timeWindowMinutes: number;
+    isCoordinated: boolean;
+  };
+  pressureSignal?: {
+    whalesOnSide: number;
+    totalTopHolders: number;
+    side: string;
+    dominancePercent: number;
+    isHighPressure: boolean;
+    label: string;
+  };
 }
 
 export interface LeaderboardEntry {

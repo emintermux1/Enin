@@ -5,6 +5,7 @@ import { HashdiveApi, HashdiveTraderProfile } from '../api/hashdive-api';
 import { classifyTrader } from '../classifier/trader-classifier';
 import { classifyRisk } from '../classifier/risk-classifier';
 import { calculateInsiderScore } from '../classifier/insider-scorer';
+import { detectPressure } from '../classifier/pressure-detector';
 import { calculateUnusualScore } from '../classifier/unusual-scorer';
 import {
   DataPosition,
@@ -143,6 +144,12 @@ export class TradeEnricher {
       closedPositions: effectiveClosedPositions,
     });
     const holderStats = await this.decorateInsiderCount(holders, trade.proxyWallet, effectiveTraderStats);
+    const pressureSignal = detectPressure(
+      holderStats.topHoldersOnSide,
+      holderStats.totalTopHolders,
+      trade.outcome,
+      holderStats.whalesInMarket,
+    );
     const classification = classifyTrader({
       trade,
       traderStats: effectiveTraderStats,
@@ -187,6 +194,7 @@ export class TradeEnricher {
         : undefined,
       insiderScore,
       unusualScore,
+      pressureSignal,
     };
   }
 

@@ -7,6 +7,16 @@ export const TRADER_TYPE_META: Record<TraderType, { label: string; emoji: string
   CONVICTION_BUILD: { label: 'Conviction Build', emoji: '🔥' },
 };
 
+export function getTradeTypeLabel(primaryType: TraderType, side: 'BUY' | 'SELL'): string {
+  if (primaryType === 'WHALE') {
+    return side === 'BUY' ? 'Whale Entry' : 'Whale Exit';
+  }
+  if (primaryType === 'INSIDER') {
+    return side === 'BUY' ? 'Insider Entry' : 'Insider Exit';
+  }
+  return TRADER_TYPE_META[primaryType].label;
+}
+
 const PRIORITY: TraderType[] = ['INSIDER', 'WHALE', 'TOP_HOLDER', 'CONVICTION_BUILD'];
 
 export interface TraderClassificationInput {

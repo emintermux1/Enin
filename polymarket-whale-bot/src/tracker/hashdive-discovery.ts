@@ -2,6 +2,7 @@ import { HashdiveApi } from '../api/hashdive-api';
 import { GammaApi } from '../api/gamma-api';
 import { EnrichedTrade, PolymarketTrade } from '../types';
 import { logger } from '../utils/logger';
+import { CoordinationDetector } from '../classifier/coordination-detector';
 import { DedupCache } from './dedup-cache';
 import { TradeEnricher } from './trade-enricher';
 import { WalletManager } from './wallet-manager';
@@ -26,6 +27,7 @@ export interface HashdiveDiscoveryOptions {
   gammaApi: GammaApi;
   walletManager: WalletManager;
   tradeEnricher: TradeEnricher;
+  coordinationDetector: CoordinationDetector;
   dedupCache: DedupCache;
   minTradeSize: number;
   pollIntervalMs: number;
@@ -134,6 +136,12 @@ export class HashdiveDiscovery {
     }
 
     const enriched = await this.options.tradeEnricher.enrichTrade(mappedTrade);
+    enriched.coordinationSignal = this.options.coordinationDetector.recordAndCheck(
+      mappedTrade.conditionId,
+      mappedTrade.proxyWallet,
+      mappedTrade.side,
+      mappedTrade.usdcSize,
+    );
     await this.options.onTrade(enriched);
     await delay(100);
   }
