@@ -160,7 +160,7 @@ export class DailyLeaderboard {
     const wallet = entry.proxyWallet
     const [positions, closedPositions] = await Promise.all([
       this.dataApi.getPositions(wallet, 1, 200).catch(() => []),
-      this.dataApi.getClosedPositions(wallet, 200).catch(() => []),
+      this.dataApi.getClosedPositions(wallet, 100).catch(() => []),
     ])
     const wins = closedPositions.filter((position) => Number(position.realizedPnl || 0) > 0).length
 

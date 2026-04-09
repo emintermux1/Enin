@@ -360,7 +360,7 @@ export class TradeEnricher {
 
     const [positionsResult, closedResult, portfolioResult, recentActivityResult] = await Promise.allSettled([
       this.dataApi.getPositions(wallet, 1, 200),
-      this.dataApi.getClosedPositions(wallet, 200),
+      this.dataApi.getClosedPositions(wallet, 100),
       this.dataApi.getPortfolioValue(wallet),
       this.dataApi.getActivity(wallet, 100),
     ]);
