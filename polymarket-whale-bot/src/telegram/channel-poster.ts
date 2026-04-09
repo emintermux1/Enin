@@ -340,6 +340,12 @@ export class ChannelPoster {
         text: ` Best Win: ${formatSignedUsd(trade.traderStats.bestWinAmount)}`,
       })
     }
+    if (trade.holderStats.traderIsTopHolder) {
+      traderLines.push({
+        emoji: null,
+        text: `👑 Top ${trade.holderStats.topHoldersOnSide}/${trade.holderStats.totalTopHolders} Holder`,
+      })
+    }
     if (trade.topCategory) {
       traderLines.push({ emoji: null, text: `🏷️ Top Category: ${trade.topCategory}` })
     }

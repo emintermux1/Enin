@@ -3,6 +3,25 @@ import { WhaleTracker } from './tracker/whale-tracker';
 import { ChannelPoster } from './telegram/channel-poster';
 import { logger } from './utils/logger';
 
+let fatalExitTimer: NodeJS.Timeout | null = null;
+
+function scheduleFatalExit() {
+  if (fatalExitTimer) {
+    return;
+  }
+  fatalExitTimer = setTimeout(() => process.exit(1), 30_000);
+}
+
+process.on('uncaughtException', (err) => {
+  logger.error('Uncaught exception', err);
+  scheduleFatalExit();
+});
+
+process.on('unhandledRejection', (err) => {
+  logger.error('Unhandled rejection', err);
+  scheduleFatalExit();
+});
+
 async function main() {
   logger.info('Starting Polymarket Whale Bot...');
 
@@ -34,5 +53,5 @@ async function main() {
 
 main().catch((error) => {
   logger.error('Fatal startup error', error);
-  process.exit(1);
+  scheduleFatalExit();
 });
