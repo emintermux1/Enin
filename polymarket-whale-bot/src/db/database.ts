@@ -55,6 +55,12 @@ export function initDatabase(): Database.Database {
 
     CREATE INDEX IF NOT EXISTS idx_market_volumes_condition ON market_volumes(condition_id);
     CREATE INDEX IF NOT EXISTS idx_market_volumes_timestamp ON market_volumes(timestamp);
+
+    CREATE TABLE IF NOT EXISTS bot_state (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at INTEGER DEFAULT (unixepoch())
+    );
   `)
 
   const migrations = [

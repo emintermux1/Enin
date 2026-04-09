@@ -2,6 +2,7 @@ import { config } from './config';
 import Database from 'better-sqlite3';
 import { initDatabase } from './db/database';
 import { WalletTradeRepo } from './db/wallet-trade-repo';
+import { DataApi } from './api/data-api';
 import { GammaApi } from './api/gamma-api';
 import { PolygonscanApi } from './api/polygonscan-api';
 import { NewsApi } from './api/news-api';
@@ -9,6 +10,7 @@ import { NewsCorrelator } from './classifier/news-correlator';
 import { WhaleTracker } from './tracker/whale-tracker';
 import { PriceHistory } from './tracker/price-history';
 import { ResolutionChecker } from './tracker/resolution-checker';
+import { DailyLeaderboard } from './tracker/daily-leaderboard';
 import { ChannelPoster } from './telegram/channel-poster';
 import { logger } from './utils/logger';
 
@@ -44,6 +46,7 @@ async function main() {
   const newsCorrelator = new NewsCorrelator(new NewsApi());
   const priceHistory = new PriceHistory();
   const poster = new ChannelPoster(config.telegram);
+  const dailyLeaderboard = new DailyLeaderboard(new DataApi(config.api), poster, database);
   const tracker = new WhaleTracker(config, async (enrichedTrade) => {
     try {
       await poster.postAlert(enrichedTrade);
@@ -70,11 +73,13 @@ async function main() {
   await poster.launch();
   await tracker.start();
   resolutionChecker.start();
+  dailyLeaderboard.start();
 
   const shutdown = () => {
     logger.info('Shutting down...');
     tracker.stop();
     resolutionChecker.stop();
+    dailyLeaderboard.stop();
     poster.stop();
     database?.close();
     database = null;

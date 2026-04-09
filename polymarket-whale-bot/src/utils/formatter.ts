@@ -33,6 +33,19 @@ export function formatCompactUsd(value: number): string {
   }).format(value);
 }
 
+export function formatSignedCompactUsd(value: number): string {
+  const absolute = Math.abs(value);
+  let formatted: string;
+  if (absolute >= 1_000_000) {
+    formatted = `$${(absolute / 1_000_000).toFixed(1)}M`;
+  } else if (absolute >= 1_000) {
+    formatted = `$${Math.round(absolute / 1_000)}K`;
+  } else {
+    formatted = `$${Math.round(absolute)}`;
+  }
+  return value >= 0 ? `+${formatted}` : `-${formatted}`;
+}
+
 export function formatPriceCents(price: number): string {
   return `${Math.round(price * 100)}¢`;
 }

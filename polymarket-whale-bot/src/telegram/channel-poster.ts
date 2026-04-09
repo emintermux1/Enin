@@ -1,12 +1,19 @@
 import fs from 'node:fs'
 import { Markup, Telegraf } from 'telegraf'
 import { CardGenerator } from '../image/card-generator'
-import { EnrichedTrade, ResolutionAlert, TelegramConfig, TraderType } from '../types'
+import {
+  EnrichedTrade,
+  LeaderboardTrader,
+  ResolutionAlert,
+  TelegramConfig,
+  TraderType,
+} from '../types'
 import {
   formatCompactUsd,
   formatMultiplier,
   formatPriceCents,
   formatResolveDate,
+  formatSignedCompactUsd,
   formatSignedUsd,
   formatUsd,
 } from '../utils/formatter'
@@ -204,6 +211,77 @@ export class ChannelPoster {
       image,
       eventSlug: alert.marketSlug,
     })
+  }
+
+  async postLeaderboard(
+    winners: LeaderboardTrader[],
+    losers: LeaderboardTrader[]
+  ): Promise<number> {
+    const { text, entities } = this.buildLeaderboardCaption(winners, losers)
+
+    if (this.dryRun) {
+      logger.info(`Dry-run leaderboard post:\n${text}`)
+      return 1
+    }
+
+    const card = await this.cardGenerator.generateLeaderboardCard()
+    let messageId: number
+    if (card) {
+      const result = await this.bot.telegram.sendPhoto(
+        this.config.channelId,
+        { source: card },
+        { caption: text, caption_entities: entities } as any
+      )
+      messageId = result.message_id
+    } else {
+      const result = await this.bot.telegram.sendMessage(this.config.channelId, text, {
+        entities,
+        link_preview_options: { is_disabled: true },
+      } as any)
+      messageId = result.message_id
+    }
+
+    await this.bot.telegram.pinChatMessage(this.config.channelId, messageId, {
+      disable_notification: true,
+    })
+
+    return messageId
+  }
+
+  async editLeaderboard(
+    messageId: number,
+    winners: LeaderboardTrader[],
+    losers: LeaderboardTrader[]
+  ): Promise<void> {
+    const { text, entities } = this.buildLeaderboardCaption(winners, losers)
+
+    if (this.dryRun) {
+      logger.info(`Dry-run leaderboard edit (${messageId}):\n${text}`)
+      return
+    }
+
+    try {
+      await this.bot.telegram.editMessageCaption(
+        this.config.channelId,
+        messageId,
+        undefined,
+        text,
+        { caption_entities: entities } as any
+      )
+    } catch (error: any) {
+      const errorMessage = String(error?.message || error)
+      if (errorMessage.includes('message is not modified')) {
+        return
+      }
+      if (errorMessage.includes('there is no caption in the message to edit')) {
+        await this.bot.telegram.editMessageText(this.config.channelId, messageId, undefined, text, {
+          entities,
+          link_preview_options: { is_disabled: true },
+        } as any)
+        return
+      }
+      throw error
+    }
   }
 
   private async sendPost(params: {
@@ -573,6 +651,57 @@ export class ChannelPoster {
       builder.newLine().newLine()
       builder.addText(marketIntelligenceParts.join(' · '))
     }
+
+    return builder.build()
+  }
+
+  private buildLeaderboardCaption(
+    winners: LeaderboardTrader[],
+    losers: LeaderboardTrader[]
+  ): CaptionResult {
+    const builder = new CaptionBuilder()
+    const rankEmojis = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟']
+
+    builder.addText('🐋 TOP WHALES & INSIDERS TODAY 🏆')
+    builder.newLine().newLine()
+
+    for (const trader of winners) {
+      const emoji = rankEmojis[trader.rank - 1] || `${trader.rank}.`
+      builder.addText(`${emoji} `)
+      builder.addLink(trader.name, `https://polymarket.com/profile/${trader.wallet}`)
+      if (trader.xUsername) {
+        builder.addText(' · ')
+        builder.addLink('𝕏', `https://x.com/${trader.xUsername}`)
+      }
+      builder.addText(
+        ` ${formatSignedCompactUsd(trader.pnl)} | Wins: ${trader.wins}/${trader.totalBets} | ${trader.livePositions} live`
+      )
+      builder.newLine()
+    }
+
+    if (losers.length > 0) {
+      builder.newLine()
+      builder.addText('📉 BIGGEST LOSERS')
+      builder.newLine()
+      for (const trader of losers) {
+        const emoji = rankEmojis[trader.rank - 1] || `${trader.rank}.`
+        builder.addText(`${emoji} `)
+        builder.addLink(trader.name, `https://polymarket.com/profile/${trader.wallet}`)
+        if (trader.xUsername) {
+          builder.addText(' · ')
+          builder.addLink('𝕏', `https://x.com/${trader.xUsername}`)
+        }
+        builder.addText(
+          ` ${formatSignedCompactUsd(trader.pnl)} | Wins: ${trader.wins}/${trader.totalBets} | ${trader.livePositions} live`
+        )
+        builder.newLine()
+      }
+    }
+
+    builder.newLine()
+    const now = new Date()
+    const timeStr = `${String(now.getUTCHours()).padStart(2, '0')}:${String(now.getUTCMinutes()).padStart(2, '0')} UTC`
+    builder.addText(`🕘 Last Updated: ${timeStr}`)
 
     return builder.build()
   }
