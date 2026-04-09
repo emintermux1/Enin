@@ -23,6 +23,8 @@ export interface PolymarketTrade {
 
 export interface TraderStats {
   totalPositionsValue: number;
+  livePositions: number;
+  totalBets: number;
   closedPositions: number;
   wins: number;
   losses: number;
@@ -63,7 +65,7 @@ export interface HolderStats {
   traderHolderRank: number | null;
 }
 
-export type TraderType = 'WHALE' | 'INSIDER' | 'TOP_HOLDER' | 'CONVICTION_BUILD';
+export type TraderType = 'WHALE' | 'INSIDER' | 'SMART_MONEY' | 'TOP_HOLDER' | 'CONVICTION_BUILD';
 
 export interface RiskLevel {
   level: string;

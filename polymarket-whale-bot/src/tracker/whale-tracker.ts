@@ -528,6 +528,7 @@ export class WhaleTracker {
       updated.traderStats.wins = winRate.wins;
       updated.traderStats.losses = winRate.losses;
       updated.traderStats.closedPositions = winRate.wins + winRate.losses;
+      updated.traderStats.totalBets = updated.traderStats.livePositions + updated.traderStats.closedPositions;
       updated.traderStats.winRateLabel = `${Math.round(winRate.winRate)}% (${winRate.wins}W-${winRate.losses}L)`;
     } else if (scrapedTrade.winRate) {
       updated.traderStats.winRateLabel = scrapedTrade.winRate;

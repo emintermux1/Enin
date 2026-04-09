@@ -27,6 +27,7 @@ type CanvasModule = {
 const LABEL_COLORS: Record<TraderType, string> = {
   WHALE: '#60a5fa',
   INSIDER: '#f59e0b',
+  SMART_MONEY: '#22c55e',
   TOP_HOLDER: '#a78bfa',
   CONVICTION_BUILD: '#f87171',
 }

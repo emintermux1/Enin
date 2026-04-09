@@ -129,7 +129,7 @@ function formatCalledAgo(daysAgo: number): string {
 }
 
 function toTraderType(value: string): TraderType {
-  if (value === 'INSIDER' || value === 'TOP_HOLDER' || value === 'CONVICTION_BUILD') {
+  if (value === 'INSIDER' || value === 'SMART_MONEY' || value === 'TOP_HOLDER' || value === 'CONVICTION_BUILD') {
     return value
   }
   return 'WHALE'
@@ -246,6 +246,59 @@ export class ChannelPoster {
     })
 
     return messageId
+  }
+
+  async postHeatmap(
+    markets: Array<{
+      marketQuestion: string
+      tradeCount: number
+      totalVolume: number
+      uniqueWallets: number
+    }>
+  ): Promise<void> {
+    const builder = new CaptionBuilder()
+    builder.addText('🔥 MARKET HEATMAP — Last 12h\n')
+    builder.addText('━━━━━━━━━━━━━━━━━\n')
+
+    const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣']
+
+    for (const [i, market] of markets.entries()) {
+      const medal = medals[i] || `${i + 1}.`
+      const volLabel = formatCompactUsd(Number(market.totalVolume || 0))
+
+      builder.addText(`${medal} `)
+      builder.addBold(
+        market.marketQuestion.length > 40
+          ? `${market.marketQuestion.slice(0, 40)}…`
+          : market.marketQuestion
+      )
+      builder.newLine()
+      builder.addText(
+        `   ${market.tradeCount} trades · ${volLabel} vol · ${market.uniqueWallets} whales`
+      )
+      builder.newLine()
+    }
+
+    builder.newLine()
+    builder.addText(
+      `🕐 Updated: ${new Date().toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: 'UTC',
+      })} UTC`
+    )
+
+    const { text, entities } = builder.build()
+
+    if (this.dryRun) {
+      logger.info(`Dry-run heatmap post:\n${text}`)
+      return
+    }
+
+    await this.bot.telegram.sendMessage(this.config.channelId, text, {
+      entities,
+      link_preview_options: { is_disabled: true },
+    } as any)
   }
 
   async editLeaderboard(
@@ -380,7 +433,11 @@ export class ChannelPoster {
 
     const builder = new CaptionBuilder()
 
-    builder.addPremiumEmoji(typeEmoji, ` ${dynamicLabel}`)
+    if (typeEmoji) {
+      builder.addPremiumEmoji(typeEmoji, ` ${dynamicLabel}`)
+    } else {
+      builder.addText(dynamicLabel)
+    }
     builder.newLine().newLine()
     builder.addLink(question, marketUrl)
     if (trade.marketInfo.volume > 0) {
@@ -444,7 +501,7 @@ export class ChannelPoster {
     const traderLines: Array<{ emoji: PremiumEmoji | null; text: string }> = []
     traderLines.push({
       emoji: null,
-      text: `Positions: ${formatCompactUsd(trade.traderStats.totalPositionsValue)} · ${trade.traderStats.closedPositions} bets`,
+      text: `Positions: ${formatCompactUsd(trade.traderStats.totalPositionsValue)} · ${trade.traderStats.livePositions} live · ${trade.traderStats.closedPositions} closed`,
     })
     if (trade.traderStats.closedPositions >= 3) {
       traderLines.push({
