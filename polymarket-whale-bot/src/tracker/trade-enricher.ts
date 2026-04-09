@@ -120,7 +120,7 @@ export class TradeEnricher {
     let effectiveLosses = statsSnapshot.traderStats.losses;
     const hashdiveResolvedCount = (hashdiveProfile?.resolvedWins || 0) + (hashdiveProfile?.resolvedLosses || 0);
     let effectiveClosedPositions = statsSnapshot.traderStats.closedPositions;
-    if (hashdiveProfile && hashdiveResolvedCount >= 5) {
+    if (hashdiveProfile && hashdiveResolvedCount >= 1) {
       effectiveWinRate = hashdiveProfile.resolvedWinRate;
       effectiveWins = hashdiveProfile.resolvedWins;
       effectiveLosses = hashdiveProfile.resolvedLosses;
@@ -163,6 +163,9 @@ export class TradeEnricher {
       ? hashdiveProfile.totalTrades
       : statsSnapshot.traderStats.closedPositions;
     const isFreshWallet = totalClosedPositions >= 0 && totalClosedPositions < 10 && statsSnapshot.positions.length < 5;
+    if (isFreshWallet) {
+      logger.info(`Fresh wallet detected: ${trade.proxyWallet} (${totalClosedPositions} closed, ${statsSnapshot.positions.length} open)`);
+    }
     const insiderScore = calculateInsiderScore({
       winRate: effectiveWinRate,
       closedPositions: effectiveClosedPositions,
@@ -311,7 +314,10 @@ export class TradeEnricher {
     const totalPositionsValue = positions.reduce((sum, position) => sum + Number(position.currentValue || 0), 0);
     const totalRealizedPnl = closedPositions.reduce((sum, position) => sum + Number(position.realizedPnl || 0), 0);
     const wins = closedPositions.filter((position) => Number(position.realizedPnl || 0) > 0).length;
-    const losses = Math.max(0, closedPositions.length - wins);
+    const losses = closedPositions.filter((position) => Number(position.realizedPnl || 0) <= 0).length;
+    if (closedPositions.length > 20 && wins === closedPositions.length) {
+      logger.warn(`Suspicious closed-position win rate for ${wallet}: ${wins}/${closedPositions.length} positions have positive realized PnL`);
+    }
     const winRate = closedPositions.length > 0 ? (wins / closedPositions.length) * 100 : 0;
     const winningPnls = closedPositions
       .map((position) => Number(position.realizedPnl || 0))
@@ -419,7 +425,7 @@ export class TradeEnricher {
     const traderHolderRank = traderRankIndex >= 0 ? traderRankIndex + 1 : null;
     const addresses = [...new Set(holders.map((holder) => normalizeWallet(holder.proxyWallet)).filter(Boolean))];
     const whalesInMarket = new Set(addresses.filter((address) => this.walletManager.isTracked(address))).size;
-    const totalTopHolders = Math.min(addresses.length, 20) || Math.min(holders.length, 20);
+    const totalTopHolders = 20;
 
     return {
       topHoldersOnSide: sameSideHolders.length,
@@ -427,7 +433,7 @@ export class TradeEnricher {
       side: trade.outcome || (trade.outcomeIndex === 0 ? 'Yes' : 'No'),
       whalesInMarket,
       insidersInMarket: 0,
-      traderIsTopHolder: addresses.includes(traderWalletNorm),
+      traderIsTopHolder: traderHolderRank !== null,
       traderHolderRank,
       addresses,
     };
@@ -461,29 +467,41 @@ export class TradeEnricher {
 
   private determineTopCategory(
     positions: DataPosition[],
-    closedPositions: Array<{ title: string }>,
+    closedPositions: Array<{ title: string; realizedPnl: number; timestamp: number }>,
   ): string | null {
-    const allTitles = [...positions.map((position) => position.title), ...closedPositions.map((position) => position.title)].filter(Boolean);
+    const categoryCounts: Record<string, number> = {};
 
-    if (allTitles.length === 0) {
-      return null;
-    }
-
-    const scores: Record<string, number> = {};
-    for (const title of allTitles) {
-      const lower = title.toLowerCase();
+    for (const position of closedPositions) {
+      const titleLower = position.title?.toLowerCase();
+      if (!titleLower) {
+        continue;
+      }
       for (const [category, keywords] of Object.entries(TradeEnricher.CATEGORY_KEYWORDS)) {
-        for (const keyword of keywords) {
-          if (lower.includes(keyword)) {
-            scores[category] = (scores[category] || 0) + 1;
-            break;
-          }
+        if (keywords.some((keyword) => titleLower.includes(keyword))) {
+          categoryCounts[category] = (categoryCounts[category] || 0) + 1;
+          break;
         }
       }
     }
 
-    const sorted = Object.entries(scores).sort((a, b) => b[1] - a[1]);
-    return sorted[0]?.[0] ?? null;
+    for (const position of positions) {
+      const titleLower = position.title?.toLowerCase();
+      if (!titleLower) {
+        continue;
+      }
+      for (const [category, keywords] of Object.entries(TradeEnricher.CATEGORY_KEYWORDS)) {
+        if (keywords.some((keyword) => titleLower.includes(keyword))) {
+          categoryCounts[category] = (categoryCounts[category] || 0) + 1;
+          break;
+        }
+      }
+    }
+
+    if (Object.keys(categoryCounts).length === 0) {
+      return null;
+    }
+
+    return Object.entries(categoryCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
   }
 
   private extractDateFromTitle(title: string): string {

@@ -21,10 +21,10 @@ export function calculateUnusualScore(params: {
     const volumeRatio = params.tradeSize / params.marketVolume;
     if (volumeRatio > 0.1) {
       score += 30;
-      signals.push(`Trade is ${(volumeRatio * 100).toFixed(1)}% of market volume`);
+      signals.push(`Unusual activity: ${(volumeRatio * 100).toFixed(1)}% of total volume from single trade`);
     } else if (volumeRatio > 0.05) {
       score += 20;
-      signals.push(`Trade is ${(volumeRatio * 100).toFixed(1)}% of market volume`);
+      signals.push(`Unusual activity: ${(volumeRatio * 100).toFixed(1)}% of total volume from single trade`);
     } else if (volumeRatio > 0.02) {
       score += 10;
       signals.push('Significant market share');

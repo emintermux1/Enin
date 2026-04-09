@@ -235,7 +235,12 @@ export class ChannelPoster {
 
   private buildCaption(trade: EnrichedTrade): CaptionResult {
     const typeEmoji = TRADER_TYPE_PREMIUM[trade.primaryType]
-    const dynamicLabel = getTradeTypeLabel(trade.primaryType, trade.trade.side)
+    const dynamicLabel = getTradeTypeLabel(
+      trade.primaryType,
+      trade.trade.side,
+      trade.isFreshWallet,
+      trade.risk.level
+    )
     const displayName =
       trade.trade.name ||
       trade.trade.pseudonym ||
@@ -253,9 +258,6 @@ export class ChannelPoster {
     const builder = new CaptionBuilder()
 
     builder.addPremiumEmoji(typeEmoji, ` ${dynamicLabel}`)
-    if (trade.isFreshWallet) {
-      builder.addText(' | 🆕 Fresh Wallet Detected')
-    }
     builder.newLine().newLine()
     builder.addLink(question, marketUrl)
     if (trade.marketInfo.volume > 0) {
@@ -269,7 +271,7 @@ export class ChannelPoster {
     builder.newLine()
     if (trade.holderStats.topHoldersOnSide > 0) {
       builder.addText(
-        `👥 Top holders: ${trade.holderStats.topHoldersOnSide}/${trade.holderStats.totalTopHolders} ${trade.holderStats.side}`
+        `👥 ${trade.holderStats.topHoldersOnSide}/${trade.holderStats.totalTopHolders} Top Holders on ${trade.holderStats.side} side`
       )
       builder.newLine()
     }

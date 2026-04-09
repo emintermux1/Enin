@@ -3,11 +3,19 @@ import { HolderStats, PolymarketTrade, TraderStats, TraderType, TrackedWallet } 
 export const TRADER_TYPE_META: Record<TraderType, { label: string; emoji: string }> = {
   WHALE: { label: 'Whale Trade', emoji: '🐋' },
   INSIDER: { label: 'Insider Spotted', emoji: '🕵️' },
-  TOP_HOLDER: { label: 'Top Holder', emoji: '👑' },
-  CONVICTION_BUILD: { label: 'Conviction Build', emoji: '🔥' },
+  TOP_HOLDER: { label: 'Top Holder Activity', emoji: '👑' },
+  CONVICTION_BUILD: { label: 'Whale DCA', emoji: '🔥' },
 };
 
-export function getTradeTypeLabel(primaryType: TraderType, side: 'BUY' | 'SELL'): string {
+export function getTradeTypeLabel(
+  primaryType: TraderType,
+  side: 'BUY' | 'SELL',
+  isFreshWallet?: boolean,
+  risk?: string,
+): string {
+  if (isFreshWallet && primaryType === 'WHALE') {
+    return `🎯 High Risk Whale ${side === 'BUY' ? 'Buy' : 'Sell'} | ❄️ Fresh Wallet`;
+  }
   if (primaryType === 'WHALE') {
     return side === 'BUY' ? 'Whale Entry' : 'Whale Exit';
   }
