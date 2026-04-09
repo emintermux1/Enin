@@ -149,6 +149,7 @@ export class TradeEnricher {
       holderStats.totalTopHolders,
       trade.outcome,
       holderStats.whalesInMarket,
+      trade.side,
     );
     const classification = classifyTrader({
       trade,

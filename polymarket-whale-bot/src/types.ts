@@ -107,7 +107,7 @@ export interface EnrichedTrade {
     isCoordinated: boolean;
   };
   pressureSignal?: {
-    whalesOnSide: number;
+    whalesInMarket: number;
     totalTopHolders: number;
     side: string;
     dominancePercent: number;

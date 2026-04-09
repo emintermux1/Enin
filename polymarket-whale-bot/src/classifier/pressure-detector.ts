@@ -1,5 +1,5 @@
 export interface PressureSignal {
-  whalesOnSide: number;
+  whalesInMarket: number;
   totalTopHolders: number;
   side: string;
   dominancePercent: number;
@@ -12,13 +12,14 @@ export function detectPressure(
   totalTopHolders: number,
   side: string,
   whalesInMarket: number,
+  tradeSide: 'BUY' | 'SELL',
 ): PressureSignal {
   const dominance = totalTopHolders > 0 ? (topHoldersOnSide / totalTopHolders) * 100 : 0;
   const isHigh = dominance >= 60 && topHoldersOnSide >= 10;
-  const direction = side.toLowerCase().includes('yes') ? 'Buy' : 'Sell';
+  const direction = tradeSide === 'BUY' ? 'Buy' : 'Sell';
 
   return {
-    whalesOnSide: whalesInMarket,
+    whalesInMarket,
     totalTopHolders,
     side,
     dominancePercent: Math.round(dominance),
