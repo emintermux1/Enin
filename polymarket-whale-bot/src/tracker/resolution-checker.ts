@@ -1,5 +1,6 @@
 import { getTradeTypeLabel } from '../classifier/trader-classifier'
 import { GammaApi, GammaMarketLookup } from '../api/gamma-api'
+import { TraderPerformanceRepo } from '../db/trader-performance-repo'
 import { WalletTradeRepo } from '../db/wallet-trade-repo'
 import { ChannelPoster } from '../telegram/channel-poster'
 import { TraderType } from '../types'
@@ -59,6 +60,7 @@ export class ResolutionChecker {
   constructor(
     private readonly gammaApi: GammaApi,
     private readonly walletTradeRepo: WalletTradeRepo,
+    private readonly traderPerformanceRepo: TraderPerformanceRepo,
     private readonly poster: ChannelPoster,
   ) {}
 
@@ -106,6 +108,13 @@ export class ResolutionChecker {
         if (winningOutcomeIndex < 0) {
           continue
         }
+        const winningOutcome = outcomes[winningOutcomeIndex] || String(winningOutcomeIndex)
+        const resolvedTimestamp = this.getResolvedTimestamp(market)
+        const performanceWallets = this.traderPerformanceRepo.resolveTradesForMarket(
+          market.conditionId,
+          winningOutcome,
+          resolvedTimestamp,
+        )
 
         const whalesInMarket = alertedTrades.filter((trade) => trade.primaryType === 'WHALE').length
         const insidersInMarket = alertedTrades.filter((trade) => trade.primaryType === 'INSIDER').length
@@ -132,7 +141,7 @@ export class ResolutionChecker {
           await this.poster.postResolutionCard({
             marketQuestion: market.question || trade.marketQuestion,
             marketSlug: market.eventSlug || market.slug,
-            outcome: outcomes[winningOutcomeIndex] || trade.outcome,
+            outcome: winningOutcome || trade.outcome,
             won,
             pnl,
             entryAmount: trade.amount,
@@ -150,6 +159,10 @@ export class ResolutionChecker {
             insidersInMarket,
             freshWalletsInMarket: 0,
           })
+        }
+
+        for (const wallet of performanceWallets) {
+          await this.postWalletPerformanceUpdates(wallet)
         }
       }
 
@@ -181,6 +194,40 @@ export class ResolutionChecker {
     }
 
     return -1
+  }
+
+  private getResolvedTimestamp(market: GammaMarketLookup): number {
+    const resolvedAt = market.updatedAt || market.closedTime || market.closeTime || market.endDate || ''
+    const parsed = Date.parse(resolvedAt)
+    return Number.isFinite(parsed) ? Math.floor(parsed / 1000) : Math.floor(Date.now() / 1000)
+  }
+
+  private async postWalletPerformanceUpdates(wallet: string): Promise<void> {
+    const alertCount = this.traderPerformanceRepo.getWalletAlertCount(wallet)
+    const backtest = this.traderPerformanceRepo.getBacktest(wallet)
+
+    if (
+      backtest &&
+      backtest.resolvedTrades >= 5 &&
+      this.traderPerformanceRepo.shouldPostBacktest(wallet, alertCount)
+    ) {
+      await this.poster.postBacktest(backtest)
+      this.traderPerformanceRepo.markBacktestPosted(wallet, alertCount)
+      logger.info(`Posted trader backtest for ${wallet} after market resolution`)
+    }
+
+    if (alertCount >= 10) {
+      const performanceAlerts = this.traderPerformanceRepo.getPendingPerformanceAlerts(wallet, backtest)
+      for (const performanceAlert of performanceAlerts) {
+        await this.poster.postPerformanceAlert(
+          wallet,
+          this.traderPerformanceRepo.getWalletDisplayName(wallet),
+          performanceAlert,
+        )
+        this.traderPerformanceRepo.markPerformanceAlertPosted(wallet, performanceAlert.type)
+        logger.info(`Posted ${performanceAlert.type} performance alert for ${wallet}`)
+      }
+    }
   }
 
   private trimCheckedMarkets(): void {

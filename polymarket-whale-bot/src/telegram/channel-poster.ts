@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import { Markup, Telegraf } from 'telegraf'
 import { CardGenerator } from '../image/card-generator'
+import type { BacktestResult, PerformanceAlertTrigger } from '../db/trader-performance-repo'
 import {
   EnrichedTrade,
   LeaderboardTrader,
@@ -211,6 +212,38 @@ export class ChannelPoster {
       image,
       eventSlug: alert.marketSlug,
     })
+  }
+
+  async postBacktest(backtest: BacktestResult): Promise<void> {
+    const { text, entities } = this.buildBacktestCaption(backtest)
+
+    if (this.dryRun) {
+      logger.info(`Dry-run backtest post:\n${text}`)
+      return
+    }
+
+    await this.bot.telegram.sendMessage(this.config.channelId, text, {
+      entities,
+      link_preview_options: { is_disabled: true },
+    } as any)
+  }
+
+  async postPerformanceAlert(
+    wallet: string,
+    walletName: string,
+    alert: PerformanceAlertTrigger
+  ): Promise<void> {
+    const { text, entities } = this.buildPerformanceAlertCaption(wallet, walletName, alert)
+
+    if (this.dryRun) {
+      logger.info(`Dry-run performance alert (${alert.type}):\n${text}`)
+      return
+    }
+
+    await this.bot.telegram.sendMessage(this.config.channelId, text, {
+      entities,
+      link_preview_options: { is_disabled: true },
+    } as any)
   }
 
   async postLeaderboard(
@@ -750,6 +783,58 @@ export class ChannelPoster {
     if (marketIntelligenceParts.length > 0) {
       builder.newLine().newLine()
       builder.addText(marketIntelligenceParts.join(' · '))
+    }
+
+    return builder.build()
+  }
+
+  private buildBacktestCaption(backtest: BacktestResult): CaptionResult {
+    const builder = new CaptionBuilder()
+    const walletUrl = `https://polymarket.com/profile/${backtest.wallet}`
+
+    builder.addText('💸 Backtest Result (Last 10 Trades)')
+    builder.newLine().newLine()
+    builder.addText('Following this wallet with $100 per trade:')
+    builder.newLine().newLine()
+    builder.addText('💰 Wallet: ')
+    builder.addLink(backtest.wallet, walletUrl)
+    builder.newLine()
+    builder.addText(`→ Total PnL: ${formatSignedUsd(backtest.totalPnl)}`)
+    builder.newLine().newLine()
+    builder.addText(`📊 Win Rate: ${backtest.wins}/${backtest.resolvedTrades}`)
+    builder.newLine()
+    builder.addText(`📈 Consistency Score: ${backtest.consistencyScore}`)
+
+    return builder.build()
+  }
+
+  private buildPerformanceAlertCaption(
+    wallet: string,
+    walletName: string,
+    alert: PerformanceAlertTrigger
+  ): CaptionResult {
+    const builder = new CaptionBuilder()
+    const walletUrl = `https://polymarket.com/profile/${wallet}`
+    const statusText = {
+      profitable: 'Highly Profitable',
+      losing: 'Consistently Losing',
+      elite: 'Elite Trader',
+    }[alert.type]
+
+    builder.addText('🚨 Performance Alert')
+    builder.newLine().newLine()
+    builder.addText('💰 Wallet: ')
+    builder.addLink(walletName, walletUrl)
+    builder.newLine()
+    builder.addText(`📊 Status: ${statusText}`)
+    builder.newLine()
+    builder.addText(
+      `💸 Simulated PnL: ${formatSignedUsd(alert.pnl)} (${alert.resolvedTrades} trades at $100 each)`
+    )
+
+    if (alert.type === 'elite') {
+      builder.newLine()
+      builder.addText(`🏅 Win Rate: ${Math.round(alert.winRate)}%`)
     }
 
     return builder.build()
