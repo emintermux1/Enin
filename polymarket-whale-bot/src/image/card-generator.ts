@@ -5,6 +5,7 @@ import { LRUCache } from 'lru-cache'
 import { EnrichedTrade, ResolutionAlert, TraderType } from '../types'
 import { getTradeTypeLabel } from '../classifier/trader-classifier'
 import {
+  formatCompactUsd,
   formatMultiplier,
   formatPriceCents,
   formatResolveDate,
@@ -568,6 +569,121 @@ export class CardGenerator {
     } catch {
       return null
     }
+  }
+
+  async generateHeatmapCard(
+    markets: Array<{
+      marketQuestion: string
+      conditionId: string
+      eventSlug?: string
+      tradeCount: number
+      totalVolume: number
+      uniqueWallets: number
+    }>
+  ): Promise<Buffer | null> {
+    const canvasModule = await this.getCanvasModule()
+    if (!canvasModule) {
+      return null
+    }
+
+    this.ensureFonts(canvasModule)
+
+    const canvas = canvasModule.createCanvas(1280, 720)
+    const ctx = canvas.getContext('2d')
+    const timestamp = new Date().toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'UTC',
+    })
+    const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣']
+
+    const background = ctx.createLinearGradient(0, 0, 1280, 720)
+    background.addColorStop(0, '#050916')
+    background.addColorStop(0.45, '#08101d')
+    background.addColorStop(1, '#030711')
+    ctx.fillStyle = background
+    ctx.fillRect(0, 0, 1280, 720)
+
+    const glow = ctx.createRadialGradient(1060, 120, 50, 1060, 120, 360)
+    glow.addColorStop(0, 'rgba(96,165,250,0.22)')
+    glow.addColorStop(1, 'rgba(96,165,250,0)')
+    ctx.fillStyle = glow
+    ctx.fillRect(0, 0, 1280, 720)
+
+    fillRoundedRect(ctx, 28, 28, 1224, 664, 36, 'rgba(255,255,255,0.04)')
+    fillRoundedRect(ctx, 44, 44, 1192, 632, 30, '#0b1220')
+
+    const panelGradient = ctx.createLinearGradient(44, 44, 1236, 676)
+    panelGradient.addColorStop(0, 'rgba(255,255,255,0.035)')
+    panelGradient.addColorStop(0.5, 'rgba(255,255,255,0.018)')
+    panelGradient.addColorStop(1, 'rgba(255,255,255,0.012)')
+    fillRoundedRect(ctx, 44, 44, 1192, 632, 30, panelGradient as unknown as string)
+
+    fillRoundedRect(ctx, 76, 78, 368, 46, 23, 'rgba(59,130,246,0.16)')
+    ctx.font = '800 24px Inter, Arial, sans-serif'
+    ctx.fillStyle = '#bfdbfe'
+    ctx.fillText('🔥 MARKET HEATMAP — Last 12h', 98, 109)
+
+    fillRoundedRect(ctx, 998, 80, 162, 42, 21, 'rgba(255,255,255,0.06)')
+    ctx.font = '700 18px Inter, Arial, sans-serif'
+    ctx.fillStyle = '#dbeafe'
+    ctx.textAlign = 'center'
+    ctx.fillText('TOP 5 MARKETS', 1079, 107)
+    ctx.textAlign = 'left'
+
+    ctx.font = '700 16px Inter, Arial, sans-serif'
+    ctx.fillStyle = 'rgba(148,163,184,0.92)'
+    ctx.fillText('MARKET', 106, 158)
+    ctx.fillText('TRADES', 810, 158)
+    ctx.fillText('VOLUME', 930, 158)
+    ctx.fillText('WHALES', 1084, 158)
+
+    const startY = 182
+    const rowHeight = 92
+
+    markets.slice(0, 5).forEach((market, index) => {
+      const y = startY + index * rowHeight
+      const medal = medals[index] || `${index + 1}.`
+      const rowBg = index === 0 ? 'rgba(59,130,246,0.12)' : 'rgba(255,255,255,0.035)'
+      const accent = index === 0 ? '#60a5fa' : '#1d4ed8'
+
+      fillRoundedRect(ctx, 78, y, 1124, 72, 24, rowBg)
+      ctx.fillStyle = accent
+      ctx.fillRect(78, y, 8, 72)
+
+      ctx.font = '800 34px Inter, Arial, sans-serif'
+      ctx.fillStyle = '#f8fafc'
+      ctx.fillText(medal, 108, y + 47)
+
+      ctx.font = '700 28px Inter, Arial, sans-serif'
+      const title = truncateText(market.marketQuestion || market.conditionId, 44)
+      ctx.fillText(title, 172, y + 36)
+
+      ctx.font = '600 18px Inter, Arial, sans-serif'
+      ctx.fillStyle = 'rgba(191,219,254,0.82)'
+      const slug = market.eventSlug || market.conditionId
+      ctx.fillText(truncateText(`polymarket.com/event/${slug}`, 44), 172, y + 60)
+
+      ctx.font = '800 26px Inter, Arial, sans-serif'
+      ctx.fillStyle = '#f8fafc'
+      ctx.textAlign = 'center'
+      ctx.fillText(String(market.tradeCount), 846, y + 46)
+      ctx.fillText(formatCompactUsd(Number(market.totalVolume || 0)), 988, y + 46)
+      ctx.fillText(String(market.uniqueWallets), 1118, y + 46)
+      ctx.textAlign = 'left'
+    })
+
+    fillRoundedRect(ctx, 76, 614, 1128, 36, 18, 'rgba(255,255,255,0.04)')
+    ctx.font = '600 18px Inter, Arial, sans-serif'
+    ctx.fillStyle = 'rgba(226,232,240,0.78)'
+    ctx.fillText(`Updated ${timestamp} UTC`, 98, 637)
+    ctx.textAlign = 'right'
+    ctx.fillText('Whale activity ranked by 12h volume', 1180, 637)
+    ctx.textAlign = 'left'
+
+    this.applyGrain(ctx, 1280, 720, 8)
+
+    return this.canvasToBuffer(canvas)
   }
 
   async generateCompactCard(trade: EnrichedTrade): Promise<Buffer | null> {

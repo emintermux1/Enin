@@ -251,6 +251,8 @@ export class ChannelPoster {
   async postHeatmap(
     markets: Array<{
       marketQuestion: string
+      conditionId: string
+      eventSlug?: string
       tradeCount: number
       totalVolume: number
       uniqueWallets: number
@@ -265,13 +267,15 @@ export class ChannelPoster {
     for (const [i, market] of markets.entries()) {
       const medal = medals[i] || `${i + 1}.`
       const volLabel = formatCompactUsd(Number(market.totalVolume || 0))
-
-      builder.addText(`${medal} `)
-      builder.addBold(
+      const slug = market.eventSlug || market.conditionId
+      const marketUrl = `https://polymarket.com/event/${slug}`
+      const displayName =
         market.marketQuestion.length > 40
           ? `${market.marketQuestion.slice(0, 40)}…`
           : market.marketQuestion
-      )
+
+      builder.addText(`${medal} `)
+      builder.addLink(displayName, marketUrl)
       builder.newLine()
       builder.addText(
         `   ${market.tradeCount} trades · ${volLabel} vol · ${market.uniqueWallets} whales`
@@ -292,6 +296,16 @@ export class ChannelPoster {
 
     if (this.dryRun) {
       logger.info(`Dry-run heatmap post:\n${text}`)
+      return
+    }
+
+    const image = await this.cardGenerator.generateHeatmapCard(markets)
+
+    if (image) {
+      await this.bot.telegram.sendPhoto(this.config.channelId, { source: image }, {
+        caption: text,
+        caption_entities: entities,
+      } as any)
       return
     }
 
@@ -449,11 +463,13 @@ export class ChannelPoster {
       ` Resolves: ${formatResolveDate(trade.marketInfo.endDate)}`
     )
     builder.newLine()
-    if (trade.holderStats.topHoldersOnSide > 0 || trade.holderStats.oppositeSideHolders > 0) {
+    if (trade.holderStats.topHoldersOnSide > 0) {
       builder.newLine()
-      builder.addText(
-        `👥 Top Holders: ${trade.holderStats.topHoldersOnSide}/20 ${trade.holderStats.side} · ${trade.holderStats.oppositeSideHolders}/20 ${trade.holderStats.oppositeSide}`
-      )
+      const sideName =
+        trade.holderStats.side.length > 20
+          ? trade.holderStats.side.slice(0, 20).trimEnd()
+          : trade.holderStats.side
+      builder.addText(`👥 Top Holders: ${trade.holderStats.topHoldersOnSide}/20 ${sideName}`)
       builder.newLine()
     }
     builder.addText(`⚠️ Risk ${trade.risk.emoji}`)
@@ -645,6 +661,9 @@ export class ChannelPoster {
         builder.addText(signal.text)
       }
     }
+    if (signals.length > 0) {
+      builder.newLine()
+    }
 
     const marketIntelligenceParts: string[] = []
     if (trade.holderStats.whalesInMarket > 0) {
@@ -663,6 +682,15 @@ export class ChannelPoster {
     if (marketIntelligenceParts.length > 0) {
       builder.newLine()
       builder.addText(marketIntelligenceParts.join(' · '))
+    }
+
+    if (trade.insiderScore && trade.insiderScore.score >= 40) {
+      builder.newLine().newLine()
+      builder.addText(`🧠 Insider Probability: ${trade.insiderScore.score}%`)
+      if (trade.insiderScore.signals.length > 0) {
+        builder.newLine()
+        builder.addText(`⚠️ ${trade.insiderScore.signals[0]}`)
+      }
     }
 
     return builder.build()

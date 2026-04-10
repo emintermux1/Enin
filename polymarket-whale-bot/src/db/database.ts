@@ -69,6 +69,7 @@ export function initDatabase(): Database.Database {
     `ALTER TABLE wallet_trades ADD COLUMN primary_type TEXT DEFAULT ''`,
     `ALTER TABLE wallet_trades ADD COLUMN potential_win REAL DEFAULT 0`,
     `ALTER TABLE wallet_trades ADD COLUMN multiplier REAL DEFAULT 0`,
+    `ALTER TABLE wallet_trades ADD COLUMN event_slug TEXT DEFAULT ''`,
     `CREATE TABLE IF NOT EXISTS insider_evidence (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       wallet TEXT NOT NULL,

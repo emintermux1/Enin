@@ -3,6 +3,7 @@ import Database from 'better-sqlite3'
 export interface WalletTradeRecord {
   wallet: string
   conditionId: string
+  eventSlug: string
   side: string
   amount: number
   price: number
@@ -30,6 +31,7 @@ export interface WalletPattern {
 interface WalletTradeRow {
   wallet: string
   conditionId: string
+  eventSlug: string
   side: string
   amount: number
   price: number
@@ -63,6 +65,7 @@ export class WalletTradeRepo {
       INSERT OR IGNORE INTO wallet_trades (
         wallet,
         condition_id,
+        event_slug,
         side,
         amount,
         price,
@@ -75,12 +78,13 @@ export class WalletTradeRepo {
         potential_win,
         multiplier
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
     this.getByWalletStmt = db.prepare(`
       SELECT
         wallet,
         condition_id AS conditionId,
+        event_slug AS eventSlug,
         side,
         amount,
         price,
@@ -112,6 +116,7 @@ export class WalletTradeRepo {
       SELECT
         wallet,
         condition_id AS conditionId,
+        event_slug AS eventSlug,
         side,
         amount,
         price,
@@ -133,6 +138,7 @@ export class WalletTradeRepo {
     this.insertStmt.run(
       trade.wallet.toLowerCase(),
       trade.conditionId,
+      trade.eventSlug,
       trade.side,
       trade.amount,
       trade.price,
