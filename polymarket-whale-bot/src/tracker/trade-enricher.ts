@@ -331,6 +331,7 @@ export class TradeEnricher {
         this.walletTradeRepo.record({
           wallet: trade.proxyWallet,
           conditionId: trade.conditionId,
+          eventSlug: marketInfo.eventSlug || trade.eventSlug || marketInfo.slug || trade.slug,
           side: trade.side,
           amount: trade.usdcSize,
           price,

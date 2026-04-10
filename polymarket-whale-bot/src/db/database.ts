@@ -61,6 +61,25 @@ export function initDatabase(): Database.Database {
       value TEXT NOT NULL,
       updated_at INTEGER DEFAULT (unixepoch())
     );
+
+    CREATE TABLE IF NOT EXISTS trader_performance (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      wallet TEXT NOT NULL,
+      condition_id TEXT NOT NULL,
+      market_question TEXT NOT NULL,
+      side TEXT NOT NULL,
+      entry_price REAL NOT NULL,
+      exit_price REAL,
+      simulated_amount REAL DEFAULT 100,
+      simulated_pnl REAL,
+      status TEXT DEFAULT 'open',
+      alert_timestamp INTEGER NOT NULL,
+      resolved_timestamp INTEGER,
+      created_at INTEGER DEFAULT (unixepoch())
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_trader_perf_wallet ON trader_performance(wallet);
+    CREATE INDEX IF NOT EXISTS idx_trader_perf_status ON trader_performance(status);
   `)
 
   const migrations = [
@@ -69,6 +88,7 @@ export function initDatabase(): Database.Database {
     `ALTER TABLE wallet_trades ADD COLUMN primary_type TEXT DEFAULT ''`,
     `ALTER TABLE wallet_trades ADD COLUMN potential_win REAL DEFAULT 0`,
     `ALTER TABLE wallet_trades ADD COLUMN multiplier REAL DEFAULT 0`,
+    `ALTER TABLE wallet_trades ADD COLUMN event_slug TEXT DEFAULT ''`,
     `CREATE TABLE IF NOT EXISTS insider_evidence (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       wallet TEXT NOT NULL,
@@ -81,6 +101,23 @@ export function initDatabase(): Database.Database {
     )`,
     `CREATE INDEX IF NOT EXISTS idx_insider_evidence_wallet ON insider_evidence(wallet)`,
     `CREATE INDEX IF NOT EXISTS idx_insider_evidence_timestamp ON insider_evidence(timestamp)`,
+    `CREATE TABLE IF NOT EXISTS trader_performance (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      wallet TEXT NOT NULL,
+      condition_id TEXT NOT NULL,
+      market_question TEXT NOT NULL,
+      side TEXT NOT NULL,
+      entry_price REAL NOT NULL,
+      exit_price REAL,
+      simulated_amount REAL DEFAULT 100,
+      simulated_pnl REAL,
+      status TEXT DEFAULT 'open',
+      alert_timestamp INTEGER NOT NULL,
+      resolved_timestamp INTEGER,
+      created_at INTEGER DEFAULT (unixepoch())
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_trader_perf_wallet ON trader_performance(wallet)`,
+    `CREATE INDEX IF NOT EXISTS idx_trader_perf_status ON trader_performance(status)`,
   ]
 
   for (const migration of migrations) {

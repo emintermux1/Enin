@@ -5,6 +5,7 @@ import { logger } from '../utils/logger'
 interface MarketHeat {
   marketQuestion: string
   conditionId: string
+  eventSlug: string
   tradeCount: number
   totalVolume: number
   uniqueWallets: number
@@ -47,6 +48,7 @@ export class MarketHeatmap {
             SELECT
               market_question as marketQuestion,
               condition_id as conditionId,
+              COALESCE(MAX(NULLIF(event_slug, '')), '') as eventSlug,
               COUNT(*) as tradeCount,
               SUM(amount) as totalVolume,
               COUNT(DISTINCT wallet) as uniqueWallets,

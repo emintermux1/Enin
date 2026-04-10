@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import { Markup, Telegraf } from 'telegraf'
 import { CardGenerator } from '../image/card-generator'
+import type { BacktestResult, PerformanceAlertTrigger } from '../db/trader-performance-repo'
 import {
   EnrichedTrade,
   LeaderboardTrader,
@@ -213,6 +214,38 @@ export class ChannelPoster {
     })
   }
 
+  async postBacktest(backtest: BacktestResult): Promise<void> {
+    const { text, entities } = this.buildBacktestCaption(backtest)
+
+    if (this.dryRun) {
+      logger.info(`Dry-run backtest post:\n${text}`)
+      return
+    }
+
+    await this.bot.telegram.sendMessage(this.config.channelId, text, {
+      entities,
+      link_preview_options: { is_disabled: true },
+    } as any)
+  }
+
+  async postPerformanceAlert(
+    wallet: string,
+    walletName: string,
+    alert: PerformanceAlertTrigger
+  ): Promise<void> {
+    const { text, entities } = this.buildPerformanceAlertCaption(wallet, walletName, alert)
+
+    if (this.dryRun) {
+      logger.info(`Dry-run performance alert (${alert.type}):\n${text}`)
+      return
+    }
+
+    await this.bot.telegram.sendMessage(this.config.channelId, text, {
+      entities,
+      link_preview_options: { is_disabled: true },
+    } as any)
+  }
+
   async postLeaderboard(
     winners: LeaderboardTrader[],
     losers: LeaderboardTrader[]
@@ -251,6 +284,8 @@ export class ChannelPoster {
   async postHeatmap(
     markets: Array<{
       marketQuestion: string
+      conditionId: string
+      eventSlug?: string
       tradeCount: number
       totalVolume: number
       uniqueWallets: number
@@ -265,13 +300,15 @@ export class ChannelPoster {
     for (const [i, market] of markets.entries()) {
       const medal = medals[i] || `${i + 1}.`
       const volLabel = formatCompactUsd(Number(market.totalVolume || 0))
-
-      builder.addText(`${medal} `)
-      builder.addBold(
+      const slug = market.eventSlug || market.conditionId
+      const marketUrl = `https://polymarket.com/event/${slug}`
+      const displayName =
         market.marketQuestion.length > 40
           ? `${market.marketQuestion.slice(0, 40)}…`
           : market.marketQuestion
-      )
+
+      builder.addText(`${medal} `)
+      builder.addLink(displayName, marketUrl)
       builder.newLine()
       builder.addText(
         `   ${market.tradeCount} trades · ${volLabel} vol · ${market.uniqueWallets} whales`
@@ -292,6 +329,16 @@ export class ChannelPoster {
 
     if (this.dryRun) {
       logger.info(`Dry-run heatmap post:\n${text}`)
+      return
+    }
+
+    const image = await this.cardGenerator.generateHeatmapCard(markets)
+
+    if (image) {
+      await this.bot.telegram.sendPhoto(this.config.channelId, { source: image }, {
+        caption: text,
+        caption_entities: entities,
+      } as any)
       return
     }
 
@@ -449,11 +496,13 @@ export class ChannelPoster {
       ` Resolves: ${formatResolveDate(trade.marketInfo.endDate)}`
     )
     builder.newLine()
-    if (trade.holderStats.topHoldersOnSide > 0 || trade.holderStats.oppositeSideHolders > 0) {
+    if (trade.holderStats.topHoldersOnSide > 0) {
       builder.newLine()
-      builder.addText(
-        `👥 Top Holders: ${trade.holderStats.topHoldersOnSide}/20 ${trade.holderStats.side} · ${trade.holderStats.oppositeSideHolders}/20 ${trade.holderStats.oppositeSide}`
-      )
+      const sideName =
+        trade.holderStats.side.length > 20
+          ? trade.holderStats.side.slice(0, 20).trimEnd()
+          : trade.holderStats.side
+      builder.addText(`👥 Top Holders: ${trade.holderStats.topHoldersOnSide}/20 ${sideName}`)
       builder.newLine()
     }
     builder.addText(`⚠️ Risk ${trade.risk.emoji}`)
@@ -645,6 +694,9 @@ export class ChannelPoster {
         builder.addText(signal.text)
       }
     }
+    if (signals.length > 0) {
+      builder.newLine()
+    }
 
     const marketIntelligenceParts: string[] = []
     if (trade.holderStats.whalesInMarket > 0) {
@@ -663,6 +715,15 @@ export class ChannelPoster {
     if (marketIntelligenceParts.length > 0) {
       builder.newLine()
       builder.addText(marketIntelligenceParts.join(' · '))
+    }
+
+    if (trade.insiderScore && trade.insiderScore.score >= 40) {
+      builder.newLine().newLine()
+      builder.addText(`🧠 Insider Probability: ${trade.insiderScore.score}%`)
+      if (trade.insiderScore.signals.length > 0) {
+        builder.newLine()
+        builder.addText(`⚠️ ${trade.insiderScore.signals[0]}`)
+      }
     }
 
     return builder.build()
@@ -722,6 +783,58 @@ export class ChannelPoster {
     if (marketIntelligenceParts.length > 0) {
       builder.newLine().newLine()
       builder.addText(marketIntelligenceParts.join(' · '))
+    }
+
+    return builder.build()
+  }
+
+  private buildBacktestCaption(backtest: BacktestResult): CaptionResult {
+    const builder = new CaptionBuilder()
+    const walletUrl = `https://polymarket.com/profile/${backtest.wallet}`
+
+    builder.addText('💸 Backtest Result (Last 10 Trades)')
+    builder.newLine().newLine()
+    builder.addText('Following this wallet with $100 per trade:')
+    builder.newLine().newLine()
+    builder.addText('💰 Wallet: ')
+    builder.addLink(backtest.wallet, walletUrl)
+    builder.newLine()
+    builder.addText(`→ Total PnL: ${formatSignedUsd(backtest.totalPnl)}`)
+    builder.newLine().newLine()
+    builder.addText(`📊 Win Rate: ${backtest.wins}/${backtest.resolvedTrades}`)
+    builder.newLine()
+    builder.addText(`📈 Consistency Score: ${backtest.consistencyScore}`)
+
+    return builder.build()
+  }
+
+  private buildPerformanceAlertCaption(
+    wallet: string,
+    walletName: string,
+    alert: PerformanceAlertTrigger
+  ): CaptionResult {
+    const builder = new CaptionBuilder()
+    const walletUrl = `https://polymarket.com/profile/${wallet}`
+    const statusText = {
+      profitable: 'Highly Profitable',
+      losing: 'Consistently Losing',
+      elite: 'Elite Trader',
+    }[alert.type]
+
+    builder.addText('🚨 Performance Alert')
+    builder.newLine().newLine()
+    builder.addText('💰 Wallet: ')
+    builder.addLink(walletName, walletUrl)
+    builder.newLine()
+    builder.addText(`📊 Status: ${statusText}`)
+    builder.newLine()
+    builder.addText(
+      `💸 Simulated PnL: ${formatSignedUsd(alert.pnl)} (${alert.resolvedTrades} trades at $100 each)`
+    )
+
+    if (alert.type === 'elite') {
+      builder.newLine()
+      builder.addText(`🏅 Win Rate: ${Math.round(alert.winRate)}%`)
     }
 
     return builder.build()
