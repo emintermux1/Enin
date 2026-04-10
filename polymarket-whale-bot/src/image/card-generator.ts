@@ -377,7 +377,10 @@ export class CardGenerator {
     ctx.textBaseline = 'alphabetic'
 
     const infoParts = [`Win ${formatUsd(trade.potentialWin)}`]
-    if (trade.traderStats.bestWinAmount && trade.traderStats.bestWinAmount > 0) {
+    if (
+      trade.traderStats.bestWinAmount &&
+      trade.traderStats.bestWinAmount > 0
+    ) {
       infoParts.push(`Best ${formatUsd(trade.traderStats.bestWinAmount)}`)
     }
     infoParts.push(formatMultiplier(trade.multiplier))
@@ -392,15 +395,24 @@ export class CardGenerator {
       ? ` | ${priceMomentum.direction === 'up' ? '↑' : '↓'}${Math.abs(priceMomentum.changePercent)}% ${priceMomentum.periodLabel}`
       : ''
     const fullInfoText = `${priceLabel}${momentumLabel}${infoText ? `     ${infoText}` : ''}`
-    const infoFontSize = fitFontSize(ctx, fullInfoText, infoMaxWidth, 28, 20, 600)
+    const infoFontSize = fitFontSize(
+      ctx,
+      fullInfoText,
+      infoMaxWidth,
+      28,
+      20,
+      600
+    )
     ctx.font = `600 ${infoFontSize}px Inter, Arial, sans-serif`
     const segments = [
       { text: priceLabel, color: 'rgba(241,245,249,0.7)' },
       ...(momentumLabel
-        ? [{
-            text: momentumLabel,
-            color: priceMomentum?.direction === 'up' ? '#4ade80' : '#ef4444',
-          }]
+        ? [
+            {
+              text: momentumLabel,
+              color: priceMomentum?.direction === 'up' ? '#4ade80' : '#ef4444',
+            },
+          ]
         : []),
       ...(infoText
         ? [{ text: `     ${infoText}`, color: 'rgba(241,245,249,0.7)' }]
@@ -521,7 +533,15 @@ export class CardGenerator {
     const panelHeight = 130
     const panelY = Math.max(y, 500)
 
-    fillRoundedRect(ctx, 76, panelY, 1128, panelHeight, 28, 'rgba(255,255,255,0.04)')
+    fillRoundedRect(
+      ctx,
+      76,
+      panelY,
+      1128,
+      panelHeight,
+      28,
+      'rgba(255,255,255,0.04)'
+    )
     ctx.fillStyle = palette.primary
     ctx.fillRect(76, panelY, 8, panelHeight)
 
@@ -595,93 +615,457 @@ export class CardGenerator {
       minute: '2-digit',
       timeZone: 'UTC',
     })
-    const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣']
+    const displayMarkets = markets.slice(0, 5)
+    const maxVolume = Math.max(
+      1,
+      ...displayMarkets.map((market) => Number(market.totalVolume || 0))
+    )
+    const medals = ['🥇', '🥈', '🥉', '4', '5']
+    const cardX = 28
+    const cardY = 28
+    const cardWidth = 1224
+    const cardHeight = 664
+    const contentX = 92
+    const contentRight = 1188
+    const rowX = 76
+    const rowWidth = 1128
+    const marketX = 176
+    const marketMaxWidth = 520
+    const tradeColumnX = 872
+    const volumeColumnX = 1008
+    const whaleColumnX = 1140
+    const rowGap = 14
+    const rowStyles = [
+      {
+        height: 100,
+        accent: '#f59e0b',
+        edgeGlow: 'rgba(245,158,11,0.18)',
+        backgroundStart: 'rgba(245,158,11,0.11)',
+        backgroundEnd: 'rgba(15,23,42,0.92)',
+        stroke: 'rgba(251,191,36,0.16)',
+        titleColor: '#f8fafc',
+        titleSize: 32,
+        rankColor: '#fbbf24',
+        volumeColor: '#fbbf24',
+        barStart: '#f59e0b',
+        barEnd: '#fbbf24',
+      },
+      {
+        height: 82,
+        accent: '#94a3b8',
+        edgeGlow: 'rgba(148,163,184,0.14)',
+        backgroundStart: 'rgba(148,163,184,0.08)',
+        backgroundEnd: 'rgba(15,23,42,0.9)',
+        stroke: 'rgba(203,213,225,0.12)',
+        titleColor: '#f8fafc',
+        titleSize: 28,
+        rankColor: '#cbd5e1',
+        volumeColor: '#f8fafc',
+        barStart: '#3b82f6',
+        barEnd: '#60a5fa',
+      },
+      {
+        height: 82,
+        accent: '#d97706',
+        edgeGlow: 'rgba(217,119,6,0.14)',
+        backgroundStart: 'rgba(217,119,6,0.07)',
+        backgroundEnd: 'rgba(15,23,42,0.9)',
+        stroke: 'rgba(245,158,11,0.12)',
+        titleColor: '#f8fafc',
+        titleSize: 28,
+        rankColor: '#f59e0b',
+        volumeColor: '#f8fafc',
+        barStart: '#3b82f6',
+        barEnd: '#60a5fa',
+      },
+      {
+        height: 82,
+        accent: '#1e40af',
+        edgeGlow: 'rgba(59,130,246,0.12)',
+        backgroundStart: 'rgba(255,255,255,0.03)',
+        backgroundEnd: 'rgba(15,23,42,0.88)',
+        stroke: 'rgba(148,163,184,0.1)',
+        titleColor: 'rgba(248,250,252,0.88)',
+        titleSize: 27,
+        rankColor: 'rgba(191,219,254,0.88)',
+        volumeColor: '#e2e8f0',
+        barStart: '#3b82f6',
+        barEnd: '#60a5fa',
+      },
+      {
+        height: 82,
+        accent: '#1e40af',
+        edgeGlow: 'rgba(59,130,246,0.12)',
+        backgroundStart: 'rgba(255,255,255,0.03)',
+        backgroundEnd: 'rgba(15,23,42,0.88)',
+        stroke: 'rgba(148,163,184,0.1)',
+        titleColor: 'rgba(248,250,252,0.88)',
+        titleSize: 27,
+        rankColor: 'rgba(191,219,254,0.88)',
+        volumeColor: '#e2e8f0',
+        barStart: '#3b82f6',
+        barEnd: '#60a5fa',
+      },
+    ] as const
 
     const background = ctx.createLinearGradient(0, 0, 1280, 720)
-    background.addColorStop(0, '#050916')
-    background.addColorStop(0.45, '#08101d')
-    background.addColorStop(1, '#030711')
+    background.addColorStop(0, '#070b14')
+    background.addColorStop(0.52, '#0a1220')
+    background.addColorStop(1, '#0d1525')
     ctx.fillStyle = background
     ctx.fillRect(0, 0, 1280, 720)
 
-    const glow = ctx.createRadialGradient(1060, 120, 50, 1060, 120, 360)
-    glow.addColorStop(0, 'rgba(96,165,250,0.22)')
-    glow.addColorStop(1, 'rgba(96,165,250,0)')
-    ctx.fillStyle = glow
+    const blueGlow = ctx.createRadialGradient(1090, 96, 10, 1090, 96, 420)
+    blueGlow.addColorStop(0, 'rgba(59,130,246,0.22)')
+    blueGlow.addColorStop(0.45, 'rgba(59,130,246,0.08)')
+    blueGlow.addColorStop(1, 'rgba(59,130,246,0)')
+    ctx.fillStyle = blueGlow
     ctx.fillRect(0, 0, 1280, 720)
 
-    fillRoundedRect(ctx, 28, 28, 1224, 664, 36, 'rgba(255,255,255,0.04)')
-    fillRoundedRect(ctx, 44, 44, 1192, 632, 30, '#0b1220')
+    const goldGlow = ctx.createRadialGradient(260, 248, 0, 260, 248, 260)
+    goldGlow.addColorStop(0, 'rgba(245,158,11,0.12)')
+    goldGlow.addColorStop(1, 'rgba(245,158,11,0)')
+    ctx.fillStyle = goldGlow
+    ctx.fillRect(0, 0, 1280, 720)
 
-    const panelGradient = ctx.createLinearGradient(44, 44, 1236, 676)
-    panelGradient.addColorStop(0, 'rgba(255,255,255,0.035)')
-    panelGradient.addColorStop(0.5, 'rgba(255,255,255,0.018)')
-    panelGradient.addColorStop(1, 'rgba(255,255,255,0.012)')
-    fillRoundedRect(ctx, 44, 44, 1192, 632, 30, panelGradient as unknown as string)
+    ctx.save()
+    ctx.strokeStyle = 'rgba(59,130,246,0.04)'
+    ctx.lineWidth = 1
+    for (let x = 0; x <= 1280; x += 96) {
+      ctx.beginPath()
+      ctx.moveTo(x, 0)
+      ctx.lineTo(x, 720)
+      ctx.stroke()
+    }
+    for (let y = 0; y <= 720; y += 96) {
+      ctx.beginPath()
+      ctx.moveTo(0, y)
+      ctx.lineTo(1280, y)
+      ctx.stroke()
+    }
+    ctx.restore()
 
-    fillRoundedRect(ctx, 76, 78, 368, 46, 23, 'rgba(59,130,246,0.16)')
-    ctx.font = '800 24px Inter, Arial, sans-serif'
-    ctx.fillStyle = '#bfdbfe'
-    ctx.fillText('🔥 MARKET HEATMAP — Last 12h', 98, 109)
+    const panelFill = ctx.createLinearGradient(
+      cardX,
+      cardY,
+      cardX + cardWidth,
+      cardY + cardHeight
+    )
+    panelFill.addColorStop(0, 'rgba(8,13,24,0.98)')
+    panelFill.addColorStop(0.38, 'rgba(9,16,29,0.96)')
+    panelFill.addColorStop(1, 'rgba(7,11,20,0.98)')
+    fillRoundedRect(
+      ctx,
+      cardX,
+      cardY,
+      cardWidth,
+      cardHeight,
+      34,
+      panelFill as unknown as string
+    )
 
-    fillRoundedRect(ctx, 998, 80, 162, 42, 21, 'rgba(255,255,255,0.06)')
-    ctx.font = '700 18px Inter, Arial, sans-serif'
-    ctx.fillStyle = '#dbeafe'
-    ctx.textAlign = 'center'
-    ctx.fillText('TOP 5 MARKETS', 1079, 107)
+    ctx.save()
+    roundedRect(ctx, cardX, cardY, cardWidth, cardHeight, 34)
+    ctx.clip()
+
+    const panelSheen = ctx.createLinearGradient(
+      cardX,
+      cardY,
+      cardX + 420,
+      cardY + 220
+    )
+    panelSheen.addColorStop(0, 'rgba(96,165,250,0.08)')
+    panelSheen.addColorStop(1, 'rgba(96,165,250,0)')
+    ctx.fillStyle = panelSheen
+    ctx.fillRect(cardX, cardY, 560, 260)
+
+    const panelVignette = ctx.createLinearGradient(
+      0,
+      cardY,
+      0,
+      cardY + cardHeight
+    )
+    panelVignette.addColorStop(0, 'rgba(255,255,255,0.02)')
+    panelVignette.addColorStop(0.55, 'rgba(255,255,255,0)')
+    panelVignette.addColorStop(1, 'rgba(2,6,23,0.22)')
+    ctx.fillStyle = panelVignette
+    ctx.fillRect(cardX, cardY, cardWidth, cardHeight)
+    ctx.restore()
+
+    ctx.save()
+    ctx.shadowColor = 'rgba(59,130,246,0.12)'
+    ctx.shadowBlur = 24
+    roundedRect(ctx, cardX, cardY, cardWidth, cardHeight, 34)
+    ctx.strokeStyle = 'rgba(59,130,246,0.12)'
+    ctx.lineWidth = 1
+    ctx.stroke()
+    ctx.restore()
+
+    roundedRect(ctx, cardX + 1, cardY + 1, cardWidth - 2, cardHeight - 2, 33)
+    ctx.strokeStyle = 'rgba(255,255,255,0.04)'
+    ctx.lineWidth = 1
+    ctx.stroke()
+
+    ctx.font = '800 28px Inter, Arial, sans-serif'
+    ctx.fillStyle = '#f8fafc'
+    ctx.fillText('🔥 MARKET HEATMAP', contentX, 100)
+
+    ctx.font = '600 16px Inter, Arial, sans-serif'
+    ctx.fillStyle = 'rgba(148,163,184,0.82)'
+    ctx.fillText('Last 12h', contentX, 126)
+
+    ctx.textAlign = 'right'
+    ctx.font = '800 18px Inter, Arial, sans-serif'
+    ctx.fillStyle = '#93c5fd'
+    ctx.fillText('TOP 5', contentRight, 98)
+    ctx.font = '600 14px Inter, Arial, sans-serif'
+    ctx.fillStyle = 'rgba(148,163,184,0.68)'
+    ctx.fillText('by 12h volume', contentRight, 122)
     ctx.textAlign = 'left'
 
-    ctx.font = '700 16px Inter, Arial, sans-serif'
-    ctx.fillStyle = 'rgba(148,163,184,0.92)'
-    ctx.fillText('MARKET', 106, 158)
-    ctx.fillText('TRADES', 810, 158)
-    ctx.fillText('VOLUME', 930, 158)
-    ctx.fillText('WHALES', 1084, 158)
+    const titleRule = ctx.createLinearGradient(contentX, 0, contentRight, 0)
+    titleRule.addColorStop(0, 'rgba(59,130,246,0.36)')
+    titleRule.addColorStop(0.5, 'rgba(96,165,250,0.12)')
+    titleRule.addColorStop(1, 'rgba(59,130,246,0)')
+    ctx.fillStyle = titleRule
+    ctx.fillRect(contentX, 142, contentRight - contentX, 1)
 
-    const startY = 182
-    const rowHeight = 92
+    if ('letterSpacing' in ctx) {
+      ctx.letterSpacing = '2px'
+    }
+    ctx.font = '700 14px Inter, Arial, sans-serif'
+    ctx.fillStyle = 'rgba(148,163,184,0.76)'
+    ctx.fillText('MARKET', 104, 173)
+    ctx.textAlign = 'center'
+    ctx.fillText('TRADES', tradeColumnX, 173)
+    ctx.fillText('VOLUME', volumeColumnX, 173)
+    ctx.fillText('WHALES', whaleColumnX, 173)
+    ctx.textAlign = 'left'
+    if ('letterSpacing' in ctx) {
+      ctx.letterSpacing = '0px'
+    }
 
-    markets.slice(0, 5).forEach((market, index) => {
-      const y = startY + index * rowHeight
-      const medal = medals[index] || `${index + 1}.`
-      const rowBg = index === 0 ? 'rgba(59,130,246,0.12)' : 'rgba(255,255,255,0.035)'
-      const accent = index === 0 ? '#60a5fa' : '#1d4ed8'
+    const fallbackRowStyle = rowStyles[rowStyles.length - 1]!
+    let currentY = 192
+    displayMarkets.forEach((market, index) => {
+      const rowStyle = rowStyles[index] ?? fallbackRowStyle
+      const rowHeight = rowStyle.height
+      const rowGradient = ctx.createLinearGradient(
+        rowX,
+        currentY,
+        rowX + rowWidth,
+        currentY + rowHeight
+      )
+      rowGradient.addColorStop(0, rowStyle.backgroundStart)
+      rowGradient.addColorStop(1, rowStyle.backgroundEnd)
+      fillRoundedRect(
+        ctx,
+        rowX,
+        currentY,
+        rowWidth,
+        rowHeight,
+        26,
+        rowGradient as unknown as string
+      )
 
-      fillRoundedRect(ctx, 78, y, 1124, 72, 24, rowBg)
-      ctx.fillStyle = accent
-      ctx.fillRect(78, y, 8, 72)
+      ctx.save()
+      roundedRect(ctx, rowX, currentY, rowWidth, rowHeight, 26)
+      ctx.clip()
+      ctx.fillStyle = rowStyle.edgeGlow
+      ctx.fillRect(rowX, currentY, 18, rowHeight)
+      ctx.fillStyle = rowStyle.accent
+      ctx.fillRect(rowX, currentY, 4, rowHeight)
+      ctx.restore()
 
-      ctx.font = '800 34px Inter, Arial, sans-serif'
-      ctx.fillStyle = '#f8fafc'
-      ctx.fillText(medal, 108, y + 47)
+      roundedRect(ctx, rowX, currentY, rowWidth, rowHeight, 26)
+      ctx.strokeStyle = rowStyle.stroke
+      ctx.lineWidth = 1
+      ctx.stroke()
 
-      ctx.font = '700 28px Inter, Arial, sans-serif'
-      const title = truncateText(market.marketQuestion || market.conditionId, 44)
-      ctx.fillText(title, 172, y + 36)
+      ctx.textBaseline = 'middle'
+      ctx.textAlign = 'center'
+      ctx.fillStyle = rowStyle.rankColor
+      ctx.font =
+        index < 3
+          ? '800 30px Inter, Arial, sans-serif'
+          : '800 28px Inter, Arial, sans-serif'
+      ctx.fillText(
+        medals[index] ?? String(index + 1),
+        rowX + 42,
+        currentY + rowHeight / 2
+      )
+      ctx.textBaseline = 'alphabetic'
+      ctx.textAlign = 'left'
 
-      ctx.font = '600 18px Inter, Arial, sans-serif'
-      ctx.fillStyle = 'rgba(191,219,254,0.82)'
-      const slug = market.eventSlug || market.conditionId
-      ctx.fillText(truncateText(`polymarket.com/event/${slug}`, 44), 172, y + 60)
+      const marketTitle = truncateText(
+        market.marketQuestion || market.conditionId,
+        38
+      )
+      const titleSize = fitFontSize(
+        ctx,
+        marketTitle,
+        marketMaxWidth,
+        rowStyle.titleSize,
+        22,
+        700
+      )
+      ctx.font = `700 ${titleSize}px Inter, Arial, sans-serif`
+      ctx.fillStyle = rowStyle.titleColor
+      const titleY = currentY + (index === 0 ? 46 : 39)
+      ctx.fillText(marketTitle, marketX, titleY)
 
-      ctx.font = '800 26px Inter, Arial, sans-serif'
+      if (index < 3) {
+        const trackX = marketX
+        const trackY = currentY + rowHeight - 24
+        const trackWidth = 438
+        const trackHeight = 6
+        fillRoundedRect(
+          ctx,
+          trackX,
+          trackY,
+          trackWidth,
+          trackHeight,
+          3,
+          'rgba(255,255,255,0.06)'
+        )
+        const rawFillWidth = Math.round(
+          (Number(market.totalVolume || 0) / maxVolume) * trackWidth
+        )
+        if (rawFillWidth > 0) {
+          const fillWidth = Math.max(30, rawFillWidth)
+          const barGradient = ctx.createLinearGradient(
+            trackX,
+            trackY,
+            trackX + trackWidth,
+            trackY
+          )
+          barGradient.addColorStop(0, rowStyle.barStart)
+          barGradient.addColorStop(1, rowStyle.barEnd)
+          fillRoundedRect(
+            ctx,
+            trackX,
+            trackY,
+            Math.min(trackWidth, fillWidth),
+            trackHeight,
+            3,
+            barGradient as unknown as string
+          )
+        }
+      }
+
+      const statY = currentY + rowHeight / 2 + 10
+      const tradeText = String(market.tradeCount)
+      const tradeSize = fitFontSize(
+        ctx,
+        tradeText,
+        72,
+        index === 0 ? 28 : 26,
+        20,
+        800
+      )
+      ctx.font = `800 ${tradeSize}px Inter, Arial, sans-serif`
       ctx.fillStyle = '#f8fafc'
       ctx.textAlign = 'center'
-      ctx.fillText(String(market.tradeCount), 846, y + 46)
-      ctx.fillText(formatCompactUsd(Number(market.totalVolume || 0)), 988, y + 46)
-      ctx.fillText(String(market.uniqueWallets), 1118, y + 46)
+      ctx.fillText(tradeText, tradeColumnX, statY)
+
+      const volumeText = formatCompactUsd(Number(market.totalVolume || 0))
+      const volumeSize = fitFontSize(
+        ctx,
+        volumeText,
+        126,
+        index === 0 ? 28 : 26,
+        18,
+        800
+      )
+      ctx.font = `800 ${volumeSize}px Inter, Arial, sans-serif`
+      ctx.fillStyle = rowStyle.volumeColor
+      ctx.fillText(volumeText, volumeColumnX, statY)
+
+      const whaleChipWidth = 58
+      const whaleChipHeight = 36
+      const whaleChipX = whaleColumnX - whaleChipWidth / 2
+      const whaleChipY = currentY + rowHeight / 2 - whaleChipHeight / 2 + 3
+      fillRoundedRect(
+        ctx,
+        whaleChipX,
+        whaleChipY,
+        whaleChipWidth,
+        whaleChipHeight,
+        18,
+        'rgba(16,185,129,0.12)'
+      )
+      roundedRect(
+        ctx,
+        whaleChipX,
+        whaleChipY,
+        whaleChipWidth,
+        whaleChipHeight,
+        18
+      )
+      ctx.strokeStyle = 'rgba(52,211,153,0.18)'
+      ctx.lineWidth = 1
+      ctx.stroke()
+      ctx.font = '800 22px Inter, Arial, sans-serif'
+      ctx.fillStyle = '#34d399'
+      ctx.fillText(String(market.uniqueWallets), whaleColumnX, statY - 1)
       ctx.textAlign = 'left'
+
+      if (index < displayMarkets.length - 1) {
+        ctx.fillStyle = 'rgba(255,255,255,0.04)'
+        ctx.fillRect(
+          rowX + 18,
+          currentY + rowHeight + rowGap / 2,
+          rowWidth - 36,
+          1
+        )
+      }
+
+      currentY += rowHeight + rowGap
     })
 
-    fillRoundedRect(ctx, 76, 614, 1128, 36, 18, 'rgba(255,255,255,0.04)')
-    ctx.font = '600 18px Inter, Arial, sans-serif'
+    if (displayMarkets.length === 0) {
+      fillRoundedRect(
+        ctx,
+        rowX,
+        212,
+        rowWidth,
+        188,
+        28,
+        'rgba(255,255,255,0.028)'
+      )
+      roundedRect(ctx, rowX, 212, rowWidth, 188, 28)
+      ctx.strokeStyle = 'rgba(59,130,246,0.12)'
+      ctx.lineWidth = 1
+      ctx.stroke()
+      ctx.font = '800 30px Inter, Arial, sans-serif'
+      ctx.fillStyle = '#f8fafc'
+      ctx.textAlign = 'center'
+      ctx.fillText('No whale activity captured in the last 12h', 640, 302)
+      ctx.font = '600 18px Inter, Arial, sans-serif'
+      ctx.fillStyle = 'rgba(148,163,184,0.84)'
+      ctx.fillText(
+        'Heatmap rows populate automatically once market flow appears.',
+        640,
+        336
+      )
+      ctx.textAlign = 'left'
+    }
+
+    const footerRule = ctx.createLinearGradient(contentX, 0, contentRight, 0)
+    footerRule.addColorStop(0, 'rgba(59,130,246,0.28)')
+    footerRule.addColorStop(0.5, 'rgba(96,165,250,0.08)')
+    footerRule.addColorStop(1, 'rgba(59,130,246,0)')
+    ctx.fillStyle = footerRule
+    ctx.fillRect(contentX, 624, contentRight - contentX, 1)
+
+    ctx.font = '600 16px Inter, Arial, sans-serif'
     ctx.fillStyle = 'rgba(226,232,240,0.78)'
-    ctx.fillText(`Updated ${timestamp} UTC`, 98, 637)
+    ctx.fillText(`Updated ${timestamp} UTC`, contentX, 650)
     ctx.textAlign = 'right'
-    ctx.fillText('Whale activity ranked by 12h volume', 1180, 637)
+    ctx.fillText('Ranked by 12h volume', contentRight, 650)
     ctx.textAlign = 'left'
 
-    this.applyGrain(ctx, 1280, 720, 8)
+    this.applyGrain(ctx, 1280, 720, 6)
 
     return this.canvasToBuffer(canvas)
   }
