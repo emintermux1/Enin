@@ -19,6 +19,7 @@ import { PriceHistory } from './price-history';
 import { StructDiscovery } from './struct-discovery';
 import { TelegramChannelScraper } from './telegram-channel-scraper';
 import { TradeFirehose } from './trade-firehose';
+import { AlertThrottle } from './alert-throttle';
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -111,6 +112,7 @@ export class WhaleTracker {
   private readonly dedupCache = new DedupCache();
   private readonly tradeEnricher: TradeEnricher;
   private readonly coordinationDetector: CoordinationDetector;
+  private readonly alertThrottle: AlertThrottle;
   private readonly hashdiveDiscovery?: HashdiveDiscovery;
   private readonly structDiscovery?: StructDiscovery;
   private readonly tradeFirehose: TradeFirehose;
@@ -150,6 +152,7 @@ export class WhaleTracker {
       options.polynterApi,
     );
     this.coordinationDetector = new CoordinationDetector();
+    this.alertThrottle = new AlertThrottle(config.tracking.maxAlertsPerWalletPerMarket);
     this.tradeFirehose = new TradeFirehose({
       dataApi: this.dataApi,
       tradeEnricher: this.tradeEnricher,
@@ -359,6 +362,9 @@ export class WhaleTracker {
 
   private async publishTrade(trade: EnrichedTrade): Promise<void> {
     const enriched = trade.walletPattern ? trade : await this.decorateTrade(trade);
+    if (!this.alertThrottle.shouldAlert(enriched.trade.proxyWallet, enriched.trade.conditionId)) {
+      return;
+    }
     await this.onTrade(enriched);
   }
 
