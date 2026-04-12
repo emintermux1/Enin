@@ -283,9 +283,7 @@ export class MarketCardGenerator {
 
     if (variant.changeLabel) {
       ctx.font = '800 30px Inter, Arial, sans-serif'
-      ctx.fillStyle = variant.changeLabel.startsWith('+')
-        ? '#4ade80'
-        : '#f87171'
+      ctx.fillStyle = variant.changeLabel.includes('+') ? '#4ade80' : '#f87171'
       ctx.fillText(variant.changeLabel, textX, heroY + 278)
     }
 

@@ -141,7 +141,19 @@ async function main() {
       for (const channel of config.scraping.channels) {
         const posts = await channelScraper.scrapeChannel(channel)
         for (const post of posts) {
-          await processScrapedPost(postComposer, publisher, polymarketApi, post)
+          try {
+            await processScrapedPost(
+              postComposer,
+              publisher,
+              polymarketApi,
+              post
+            )
+          } catch (error) {
+            logger.warn(
+              `Failed to process scraped post ${post.source}:${post.messageId}`,
+              error
+            )
+          }
         }
       }
     })

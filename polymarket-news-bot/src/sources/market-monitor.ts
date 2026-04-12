@@ -37,7 +37,6 @@ export class MarketMonitor {
 
     for (const market of markets) {
       const alreadyKnown = this.db.isKnownMarket(market.id)
-      this.db.rememberMarket(market)
       if (alreadyKnown) {
         continue
       }
@@ -51,6 +50,7 @@ export class MarketMonitor {
         continue
       }
       fresh.push(market)
+      this.db.rememberMarket(market)
     }
 
     return fresh.slice(0, 6)
