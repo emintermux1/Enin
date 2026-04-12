@@ -31,24 +31,17 @@ function buildMarketButtons(
   market?: MarketData,
   fallbackUrl?: string
 ): InlineButton[] {
-  let marketUrl = buildMarketUrl(market)
-  if (marketUrl === 'https://polymarket.com' && fallbackUrl) {
-    marketUrl = fallbackUrl
-  }
-  if (marketUrl !== 'https://polymarket.com') {
-    return [
-      {
-        text: '🔮 Open on Polymarket',
-        url: marketUrl,
-      },
-      {
-        text: config.telegram.communityButtonText,
-        url: config.telegram.communityUrl,
-      },
-    ]
-  }
+  const marketUrl = buildMarketUrl(market)
+  const finalUrl =
+    marketUrl !== 'https://polymarket.com'
+      ? marketUrl
+      : fallbackUrl || 'https://polymarket.com'
+  const hasSpecificUrl = finalUrl !== 'https://polymarket.com'
   return [
-    { text: '🔮 Open on Polymarket', url: 'https://polymarket.com/markets' },
+    {
+      text: hasSpecificUrl ? '🔮 Trade on Polymarket' : '🔮 Open Polymarket',
+      url: finalUrl,
+    },
     {
       text: config.telegram.communityButtonText,
       url: config.telegram.communityUrl,
@@ -88,7 +81,7 @@ export class PostComposer {
     relatedMarket?: MarketData
   ): Promise<QueuedPost | null> {
     const polymarketLink = post.links.find((link) =>
-      /polymarket\.com\/(?:event|market)\//i.test(link.url)
+      link.url.includes('polymarket.com')
     )
     const fallbackUrl = polymarketLink?.url
       ? polymarketLink.url.split('?')[0]
@@ -123,15 +116,8 @@ export class PostComposer {
     const context = relatedMarket
       ? `\n\n<b>Related market:</b> ${escapeHtml(relatedMarket.question)}\n${summarizeOutcomes(relatedMarket)}`
       : ''
-    const links = post.links
-      .slice(0, 2)
-      .map(
-        (link) =>
-          `<a href="${escapeHtml(link.url)}">${escapeHtml(link.text || 'Source')}</a>`
-      )
-      .join(' • ')
     const caption = trimCaptionForPhoto(
-      `${emojiPrefix}🚨 <b>BREAKING:</b> ${escapeHtml(headline)}${context}${links ? `\n\n${links}` : ''}`
+      `${emojiPrefix}🚨 <b>BREAKING:</b> ${escapeHtml(headline)}${context}`
     )
     return {
       id: buildId('breaking', `${post.source}:${post.messageId}`),
@@ -247,6 +233,34 @@ export class PostComposer {
       imageBuffer: card,
       buttons: buildMarketButtons(market),
       sourceId: `market:price_mover:${market.slug}:${sourceHour()}`,
+      createdAt: Date.now(),
+      market,
+    }
+  }
+
+  async composeFlashAlert(
+    market: MarketData,
+    change: number,
+    direction: 'up' | 'down'
+  ): Promise<QueuedPost> {
+    const arrow = direction === 'up' ? '🚀' : '💥'
+    const signed = `${direction === 'up' ? '+' : '-'}${formatPercent(change, 0)}`
+    const caption = trimCaptionForPhoto(
+      `⚡ <b>FLASH ALERT</b> (${escapeHtml(signed)})\n\n${arrow} <b>${escapeHtml(market.question)}</b>\n\n${summarizeOutcomes(market)}\n\n🔥 Massive ${escapeHtml(signed)} swing detected!`
+    )
+    const card = await this.cardGenerator.generateFlashAlertCard(
+      market,
+      change,
+      direction
+    )
+    return {
+      id: buildId('flash', `${market.slug}:${signed}`),
+      type: 'flash_alert',
+      priority: 92,
+      caption,
+      imageBuffer: card,
+      buttons: buildMarketButtons(market),
+      sourceId: `market:flash_alert:${market.slug}:${sourceHour()}`,
       createdAt: Date.now(),
       market,
     }

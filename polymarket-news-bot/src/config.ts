@@ -25,9 +25,11 @@ export interface AppConfig {
     trendingDigestIntervalMs: number
     newMarketPollMs: number
     priceMovePollMs: number
+    flashAlertPollMs: number
     resolutionPollMs: number
     minVolumeForTrending: number
     minPriceChangePercent: number
+    flashAlertMinChange: number
     minVolumeForNewMarket: number
   }
   posting: {
@@ -103,9 +105,11 @@ export const config: AppConfig = {
     ),
     newMarketPollMs: readNumber('NEW_MARKET_POLL_MS', 600_000),
     priceMovePollMs: readNumber('PRICE_MOVE_POLL_MS', 180_000),
+    flashAlertPollMs: readNumber('FLASH_ALERT_POLL_MS', 120_000),
     resolutionPollMs: readNumber('RESOLUTION_POLL_MS', 300_000),
     minVolumeForTrending: readNumber('MIN_VOLUME_TRENDING', 1_000),
     minPriceChangePercent: readNumber('MIN_PRICE_CHANGE_PERCENT', 10),
+    flashAlertMinChange: readNumber('FLASH_ALERT_MIN_CHANGE', 50),
     minVolumeForNewMarket: readNumber('MIN_VOLUME_NEW_MARKET', 2_000),
   },
   posting: {

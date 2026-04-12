@@ -126,6 +126,24 @@ export class MarketCardGenerator {
     })
   }
 
+  async generateFlashAlertCard(
+    market: MarketData,
+    change: number,
+    direction: 'up' | 'down'
+  ): Promise<Buffer> {
+    return this.renderCard({
+      header: '⚡ FLASH ALERT',
+      accentStart: direction === 'up' ? '#facc15' : '#f43f5e',
+      accentEnd: direction === 'up' ? '#f97316' : '#9333ea',
+      eyebrow: market.tags[0] || 'Rapid Movement',
+      headline: market.question,
+      market,
+      heroBadge: 'FLASH',
+      changeLabel: `${direction === 'up' ? '🚀 +' : '💥 -'}${Math.round(change)}%`,
+      volumeBadge: `${formatCompactUsd(market.volume24hr || market.volume)} Volume`,
+    })
+  }
+
   async generateResolutionCard(
     market: MarketData,
     resolvedOutcome: string

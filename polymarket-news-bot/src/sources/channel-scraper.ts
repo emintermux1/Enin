@@ -15,10 +15,13 @@ function normalizeTextBlock(html: string): string {
 function stripTemplateFooter(text: string): string {
   return text
     .replace(
-      /(?:\n|\s)*(Open on Twitter\s*\|\s*Trade on Polymarket\s*\|\s*Discord.*)$/is,
+      /(?:\n|\s)*(Open on Twitter\s*[\|·•]\s*(?:Trade on|Open on|Open)\s*Polymarket\s*[\|·•]?\s*Discord?.*)$/is,
       ''
     )
-    .replace(/(?:\n|\s)*(Trade on Polymarket\s*\|\s*Discord.*)$/is, '')
+    .replace(/(?:\n|\s)*(Trade on Polymarket\s*[\|·•]?\s*Discord?.*)$/is, '')
+    .replace(/(?:\n|\s)*(Open on Polymarket\s*[\|·•]?\s*Discord?.*)$/is, '')
+    .replace(/(?:\n|\s)*(Trade the News on PolyGun.*)$/is, '')
+    .replace(/(?:\n|\s)*(Open on Twitter\s*[\|·•]\s*Open on Polymarket.*)$/is, '')
     .trim()
 }
 

@@ -243,6 +243,20 @@ async function main() {
   )
 
   timers.push(
+    startLoop('flash-alerts', config.monitoring.flashAlertPollMs, async () => {
+      const alerts = await marketMonitor.getFlashAlerts()
+      for (const { market, change, direction } of alerts) {
+        const queued = await postComposer.composeFlashAlert(
+          market,
+          change,
+          direction
+        )
+        publisher.queuePost(queued)
+      }
+    })
+  )
+
+  timers.push(
     startLoop('resolutions', config.monitoring.resolutionPollMs, async () => {
       const resolved = await marketMonitor.getResolvedMarkets()
       for (const market of resolved) {
