@@ -19,12 +19,20 @@ function sourceHour(): string {
   return new Date().toISOString().slice(0, 13)
 }
 
+function buildMarketUrl(market?: MarketData): string {
+  const marketPath = market?.eventSlug || market?.slug
+  return marketPath
+    ? `https://polymarket.com/event/${marketPath}`
+    : 'https://polymarket.com'
+}
+
 function buildMarketButtons(market?: MarketData): InlineButton[] {
-  if (market?.eventSlug) {
+  const marketUrl = buildMarketUrl(market)
+  if (marketUrl !== 'https://polymarket.com') {
     return [
       {
         text: '🔮 Trade on Polymarket',
-        url: `https://polymarket.com/event/${market.eventSlug}`,
+        url: marketUrl,
       },
       {
         text: config.telegram.communityButtonText,
@@ -143,6 +151,50 @@ export class PostComposer {
       sourceId: `market:market_spotlight:${market.slug}:${sourceHour()}`,
       createdAt: Date.now(),
       market,
+    }
+  }
+
+  async composeTrendingDigest(markets: MarketData[]): Promise<QueuedPost> {
+    const top10 = markets.slice(0, 10)
+
+    let caption = '🔥 <b>Trending Markets — Last 24h</b>\n\n'
+
+    top10.forEach((market, index) => {
+      const rank = index + 1
+      const topOutcomeIdx = market.outcomePrices.indexOf(
+        Math.max(...market.outcomePrices)
+      )
+      const topOutcome = market.outcomes[topOutcomeIdx] || '—'
+      const topProb = Math.round(
+        (market.outcomePrices[topOutcomeIdx] || 0) * 100
+      )
+      const vol = formatCompactUsd(market.volume24hr || market.volume)
+      const url = buildMarketUrl(market)
+
+      caption += `${rank}. <a href="${url}">${escapeHtml(truncateText(market.question, 110))}</a>\n`
+      caption += `    ${escapeHtml(topOutcome)}: <b>${topProb}%</b> · ${escapeHtml(vol)}\n\n`
+    })
+
+    caption +=
+      '📊 <a href="https://polymarket.com/markets?_s=volume24hr&_od=desc">View all on Polymarket</a>'
+
+    return {
+      id: `trending-digest-${sourceHour()}`,
+      type: 'trending_digest',
+      priority: 95,
+      caption: trimCaptionForMessage(caption),
+      buttons: [
+        {
+          text: '🔮 Explore Markets',
+          url: 'https://polymarket.com/markets?_s=volume24hr&_od=desc',
+        },
+        {
+          text: config.telegram.communityButtonText,
+          url: config.telegram.communityUrl,
+        },
+      ],
+      sourceId: `digest:trending:${new Date().toISOString().slice(0, 10)}`,
+      createdAt: Date.now(),
     }
   }
 

@@ -66,7 +66,10 @@ export class TelegramPublisher {
 
     this.processing = true
     try {
-      await this.sendPost(nextPost)
+      const messageId = await this.sendPost(nextPost)
+      if (nextPost.type === 'trending_digest' && messageId) {
+        await this.pinTrendingDigest(messageId)
+      }
       this.lastPostAt = Date.now()
       this.postTimestamps.push(this.lastPostAt)
       this.postTimestamps = this.postTimestamps.filter(
@@ -105,18 +108,18 @@ export class TelegramPublisher {
     return this.postTimestamps.length < maxPostsPerHour
   }
 
-  private async sendPost(post: QueuedPost): Promise<void> {
+  private async sendPost(post: QueuedPost): Promise<number | undefined> {
     const keyboard = Markup.inlineKeyboard([
       post.buttons.map((button) => Markup.button.url(button.text, button.url)),
     ])
 
     if (config.runtime.dryRun) {
       logger.info(`[DRY RUN] ${post.type}: ${post.caption}`)
-      return
+      return undefined
     }
 
     if (post.imageBuffer) {
-      await this.bot.telegram.sendPhoto(
+      const sentMessage = await this.bot.telegram.sendPhoto(
         this.telegramConfig.channelId,
         { source: post.imageBuffer },
         {
@@ -125,7 +128,7 @@ export class TelegramPublisher {
           reply_markup: keyboard.reply_markup,
         }
       )
-      return
+      return sentMessage.message_id
     }
 
     if (post.imageUrl) {
@@ -133,7 +136,7 @@ export class TelegramPublisher {
         responseType: 'arraybuffer',
         timeout: 15_000,
       })
-      await this.bot.telegram.sendPhoto(
+      const sentMessage = await this.bot.telegram.sendPhoto(
         this.telegramConfig.channelId,
         { source: Buffer.from(response.data) },
         {
@@ -142,10 +145,10 @@ export class TelegramPublisher {
           reply_markup: keyboard.reply_markup,
         }
       )
-      return
+      return sentMessage.message_id
     }
 
-    await this.bot.telegram.sendMessage(
+    const sentMessage = await this.bot.telegram.sendMessage(
       this.telegramConfig.channelId,
       trimCaptionForMessage(post.caption),
       {
@@ -154,5 +157,28 @@ export class TelegramPublisher {
         link_preview_options: { is_disabled: true },
       }
     )
+    return sentMessage.message_id
+  }
+
+  private async pinTrendingDigest(messageId: number): Promise<void> {
+    try {
+      await this.bot.telegram.unpinAllChatMessages(
+        this.telegramConfig.channelId
+      )
+    } catch (error) {
+      logger.warn('Failed to unpin previous trending digest', error)
+    }
+
+    try {
+      await this.bot.telegram.pinChatMessage(
+        this.telegramConfig.channelId,
+        messageId,
+        {
+          disable_notification: true,
+        }
+      )
+    } catch (error) {
+      logger.warn('Failed to pin trending digest', error)
+    }
   }
 }

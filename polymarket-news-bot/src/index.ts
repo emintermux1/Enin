@@ -183,6 +183,21 @@ async function main() {
   )
 
   timers.push(
+    startLoop(
+      'trending-digest',
+      config.monitoring.trendingDigestIntervalMs,
+      async () => {
+        const markets = await marketMonitor.getTrendingDigestMarkets()
+        if (markets.length === 0) {
+          return
+        }
+        const queued = await postComposer.composeTrendingDigest(markets)
+        publisher.queuePost(queued)
+      }
+    )
+  )
+
+  timers.push(
     startLoop('new-markets', config.monitoring.newMarketPollMs, async () => {
       const newMarkets = await marketMonitor.getNewNotableMarkets()
       for (const market of newMarkets) {

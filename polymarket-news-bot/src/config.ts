@@ -22,6 +22,7 @@ export interface AppConfig {
   }
   monitoring: {
     trendingPollMs: number
+    trendingDigestIntervalMs: number
     newMarketPollMs: number
     priceMovePollMs: number
     resolutionPollMs: number
@@ -96,6 +97,10 @@ export const config: AppConfig = {
   },
   monitoring: {
     trendingPollMs: readNumber('TRENDING_POLL_MS', 300_000),
+    trendingDigestIntervalMs: readNumber(
+      'TRENDING_DIGEST_INTERVAL_MS',
+      86_400_000
+    ),
     newMarketPollMs: readNumber('NEW_MARKET_POLL_MS', 600_000),
     priceMovePollMs: readNumber('PRICE_MOVE_POLL_MS', 180_000),
     resolutionPollMs: readNumber('RESOLUTION_POLL_MS', 300_000),

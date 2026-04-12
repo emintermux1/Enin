@@ -36,6 +36,7 @@ export type PostType =
   | 'price_mover'
   | 'resolution'
   | 'market_pulse'
+  | 'trending_digest'
 
 export interface InlineButton {
   text: string

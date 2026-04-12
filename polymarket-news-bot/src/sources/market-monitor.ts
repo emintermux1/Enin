@@ -31,6 +31,16 @@ export class MarketMonitor {
       .slice(0, 8)
   }
 
+  async getTrendingDigestMarkets(): Promise<MarketData[]> {
+    const markets = await this.polymarketApi.getTopEvents(20, 0)
+    return markets
+      .filter(
+        (market) => market.active && !market.closed && market.volume24hr > 0
+      )
+      .sort((a, b) => b.volume24hr - a.volume24hr)
+      .slice(0, 10)
+  }
+
   async getNewNotableMarkets(): Promise<MarketData[]> {
     const markets = await this.polymarketApi.getNewestEvents(40)
     const fresh: MarketData[] = []
