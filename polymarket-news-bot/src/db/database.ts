@@ -29,6 +29,8 @@ export class NewsDatabase {
   private readonly insertPostedStmt: Database.Statement
   private readonly countPostedSinceStmt: Database.Statement
   private readonly hasPostedTypeSlugStmt: Database.Statement
+  private readonly hasFingerprintStmt: Database.Statement
+  private readonly insertFingerprintStmt: Database.Statement
   private readonly latestSnapshotStmt: Database.Statement
   private readonly insertSnapshotStmt: Database.Statement
   private readonly knownMarketStmt: Database.Statement
@@ -68,6 +70,13 @@ export class NewsDatabase {
         question TEXT NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS content_fingerprints (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        fingerprint TEXT NOT NULL,
+        source_id TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      );
+
       CREATE TABLE IF NOT EXISTS bot_metadata (
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL,
@@ -76,6 +85,8 @@ export class NewsDatabase {
 
       CREATE INDEX IF NOT EXISTS idx_posted_source ON posted_messages(source_id);
       CREATE INDEX IF NOT EXISTS idx_posted_time ON posted_messages(posted_at);
+      CREATE INDEX IF NOT EXISTS idx_fingerprint ON content_fingerprints(fingerprint);
+      CREATE INDEX IF NOT EXISTS idx_fingerprint_time ON content_fingerprints(created_at);
       CREATE INDEX IF NOT EXISTS idx_snapshots_market ON market_snapshots(market_id);
       CREATE INDEX IF NOT EXISTS idx_snapshots_time ON market_snapshots(captured_at);
     `)
@@ -92,6 +103,12 @@ export class NewsDatabase {
     )
     this.hasPostedTypeSlugStmt = this.connection.prepare(
       'SELECT COUNT(*) as count FROM posted_messages WHERE post_type = ? AND market_slug = ? AND posted_at >= ?'
+    )
+    this.hasFingerprintStmt = this.connection.prepare(
+      'SELECT COUNT(*) as count FROM content_fingerprints WHERE fingerprint = ? AND created_at >= ?'
+    )
+    this.insertFingerprintStmt = this.connection.prepare(
+      'INSERT INTO content_fingerprints (fingerprint, source_id, created_at) VALUES (?, ?, ?)'
     )
     this.latestSnapshotStmt = this.connection.prepare(`
       SELECT outcome_prices, volume, captured_at
@@ -157,6 +174,21 @@ export class NewsDatabase {
   countPostsSince(timestamp: number): number {
     const row = this.countPostedSinceStmt.get(timestamp) as PostedMessageRow
     return row?.count ?? 0
+  }
+
+  hasRecentFingerprint(
+    fingerprint: string,
+    lookbackMs = 2 * 60 * 60 * 1000
+  ): boolean {
+    const row = this.hasFingerprintStmt.get(
+      fingerprint,
+      Date.now() - lookbackMs
+    ) as PostedMessageRow
+    return (row?.count ?? 0) > 0
+  }
+
+  recordFingerprint(fingerprint: string, sourceId: string): void {
+    this.insertFingerprintStmt.run(fingerprint, sourceId, Date.now())
   }
 
   getLatestSnapshot(marketId: string): MarketSnapshot | null {
