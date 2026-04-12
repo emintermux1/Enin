@@ -104,9 +104,9 @@ export const config: AppConfig = {
     newMarketPollMs: readNumber('NEW_MARKET_POLL_MS', 600_000),
     priceMovePollMs: readNumber('PRICE_MOVE_POLL_MS', 180_000),
     resolutionPollMs: readNumber('RESOLUTION_POLL_MS', 300_000),
-    minVolumeForTrending: readNumber('MIN_VOLUME_TRENDING', 100_000),
+    minVolumeForTrending: readNumber('MIN_VOLUME_TRENDING', 1_000),
     minPriceChangePercent: readNumber('MIN_PRICE_CHANGE_PERCENT', 10),
-    minVolumeForNewMarket: readNumber('MIN_VOLUME_NEW_MARKET', 50_000),
+    minVolumeForNewMarket: readNumber('MIN_VOLUME_NEW_MARKET', 2_000),
   },
   posting: {
     minIntervalMs: readNumber('MIN_POST_INTERVAL_MS', 120_000),

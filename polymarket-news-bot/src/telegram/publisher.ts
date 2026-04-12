@@ -132,20 +132,38 @@ export class TelegramPublisher {
     }
 
     if (post.imageUrl) {
-      const response = await axios.get<ArrayBuffer>(post.imageUrl, {
-        responseType: 'arraybuffer',
-        timeout: 15_000,
-      })
-      const sentMessage = await this.bot.telegram.sendPhoto(
-        this.telegramConfig.channelId,
-        { source: Buffer.from(response.data) },
-        {
-          caption: trimCaptionForPhoto(post.caption),
-          parse_mode: 'HTML',
-          reply_markup: keyboard.reply_markup,
+      try {
+        const sentMessage = await this.bot.telegram.sendPhoto(
+          this.telegramConfig.channelId,
+          post.imageUrl,
+          {
+            caption: trimCaptionForPhoto(post.caption),
+            parse_mode: 'HTML',
+            reply_markup: keyboard.reply_markup,
+          }
+        )
+        return sentMessage.message_id
+      } catch (urlError) {
+        logger.warn(`Direct URL send failed, downloading image: ${post.imageUrl}`)
+        try {
+          const response = await axios.get<ArrayBuffer>(post.imageUrl, {
+            responseType: 'arraybuffer',
+            timeout: 15_000,
+          })
+          const sentMessage = await this.bot.telegram.sendPhoto(
+            this.telegramConfig.channelId,
+            { source: Buffer.from(response.data) },
+            {
+              caption: trimCaptionForPhoto(post.caption),
+              parse_mode: 'HTML',
+              reply_markup: keyboard.reply_markup,
+            }
+          )
+          return sentMessage.message_id
+        } catch (downloadError) {
+          logger.warn(`Image download also failed, sending text-only`, downloadError)
         }
-      )
-      return sentMessage.message_id
+      }
     }
 
     const sentMessage = await this.bot.telegram.sendMessage(

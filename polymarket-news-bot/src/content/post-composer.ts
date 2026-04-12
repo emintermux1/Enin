@@ -92,11 +92,9 @@ export class PostComposer {
         return {
           id: buildId('scraped-new', `${post.source}:${post.messageId}`),
           type: 'new_market',
-          priority: 60,
+          priority: 85,
           caption,
-          imageBuffer:
-            await this.cardGenerator.generateNewMarketCard(relatedMarket),
-          imageUrl: post.imageUrl,
+          imageUrl: relatedMarket.image || post.imageUrl,
           buttons: buildMarketButtons(relatedMarket),
           sourceId: `${post.source}:${post.messageId}`,
           createdAt: Date.now(),
@@ -119,17 +117,12 @@ export class PostComposer {
     const caption = trimCaptionForPhoto(
       `🚨 <b>BREAKING:</b> ${escapeHtml(headline)}${context}${links ? `\n\n${links}` : ''}`
     )
-    const imageBuffer = await this.cardGenerator.generateBreakingNewsCard(
-      headline,
-      relatedMarket
-    )
     return {
       id: buildId('breaking', `${post.source}:${post.messageId}`),
       type: 'breaking_news',
       priority: 90,
       caption,
-      imageBuffer,
-      imageUrl: post.imageUrl,
+      imageUrl: relatedMarket?.image || post.imageUrl,
       buttons: buildMarketButtons(relatedMarket),
       sourceId: `${post.source}:${post.messageId}`,
       createdAt: Date.now(),
@@ -205,9 +198,9 @@ export class PostComposer {
     return {
       id: buildId('new', market.slug),
       type: 'new_market',
-      priority: 60,
+      priority: 85,
       caption,
-      imageBuffer: await this.cardGenerator.generateNewMarketCard(market),
+      imageUrl: market.image || undefined,
       buttons: buildMarketButtons(market),
       sourceId: `market:new_market:${market.slug}:${sourceHour()}`,
       createdAt: Date.now(),
