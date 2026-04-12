@@ -34,6 +34,7 @@ export type PostType =
   | 'market_spotlight'
   | 'new_market'
   | 'price_mover'
+  | 'flash_alert'
   | 'resolution'
   | 'market_pulse'
   | 'trending_digest'

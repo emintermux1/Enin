@@ -107,6 +107,43 @@ export class MarketMonitor {
       .slice(0, 5)
   }
 
+  async getFlashAlerts(): Promise<PriceMover[]> {
+    const markets = await this.polymarketApi.getTopEvents(50, 0)
+    const alerts: PriceMover[] = []
+
+    for (const market of markets) {
+      try {
+        const latestSnapshot = this.db.getLatestSnapshot(market.id)
+        const currentProbability = bestProbability(market.outcomePrices)
+        if (latestSnapshot && latestSnapshot.outcomePrices.length > 0) {
+          const previousProbability = bestProbability(latestSnapshot.outcomePrices)
+          const delta = (currentProbability - previousProbability) * 100
+          if (Math.abs(delta) >= config.monitoring.flashAlertMinChange) {
+            alerts.push({
+              market,
+              change: Math.abs(delta),
+              direction: delta >= 0 ? 'up' : 'down',
+            })
+          }
+        }
+      } catch (error) {
+        logger.warn(`Flash alert check failed for ${market.slug}`, error)
+      }
+    }
+
+    return alerts
+      .filter(
+        (item) =>
+          !this.db.hasRecentMarketPost(
+            'flash_alert',
+            item.market.slug,
+            4 * 60 * 60 * 1000
+          )
+      )
+      .sort((a, b) => b.change - a.change)
+      .slice(0, 3)
+  }
+
   async getResolvedMarkets(): Promise<MarketData[]> {
     const markets = await this.polymarketApi.getResolvedMarkets(12)
     return markets
