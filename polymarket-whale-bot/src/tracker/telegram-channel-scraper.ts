@@ -2,12 +2,15 @@ import { HttpClient } from '../api/http-client';
 import { ScrapedChannelSource, ScrapedChannelTrade } from '../types';
 import { logger } from '../utils/logger';
 
-const DEFAULT_CHANNELS: ScrapedChannelSource[] = ['polymarket_whale', 'polymarket_whales'];
+const DEFAULT_CHANNELS: ScrapedChannelSource[] = ['polymarket_whale', 'polymarket_whales', 'polycop_signal'];
 const POST_PATTERN = /data-post="([^"/]+)\/(\d+)"/g;
 const MESSAGE_TEXT_PATTERN = /<div class="tgme_widget_message_text js-message_text" dir="auto">([\s\S]*?)<\/div>/;
 const TIMESTAMP_PATTERN = /<time datetime="([^"]+)"/;
 const WALLET_PATTERN = /https:\/\/polymarket\.com\/profile\/(0x[a-fA-F0-9]{40})/;
 const MARKET_URL_PATTERN = /https:\/\/polymarket\.com\/event\/([^"'?#/]+)\/([^"'?#/]+)/;
+const SMART_SCORE_PATTERN = /Smart\s*Score[:\s]*(\d+)/i;
+const POLYCOP_WIN_RATE_PATTERN = /Win\s*Rate[:\s]*([\d.]+%?)/i;
+const POLYCOP_BACKTEST_PATTERN = /Backtest\s*PnL[:\s]*/i;
 
 function decodeHtmlEntities(input: string): string {
   return input
@@ -172,6 +175,64 @@ function parseSharedFields(
   };
 }
 
+function parsePolycopFields(
+  text: string,
+  source: ScrapedChannelSource,
+  messageId: string,
+  timestamp: number,
+): ScrapedChannelTrade | null {
+  const lines = text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (lines.length < 4) {
+    return null;
+  }
+
+  const marketQuestion = lines[0] ?? '';
+  const actionLine = lines.find((line) => /(?:^| )(buy|sell)\b/i.test(line));
+  const amount = parseCurrency(text.match(/Amount:\s*([+\-]?\$[\d,]+(?:\.\d+)?)/i)?.[1]);
+  const smartScore = parseNumber(text.match(SMART_SCORE_PATTERN)?.[1]);
+  const polycopWinRate = text.match(POLYCOP_WIN_RATE_PATTERN)?.[1]?.trim();
+  const traderName = text.match(/Whale\s*Profile:\s*(.+)/i)?.[1]?.trim() ?? '';
+
+  if (!marketQuestion || !actionLine || amount === undefined || !traderName) {
+    return null;
+  }
+
+  const actionMatch = actionLine.match(/(Buy|Sell)\s+(.+?)\s*\|\s*\$?([\d.]+)/i);
+  if (!actionMatch) {
+    return null;
+  }
+
+  const rawSide = actionMatch[1] ?? 'Buy';
+  const rawOutcome = actionMatch[2] ?? '';
+  const price = parseNumber(actionMatch[3]);
+  if (price === undefined) {
+    return null;
+  }
+
+  if (POLYCOP_BACKTEST_PATTERN.test(text)) {
+    POLYCOP_BACKTEST_PATTERN.lastIndex = 0;
+  }
+
+  return {
+    source,
+    messageId,
+    tradeType: 'SMART_MONEY',
+    marketQuestion,
+    side: rawSide.toUpperCase() === 'SELL' ? 'SELL' : 'BUY',
+    outcome: normalizeOutcome(rawOutcome),
+    amount,
+    price,
+    traderName,
+    walletAddress: text.match(/\b0x[a-fA-F0-9]{40}\b/)?.[0],
+    smartScore: smartScore !== undefined ? Math.max(0, Math.min(100, smartScore)) : undefined,
+    polycopWinRate,
+    timestamp,
+  };
+}
+
 export class TelegramChannelScraper {
   private readonly client: HttpClient;
   private readonly lastMessageIds = new Map<string, number>();
@@ -291,12 +352,31 @@ export class TelegramChannelScraper {
       const block = start !== undefined ? html.slice(start, end) : '';
       const rawMessageHtml = block.match(MESSAGE_TEXT_PATTERN)?.[1];
       const isoTimestamp = block.match(TIMESTAMP_PATTERN)?.[1];
-      if (matchChannel !== channel || !rawMessageHtml || !messageId || !isoTimestamp) {
+      if (!matchChannel || matchChannel.toLowerCase() !== channel.toLowerCase() || !rawMessageHtml || !messageId || !isoTimestamp) {
         continue;
       }
       const text = htmlToText(rawMessageHtml);
       const timestamp = Math.floor(new Date(isoTimestamp).getTime() / 1000);
       if (!text || !Number.isFinite(timestamp)) {
+        continue;
+      }
+      if (channel === 'polycop_signal') {
+        const polycopTrade = parsePolycopFields(text, channel, messageId, timestamp);
+        if (!polycopTrade) {
+          logger.debug(`Skipping unparseable PolyCop message ${messageId}`);
+          continue;
+        }
+        const walletFromHtml = rawMessageHtml.match(WALLET_PATTERN)?.[1];
+        if (walletFromHtml) {
+          polycopTrade.walletAddress = walletFromHtml;
+        }
+        const marketMatch = rawMessageHtml.match(MARKET_URL_PATTERN);
+        if (marketMatch) {
+          polycopTrade.eventSlug = marketMatch[1];
+          polycopTrade.marketSlug = marketMatch[2];
+          polycopTrade.marketUrl = marketMatch[0];
+        }
+        trades.push(polycopTrade);
         continue;
       }
       const parser = channel === 'polymarket_whale'

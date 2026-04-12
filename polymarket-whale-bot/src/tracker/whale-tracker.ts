@@ -3,6 +3,7 @@ import Database from 'better-sqlite3';
 import { DataApi } from '../api/data-api';
 import { GammaApi, GammaMarketLookup } from '../api/gamma-api';
 import { HashdiveApi } from '../api/hashdive-api';
+import { PolynterApi } from '../api/polynter-api';
 import { PolygonscanApi } from '../api/polygonscan-api';
 import { WalletTradeRepo } from '../db/wallet-trade-repo';
 import { InsiderTracker } from '../db/insider-tracker';
@@ -97,6 +98,7 @@ interface WhaleTrackerOptions {
   walletTradeRepo?: WalletTradeRepo;
   insiderTracker?: InsiderTracker;
   polygonscanApi?: PolygonscanApi;
+  polynterApi?: PolynterApi;
   newsCorrelator?: NewsCorrelator;
   priceHistory?: PriceHistory;
 }
@@ -143,6 +145,7 @@ export class WhaleTracker {
       options.insiderTracker,
       options.newsCorrelator,
       this.priceHistory,
+      options.polynterApi,
     );
     this.coordinationDetector = new CoordinationDetector();
     this.tradeFirehose = new TradeFirehose({
@@ -364,7 +367,9 @@ export class WhaleTracker {
     }
 
     const enriched = this.applyScrapedMetadata(
-      await this.decorateTrade(await this.tradeEnricher.enrichTrade(mappedTrade)),
+      await this.decorateTrade(await this.tradeEnricher.enrichTrade(mappedTrade, {
+        smartScore: scrapedTrade.smartScore,
+      })),
       scrapedTrade,
     );
     if (mappedTrade.proxyWallet && mappedTrade.conditionId) {
@@ -525,6 +530,9 @@ export class WhaleTracker {
     if (scrapedTrade.pnl !== undefined) {
       updated.traderStats.totalRealizedPnl = scrapedTrade.pnl;
     }
+    if (scrapedTrade.smartScore !== undefined) {
+      updated.smartScore = scrapedTrade.smartScore;
+    }
     const winRate = parseWinRateDetails(scrapedTrade.winRate);
     if (winRate) {
       updated.traderStats.winRate = winRate.winRate;
@@ -535,6 +543,13 @@ export class WhaleTracker {
       updated.traderStats.winRateLabel = `${Math.round(winRate.winRate)}% (${winRate.wins}W-${winRate.losses}L)`;
     } else if (scrapedTrade.winRate) {
       updated.traderStats.winRateLabel = scrapedTrade.winRate;
+    }
+    if (scrapedTrade.polycopWinRate) {
+      const polycopWinRate = parseFloat(scrapedTrade.polycopWinRate);
+      if (!Number.isNaN(polycopWinRate) && updated.traderStats.closedPositions < 5) {
+        updated.traderStats.winRate = polycopWinRate;
+        updated.traderStats.winRateLabel = `${Math.round(polycopWinRate)}% (PolyCop)`;
+      }
     }
 
     const topHolderSplitMatch = scrapedTrade.topHolders?.match(

@@ -159,6 +159,15 @@ export interface EnrichedTrade {
     preNewsCount: number;
     isSuspectedInsider: boolean;
   };
+  smartScore?: number;
+  polynterData?: {
+    apy: number;
+    volume: number;
+    liquidity: number;
+    tags: string[];
+    pricePercent: number;
+    polymarketUrl: string;
+  };
 }
 
 export interface LeaderboardEntry {
@@ -289,7 +298,7 @@ export interface ResolutionAlert {
   freshWalletsInMarket: number;
 }
 
-export type ScrapedChannelSource = 'polymarket_whale' | 'polymarket_whales';
+export type ScrapedChannelSource = 'polymarket_whale' | 'polymarket_whales' | 'polycop_signal';
 
 export interface ScrapedChannelTrade {
   source: ScrapedChannelSource;
@@ -310,6 +319,8 @@ export interface ScrapedChannelTrade {
   walletAddress?: string;
   positions?: number;
   winRate?: string;
+  smartScore?: number;
+  polycopWinRate?: string;
   pnl?: number;
   topHolders?: string;
   timestamp: number;
@@ -344,6 +355,9 @@ export interface AppConfig {
   tracking: TrackingConfig;
   scraping: ScrapingConfig;
   api: ApiConfig;
+  polynter: {
+    enabled: boolean;
+  };
   polygonscan: {
     apiKey: string;
     enabled: boolean;

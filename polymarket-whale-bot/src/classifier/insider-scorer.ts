@@ -18,6 +18,7 @@ export function calculateInsiderScore(params: {
   historicalPreNewsCount?: number;
   cumulativeInsiderScore?: number;
   eventProximityHours?: number;
+  smartScore?: number;
 }): InsiderScore {
   let score = 0;
   const signals: string[] = [];
@@ -93,6 +94,14 @@ export function calculateInsiderScore(params: {
   ) {
     score += 15;
     signals.push(`Trading ${params.eventProximityHours}h before resolution`);
+  }
+
+  if (params.smartScore !== undefined && params.smartScore >= 80) {
+    score += 20;
+    signals.push(`High PolyCop Smart Score (${params.smartScore})`);
+  } else if (params.smartScore !== undefined && params.smartScore >= 60) {
+    score += 10;
+    signals.push(`Good PolyCop Smart Score (${params.smartScore})`);
   }
 
   return {
