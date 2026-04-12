@@ -187,15 +187,19 @@ export class ChannelPoster {
     }
     const { text, entities } = this.buildCaption(trade)
     const image = await this.cardGenerator.generateCard(trade)
+    const marketUrl =
+      trade.polynterData?.polymarketUrl ||
+      `https://polymarket.com/event/${
+        trade.marketInfo.eventSlug ||
+        trade.trade.eventSlug ||
+        trade.marketInfo.slug ||
+        trade.trade.slug
+      }`
     await this.sendPost({
       text,
       entities,
       image,
-      eventSlug:
-        trade.marketInfo.eventSlug ||
-        trade.trade.eventSlug ||
-        trade.marketInfo.slug ||
-        trade.trade.slug,
+      marketUrl,
     })
   }
 
@@ -210,7 +214,7 @@ export class ChannelPoster {
       text,
       entities,
       image,
-      eventSlug: alert.marketSlug,
+      marketUrl: `https://polymarket.com/event/${alert.marketSlug}`,
     })
   }
 
@@ -388,9 +392,9 @@ export class ChannelPoster {
     text: string
     entities: CaptionResult['entities']
     image: Buffer | null
-    eventSlug: string
+    marketUrl: string
   }): Promise<void> {
-    const keyboard = this.buildMarketKeyboard(params.eventSlug)
+    const keyboard = this.buildMarketKeyboard(params.marketUrl)
 
     try {
       if (params.image) {
@@ -439,7 +443,7 @@ export class ChannelPoster {
     }
   }
 
-  private buildMarketKeyboard(eventSlug: string) {
+  private buildMarketKeyboard(marketUrl: string) {
     return Markup.inlineKeyboard([
       [
         Markup.button.url(
@@ -450,7 +454,7 @@ export class ChannelPoster {
       [
         Markup.button.url(
           '📊 View Polymarket',
-          `https://polymarket.com/event/${eventSlug}`
+          marketUrl
         ),
       ],
     ])
@@ -476,7 +480,7 @@ export class ChannelPoster {
       trade.trade.eventSlug ||
       trade.marketInfo.slug ||
       trade.trade.slug
-    const marketUrl = `https://polymarket.com/event/${eventSlug}`
+    const marketUrl = trade.polynterData?.polymarketUrl || `https://polymarket.com/event/${eventSlug}`
 
     const builder = new CaptionBuilder()
 
@@ -487,8 +491,24 @@ export class ChannelPoster {
     }
     builder.newLine().newLine()
     builder.addLink(question, marketUrl)
-    if (trade.marketInfo.volume > 0) {
+    if (!trade.polynterData && trade.marketInfo.volume > 0) {
       builder.addText(` · Vol: ${formatCompactUsd(trade.marketInfo.volume)}`)
+    }
+    if (trade.polynterData) {
+      const marketStats: string[] = []
+      if (trade.polynterData.apy > 10) {
+        marketStats.push(`APY: ${Math.round(trade.polynterData.apy)}%`)
+      }
+      if (trade.polynterData.volume > 0) {
+        marketStats.push(`Vol: ${formatCompactUsd(trade.polynterData.volume)}`)
+      }
+      if (trade.polynterData.liquidity > 0) {
+        marketStats.push(`Liq: ${formatCompactUsd(trade.polynterData.liquidity)}`)
+      }
+      if (marketStats.length > 0) {
+        builder.newLine()
+        builder.addText(`📈 ${marketStats.join(' · ')}`)
+      }
     }
     builder.newLine().newLine()
     builder.addPremiumEmoji(
@@ -557,6 +577,12 @@ export class ChannelPoster {
       traderLines.push({
         emoji: null,
         text: `Win Rate: ${Math.round(trade.traderStats.winRate)}%`,
+      })
+    }
+    if (trade.smartScore && trade.smartScore > 0) {
+      traderLines.push({
+        emoji: null,
+        text: `🎯 Smart Score: ${trade.smartScore}/100`,
       })
     }
     traderLines.push({

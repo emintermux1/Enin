@@ -6,6 +6,7 @@ import { InsiderTracker } from './db/insider-tracker';
 import { TraderPerformanceRepo } from './db/trader-performance-repo';
 import { DataApi } from './api/data-api';
 import { GammaApi } from './api/gamma-api';
+import { PolynterApi } from './api/polynter-api';
 import { PolygonscanApi } from './api/polygonscan-api';
 import { NewsApi } from './api/news-api';
 import { NewsCorrelator } from './classifier/news-correlator';
@@ -41,10 +42,24 @@ async function main() {
   logger.info('Starting Polymarket Whale Bot...');
 
   database = initDatabase();
+  let polynterRefreshTimer: NodeJS.Timeout | null = null;
   const walletTradeRepo = new WalletTradeRepo(database);
   const insiderTracker = new InsiderTracker(database);
   const traderPerformanceRepo = new TraderPerformanceRepo(database);
   const gammaApi = new GammaApi(config.api);
+  const polynterApi = config.polynter.enabled
+    ? new PolynterApi()
+    : undefined;
+  if (polynterApi) {
+    polynterApi.refreshAllMarkets().catch((error) => {
+      logger.warn('Polynter initial refresh failed', error);
+    });
+    polynterRefreshTimer = setInterval(() => {
+      polynterApi.refreshAllMarkets().catch((error) => {
+        logger.warn('Polynter refresh failed', error);
+      });
+    }, 30 * 60 * 1000);
+  }
   const polygonscanApi = config.polygonscan.enabled
     ? new PolygonscanApi(config.polygonscan.apiKey)
     : undefined;
@@ -109,6 +124,7 @@ async function main() {
     walletTradeRepo,
     insiderTracker,
     polygonscanApi,
+    polynterApi,
     newsCorrelator,
     priceHistory,
   });
@@ -129,6 +145,10 @@ async function main() {
 
   const shutdown = () => {
     logger.info('Shutting down...');
+    if (polynterRefreshTimer) {
+      clearInterval(polynterRefreshTimer);
+      polynterRefreshTimer = null;
+    }
     tracker.stop();
     resolutionChecker.stop();
     dailyLeaderboard.stop();

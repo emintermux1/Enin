@@ -36,7 +36,7 @@ export const config: AppConfig = {
   scraping: {
     enabled: true,
     pollIntervalMs: readNumber('SCRAPE_POLL_INTERVAL_MS', 60_000),
-    channels: ['polymarket_whale', 'polymarket_whales'],
+    channels: ['polymarket_whale', 'polymarket_whales', 'polycop_signal'],
   },
   api: {
     gammaApiUrl: readString('GAMMA_API_URL', 'https://gamma-api.polymarket.com'),
@@ -45,6 +45,13 @@ export const config: AppConfig = {
     retryCount: 3,
     minRequestSpacingMs: 40,
     hashdiveApiKey: readString('HASHDIVE_API_KEY', ''),
+  },
+  struct: {
+    apiKey: readString('STRUCT_API_KEY', ''),
+    enabled: Boolean(readString('STRUCT_API_KEY', '')),
+  },
+  polynter: {
+    enabled: readNumber('POLYNTER_ENABLED', 1) === 1,
   },
   polygonscan: {
     apiKey: readString('POLYGONSCAN_API_KEY', ''),

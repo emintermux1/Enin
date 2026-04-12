@@ -3,6 +3,7 @@ import Database from 'better-sqlite3';
 import { DataApi } from '../api/data-api';
 import { GammaApi, GammaMarketLookup } from '../api/gamma-api';
 import { HashdiveApi } from '../api/hashdive-api';
+import { PolynterApi } from '../api/polynter-api';
 import { PolygonscanApi } from '../api/polygonscan-api';
 import { WalletTradeRepo } from '../db/wallet-trade-repo';
 import { InsiderTracker } from '../db/insider-tracker';
@@ -15,6 +16,7 @@ import { createSourceDedupKey, HashdiveDiscovery } from './hashdive-discovery';
 import { NewsCorrelator } from '../classifier/news-correlator';
 import { CoordinationDetector } from '../classifier/coordination-detector';
 import { PriceHistory } from './price-history';
+import { StructDiscovery } from './struct-discovery';
 import { TelegramChannelScraper } from './telegram-channel-scraper';
 import { TradeFirehose } from './trade-firehose';
 
@@ -97,6 +99,7 @@ interface WhaleTrackerOptions {
   walletTradeRepo?: WalletTradeRepo;
   insiderTracker?: InsiderTracker;
   polygonscanApi?: PolygonscanApi;
+  polynterApi?: PolynterApi;
   newsCorrelator?: NewsCorrelator;
   priceHistory?: PriceHistory;
 }
@@ -109,6 +112,7 @@ export class WhaleTracker {
   private readonly tradeEnricher: TradeEnricher;
   private readonly coordinationDetector: CoordinationDetector;
   private readonly hashdiveDiscovery?: HashdiveDiscovery;
+  private readonly structDiscovery?: StructDiscovery;
   private readonly tradeFirehose: TradeFirehose;
   private readonly channelScraper?: TelegramChannelScraper;
   private readonly walletTradeRepo?: WalletTradeRepo;
@@ -143,6 +147,7 @@ export class WhaleTracker {
       options.insiderTracker,
       options.newsCorrelator,
       this.priceHistory,
+      options.polynterApi,
     );
     this.coordinationDetector = new CoordinationDetector();
     this.tradeFirehose = new TradeFirehose({
@@ -165,6 +170,18 @@ export class WhaleTracker {
         dedupCache: this.dedupCache,
         minTradeSize: this.config.tracking.minTradeSize,
         pollIntervalMs: this.config.tracking.hashdivePollIntervalMs,
+        onTrade: async (trade) => this.publishTrade(trade),
+      });
+    }
+    if (config.struct.enabled) {
+      this.structDiscovery = new StructDiscovery({
+        apiKey: config.struct.apiKey,
+        gammaApi: this.gammaApi,
+        walletManager: this.walletManager,
+        tradeEnricher: this.tradeEnricher,
+        coordinationDetector: this.coordinationDetector,
+        dedupCache: this.dedupCache,
+        minTradeSize: this.config.tracking.minTradeSize,
         onTrade: async (trade) => this.publishTrade(trade),
       });
     }
@@ -230,6 +247,7 @@ export class WhaleTracker {
     }, this.config.tracking.pollIntervalMs);
     await this.tradeFirehose.start();
     await this.hashdiveDiscovery?.start();
+    await this.structDiscovery?.start();
     await this.channelScraper?.start();
     void this.tick();
   }
@@ -242,6 +260,7 @@ export class WhaleTracker {
     }
     this.tradeFirehose.stop();
     this.hashdiveDiscovery?.stop();
+    this.structDiscovery?.stop();
     this.channelScraper?.stop();
   }
 
@@ -364,7 +383,9 @@ export class WhaleTracker {
     }
 
     const enriched = this.applyScrapedMetadata(
-      await this.decorateTrade(await this.tradeEnricher.enrichTrade(mappedTrade)),
+      await this.decorateTrade(await this.tradeEnricher.enrichTrade(mappedTrade, {
+        smartScore: scrapedTrade.smartScore,
+      })),
       scrapedTrade,
     );
     if (mappedTrade.proxyWallet && mappedTrade.conditionId) {
@@ -525,6 +546,9 @@ export class WhaleTracker {
     if (scrapedTrade.pnl !== undefined) {
       updated.traderStats.totalRealizedPnl = scrapedTrade.pnl;
     }
+    if (scrapedTrade.smartScore !== undefined) {
+      updated.smartScore = scrapedTrade.smartScore;
+    }
     const winRate = parseWinRateDetails(scrapedTrade.winRate);
     if (winRate) {
       updated.traderStats.winRate = winRate.winRate;
@@ -535,6 +559,13 @@ export class WhaleTracker {
       updated.traderStats.winRateLabel = `${Math.round(winRate.winRate)}% (${winRate.wins}W-${winRate.losses}L)`;
     } else if (scrapedTrade.winRate) {
       updated.traderStats.winRateLabel = scrapedTrade.winRate;
+    }
+    if (scrapedTrade.polycopWinRate) {
+      const polycopWinRate = parseFloat(scrapedTrade.polycopWinRate);
+      if (!Number.isNaN(polycopWinRate) && updated.traderStats.closedPositions < 5) {
+        updated.traderStats.winRate = polycopWinRate;
+        updated.traderStats.winRateLabel = `${Math.round(polycopWinRate)}% (PolyCop)`;
+      }
     }
 
     const topHolderSplitMatch = scrapedTrade.topHolders?.match(

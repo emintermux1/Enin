@@ -3,6 +3,7 @@ import { GammaApi } from '../api/gamma-api';
 import { DataApi } from '../api/data-api';
 import { HashdiveApi, HashdiveTraderProfile } from '../api/hashdive-api';
 import { PolygonscanApi } from '../api/polygonscan-api';
+import { PolynterApi } from '../api/polynter-api';
 import { classifyTrader } from '../classifier/trader-classifier';
 import { classifyRisk } from '../classifier/risk-classifier';
 import { calculateInsiderScore } from '../classifier/insider-scorer';
@@ -72,9 +73,10 @@ export class TradeEnricher {
     private readonly insiderTracker?: InsiderTracker,
     private readonly newsCorrelator?: NewsCorrelator,
     private readonly priceHistory?: PriceHistory,
+    private readonly polynterApi?: PolynterApi,
   ) {}
 
-  async enrichTrade(trade: PolymarketTrade): Promise<EnrichedTrade> {
+  async enrichTrade(trade: PolymarketTrade, options: { smartScore?: number } = {}): Promise<EnrichedTrade> {
     const trackedWallet = this.walletManager.getWallet(trade.proxyWallet);
     const marketInfoPromise = this.getMarketInfo(trade);
     const hashdiveProfilePromise = Promise.race([
@@ -200,6 +202,7 @@ export class TradeEnricher {
       historicalPreNewsCount: priorCumulativeProfile?.preNewsCount,
       cumulativeInsiderScore: priorCumulativeProfile?.totalScore,
       eventProximityHours,
+      smartScore: options.smartScore,
     });
     const unusualScore = calculateUnusualScore({
       tradeSize: trade.usdcSize,
@@ -275,6 +278,7 @@ export class TradeEnricher {
       isFreshWallet,
       topCategory,
       freshWalletsInMarket,
+      smartScore: options.smartScore,
       hashdiveProfile: hashdiveProfile
         ? {
             resolvedWinRate: hashdiveProfile.resolvedWinRate,
@@ -325,6 +329,20 @@ export class TradeEnricher {
           }
         : undefined,
     };
+
+    if (this.polynterApi) {
+      const polynterMarket = this.polynterApi.findMarket(trade.slug, marketInfo.question);
+      if (polynterMarket) {
+        enrichedTrade.polynterData = {
+          apy: polynterMarket.apy,
+          volume: polynterMarket.volume,
+          liquidity: polynterMarket.liquidity,
+          tags: polynterMarket.tags,
+          pricePercent: polynterMarket.pricePercent,
+          polymarketUrl: polynterMarket.polymarketUrl,
+        };
+      }
+    }
 
     if (this.walletTradeRepo) {
       try {
