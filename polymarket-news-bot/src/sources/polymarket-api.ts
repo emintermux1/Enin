@@ -90,7 +90,10 @@ function pickPrimaryMarket(event: GammaEvent): GammaMarket | null {
   )
 }
 
-function mapEvent(event: GammaEvent): MarketData | null {
+function mapEvent(event: GammaEvent | undefined): MarketData | null {
+  if (!event) {
+    return null
+  }
   const market = pickPrimaryMarket(event)
   if (!market) {
     return null
@@ -161,6 +164,9 @@ export class PolymarketApi {
     const events = await this.http.get<GammaEvent[]>(
       `/events?slug=${encodeURIComponent(slug)}&limit=1`
     )
+    if (!events[0]) {
+      return null
+    }
     return mapEvent(events[0])
   }
 
