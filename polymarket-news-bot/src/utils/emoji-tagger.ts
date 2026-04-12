@@ -92,6 +92,6 @@ export function formatEmojiPrefix(market: {
   if (topicEmoji) {
     parts.push(topicEmoji)
   }
-  const limitedParts = parts.slice(0, 2)
+  const limitedParts = parts.slice(0, 1)
   return limitedParts.length > 0 ? `${limitedParts.join(' ')} ` : ''
 }
