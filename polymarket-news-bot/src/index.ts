@@ -197,6 +197,22 @@ async function main() {
           return
         }
         const queued = await postComposer.composeTrendingDigest(markets)
+        const today = new Date().toISOString().slice(0, 10)
+        const lastDigestDate = database?.getPinnedDigestDate() ?? null
+        const pinnedMessageId = database?.getPinnedDigestMessageId() ?? null
+
+        if (lastDigestDate === today && pinnedMessageId) {
+          const edited = await publisher.editPinnedDigest(
+            pinnedMessageId,
+            queued.caption,
+            queued.buttons
+          )
+          if (edited) {
+            logger.info(`Updated pinned trending digest #${pinnedMessageId}`)
+            return
+          }
+        }
+
         publisher.queuePost(queued)
       }
     )

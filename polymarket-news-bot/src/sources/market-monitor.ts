@@ -110,6 +110,7 @@ export class MarketMonitor {
   async getResolvedMarkets(): Promise<MarketData[]> {
     const markets = await this.polymarketApi.getResolvedMarkets(12)
     return markets
+      .filter((market) => market.volume >= 50_000)
       .filter(
         (market) =>
           !this.db.hasRecentMarketPost(
@@ -118,6 +119,7 @@ export class MarketMonitor {
             365 * 24 * 60 * 60 * 1000
           )
       )
-      .slice(0, 10)
+      .sort((a, b) => b.volume - a.volume)
+      .slice(0, 5)
   }
 }
