@@ -14,6 +14,7 @@ import {
   trimCaptionForMessage,
   trimCaptionForPhoto,
 } from '../telegram/formatters'
+import { formatEmojiPrefix } from '../utils/emoji-tagger'
 
 function sourceHour(): string {
   return new Date().toISOString().slice(0, 13)
@@ -37,7 +38,7 @@ function buildMarketButtons(
   if (marketUrl !== 'https://polymarket.com') {
     return [
       {
-        text: '🔮 Trade on Polymarket',
+        text: '🔮 Open on Polymarket',
         url: marketUrl,
       },
       {
@@ -47,7 +48,7 @@ function buildMarketButtons(
     ]
   }
   return [
-    { text: '🔮 Explore Markets', url: 'https://polymarket.com/markets' },
+    { text: '🔮 Open on Polymarket', url: 'https://polymarket.com/markets' },
     {
       text: config.telegram.communityButtonText,
       url: config.telegram.communityUrl,
@@ -90,6 +91,8 @@ export class PostComposer {
       /polymarket\.com\/(?:event|market)\//i.test(link.url)
     )
     const fallbackUrl = polymarketLink?.url
+      ? polymarketLink.url.split('?')[0]
+      : undefined
     const cleanedText = post.text.replace(/\s+/g, ' ').trim()
     if (post.source === 'polymarket_markets') {
       if (cleanedText.length < 20 || isSpamMarket(cleanedText)) {
@@ -97,7 +100,7 @@ export class PostComposer {
       }
       if (relatedMarket) {
         const caption = trimCaptionForPhoto(
-          `🆕 <b>New on Polymarket</b>\n\n<b>${escapeHtml(relatedMarket.question)}</b>\n\n${summarizeOutcomes(relatedMarket)}${relatedMarket.endDate ? `\n\n🗓 Ends: ${escapeHtml(formatDate(relatedMarket.endDate))}` : ''}`
+          `${formatEmojiPrefix(relatedMarket)}🆕 <b>New on Polymarket</b>\n\n<b>${escapeHtml(relatedMarket.question)}</b>\n\n${summarizeOutcomes(relatedMarket)}${relatedMarket.endDate ? `\n\n🗓 Ends: ${escapeHtml(formatDate(relatedMarket.endDate))}` : ''}`
         )
         return {
           id: buildId('scraped-new', `${post.source}:${post.messageId}`),
@@ -114,6 +117,9 @@ export class PostComposer {
     }
 
     const headline = truncateText(cleanedText, 220)
+    const emojiPrefix = relatedMarket
+      ? formatEmojiPrefix(relatedMarket)
+      : formatEmojiPrefix({ question: headline, tags: [] })
     const context = relatedMarket
       ? `\n\n<b>Related market:</b> ${escapeHtml(relatedMarket.question)}\n${summarizeOutcomes(relatedMarket)}`
       : ''
@@ -125,7 +131,7 @@ export class PostComposer {
       )
       .join(' • ')
     const caption = trimCaptionForPhoto(
-      `🚨 <b>BREAKING:</b> ${escapeHtml(headline)}${context}${links ? `\n\n${links}` : ''}`
+      `${emojiPrefix}🚨 <b>BREAKING:</b> ${escapeHtml(headline)}${context}${links ? `\n\n${links}` : ''}`
     )
     return {
       id: buildId('breaking', `${post.source}:${post.messageId}`),
@@ -142,7 +148,7 @@ export class PostComposer {
 
   async composeTrendingMarket(market: MarketData): Promise<QueuedPost> {
     const caption = trimCaptionForPhoto(
-      `📊 <b>Trending Market</b>\n\n<b>${escapeHtml(market.question)}</b>\n\n${summarizeOutcomes(market)}\n\n💰 Volume: ${escapeHtml(formatCompactUsd(market.volume24hr || market.volume))}`
+      `${formatEmojiPrefix(market)}📊 <b>Trending Market</b>\n\n<b>${escapeHtml(market.question)}</b>\n\n${summarizeOutcomes(market)}\n\n💰 Volume: ${escapeHtml(formatCompactUsd(market.volume24hr || market.volume))}`
     )
     return {
       id: buildId('trending', market.slug),
@@ -173,8 +179,9 @@ export class PostComposer {
       )
       const vol = formatCompactUsd(market.volume24hr || market.volume)
       const url = buildMarketUrl(market)
+      const emojiPrefix = formatEmojiPrefix(market)
 
-      caption += `${rank}. <a href="${url}">${escapeHtml(truncateText(market.question, 110))}</a>\n`
+      caption += `${rank}. ${emojiPrefix}<a href="${url}">${escapeHtml(truncateText(market.question, 100))}</a>\n`
       caption += `    ${escapeHtml(topOutcome)}: <b>${topProb}%</b> · ${escapeHtml(vol)}\n\n`
     })
 
@@ -188,7 +195,7 @@ export class PostComposer {
       caption: trimCaptionForMessage(caption),
       buttons: [
         {
-          text: '🔮 Explore Markets',
+          text: '🔮 Open on Polymarket',
           url: 'https://polymarket.com/markets?_s=volume24hr&_od=desc',
         },
         {
@@ -196,14 +203,14 @@ export class PostComposer {
           url: config.telegram.communityUrl,
         },
       ],
-      sourceId: `digest:trending:${new Date().toISOString().slice(0, 10)}`,
+      sourceId: `digest:trending:${sourceHour()}`,
       createdAt: Date.now(),
     }
   }
 
   async composeNewMarket(market: MarketData): Promise<QueuedPost> {
     const caption = trimCaptionForPhoto(
-      `🆕 <b>New on Polymarket</b>\n\n<b>${escapeHtml(market.question)}</b>\n\n${summarizeOutcomes(market)}${market.endDate ? `\n\n🗓 Ends: ${escapeHtml(formatDate(market.endDate))}` : ''}`
+      `${formatEmojiPrefix(market)}🆕 <b>New on Polymarket</b>\n\n<b>${escapeHtml(market.question)}</b>\n\n${summarizeOutcomes(market)}${market.endDate ? `\n\n🗓 Ends: ${escapeHtml(formatDate(market.endDate))}` : ''}`
     )
     return {
       id: buildId('new', market.slug),
@@ -225,7 +232,7 @@ export class PostComposer {
   ): Promise<QueuedPost> {
     const signed = `${direction === 'up' ? '+' : '-'}${formatPercent(change, 0)}`
     const caption = trimCaptionForPhoto(
-      `📈 <b>Market Mover</b> (${escapeHtml(signed)})\n\n<b>${escapeHtml(market.question)}</b>\n\n${summarizeOutcomes(market)}\n\n⚡ Move detected across the leading outcome.`
+      `${formatEmojiPrefix(market)}📈 <b>Market Mover</b> (${escapeHtml(signed)})\n\n<b>${escapeHtml(market.question)}</b>\n\n${summarizeOutcomes(market)}\n\n⚡ Move detected across the leading outcome.`
     )
     const card = await this.cardGenerator.generatePriceMoverCard(
       market,
@@ -249,18 +256,23 @@ export class PostComposer {
     market: MarketData,
     resolvedOutcome: string
   ): Promise<QueuedPost> {
-    const caption = trimCaptionForMessage(
-      `✅ <b>Market Resolved</b>\n\n<b>${escapeHtml(market.question)}</b>\n\nResult: <b>${escapeHtml(resolvedOutcome)}</b>\n\n💰 Final volume: ${escapeHtml(formatCompactUsd(market.volume))}`
+    const emojiPrefix = formatEmojiPrefix(market)
+    const caption = trimCaptionForPhoto(
+      `${emojiPrefix}✅ <b>MARKET RESOLVED</b>\n\n<b>${escapeHtml(market.question)}</b>\n\n🏆 Winner: <b>${escapeHtml(resolvedOutcome)}</b>\n\n💰 Total Volume: ${escapeHtml(formatCompactUsd(market.volume))}${market.endDate ? `\n📅 Closed: ${escapeHtml(formatDate(market.endDate))}` : ''}`
     )
+    const hasMarketImage = market.image && market.image.length > 0
     return {
       id: buildId('resolution', `${market.slug}:${resolvedOutcome}`),
       type: 'resolution',
-      priority: 70,
+      priority: 75,
       caption,
-      imageBuffer: await this.cardGenerator.generateResolutionCard(
-        market,
-        resolvedOutcome
-      ),
+      imageBuffer: hasMarketImage
+        ? undefined
+        : await this.cardGenerator.generateResolutionCard(
+            market,
+            resolvedOutcome
+          ),
+      imageUrl: hasMarketImage ? market.image : undefined,
       buttons: buildMarketButtons(market),
       sourceId: `market:resolution:${market.slug}`,
       createdAt: Date.now(),

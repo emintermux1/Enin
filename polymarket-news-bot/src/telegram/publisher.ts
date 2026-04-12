@@ -2,7 +2,7 @@ import axios from 'axios'
 import { Markup, Telegraf } from 'telegraf'
 import { config } from '../config'
 import { NewsDatabase } from '../db/database'
-import { QueuedPost } from '../types'
+import { InlineButton, QueuedPost } from '../types'
 import { logger } from '../utils/logger'
 import { trimCaptionForMessage, trimCaptionForPhoto } from './formatters'
 
@@ -51,6 +51,37 @@ export class TelegramPublisher {
     return true
   }
 
+  async editPinnedDigest(
+    messageId: number,
+    caption: string,
+    buttons: InlineButton[]
+  ): Promise<boolean> {
+    if (config.runtime.dryRun) {
+      logger.info(`[DRY RUN] edit pinned digest #${messageId}`)
+      return true
+    }
+    try {
+      const keyboard = Markup.inlineKeyboard([
+        buttons.map((button) => Markup.button.url(button.text, button.url)),
+      ])
+      await this.bot.telegram.editMessageText(
+        this.telegramConfig.channelId,
+        messageId,
+        undefined,
+        trimCaptionForMessage(caption),
+        {
+          parse_mode: 'HTML',
+          reply_markup: keyboard.reply_markup as any,
+          link_preview_options: { is_disabled: true },
+        }
+      )
+      return true
+    } catch (error) {
+      logger.warn(`Failed to edit pinned digest #${messageId}`, error)
+      return false
+    }
+  }
+
   async processQueue(): Promise<void> {
     if (this.processing || this.postQueue.length === 0) {
       return
@@ -69,6 +100,8 @@ export class TelegramPublisher {
       const messageId = await this.sendPost(nextPost)
       if (nextPost.type === 'trending_digest' && messageId) {
         await this.pinTrendingDigest(messageId)
+        this.db.setPinnedDigestMessageId(messageId)
+        this.db.setPinnedDigestDate(new Date().toISOString().slice(0, 10))
       }
       this.lastPostAt = Date.now()
       this.postTimestamps.push(this.lastPostAt)

@@ -33,6 +33,8 @@ export class NewsDatabase {
   private readonly insertSnapshotStmt: Database.Statement
   private readonly knownMarketStmt: Database.Statement
   private readonly insertKnownMarketStmt: Database.Statement
+  private readonly getMetaStmt: Database.Statement
+  private readonly setMetaStmt: Database.Statement
 
   constructor(dbPath = config.runtime.databasePath) {
     fs.mkdirSync(path.dirname(dbPath), { recursive: true })
@@ -64,6 +66,12 @@ export class NewsDatabase {
         first_seen_at INTEGER NOT NULL,
         slug TEXT NOT NULL,
         question TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS bot_metadata (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated_at INTEGER NOT NULL
       );
 
       CREATE INDEX IF NOT EXISTS idx_posted_source ON posted_messages(source_id);
@@ -103,6 +111,12 @@ export class NewsDatabase {
       INSERT OR IGNORE INTO known_markets (market_id, first_seen_at, slug, question)
       VALUES (?, ?, ?, ?)
     `)
+    this.getMetaStmt = this.connection.prepare(
+      'SELECT value FROM bot_metadata WHERE key = ?'
+    )
+    this.setMetaStmt = this.connection.prepare(
+      'INSERT OR REPLACE INTO bot_metadata (key, value, updated_at) VALUES (?, ?, ?)'
+    )
 
     logger.info(`SQLite database initialized at ${dbPath}`)
   }
@@ -185,6 +199,36 @@ export class NewsDatabase {
       market.slug,
       market.question
     )
+  }
+
+  getMeta(key: string): string | null {
+    const row = this.getMetaStmt.get(key) as { value: string } | undefined
+    return row?.value ?? null
+  }
+
+  setMeta(key: string, value: string): void {
+    this.setMetaStmt.run(key, value, Date.now())
+  }
+
+  getPinnedDigestMessageId(): number | null {
+    const value = this.getMeta('pinned_digest_message_id')
+    if (!value) {
+      return null
+    }
+    const parsed = Number.parseInt(value, 10)
+    return Number.isNaN(parsed) ? null : parsed
+  }
+
+  setPinnedDigestMessageId(messageId: number): void {
+    this.setMeta('pinned_digest_message_id', String(messageId))
+  }
+
+  getPinnedDigestDate(): string | null {
+    return this.getMeta('pinned_digest_date')
+  }
+
+  setPinnedDigestDate(date: string): void {
+    this.setMeta('pinned_digest_date', date)
   }
 
   close(): void {
