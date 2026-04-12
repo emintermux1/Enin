@@ -79,6 +79,7 @@ function stripNewsPrefix(text: string): string {
       /^(?:(?:BREAKING|JUST IN|NEW POLYMARKET|NEW|ALERT|FLASH|URGENT)\s*:\s*)+/i,
       ''
     )
+    .replace(/^[\p{Emoji_Presentation}\p{Extended_Pictographic}\u200d\ufe0f\s]+/u, '')
     .trim()
 }
 
