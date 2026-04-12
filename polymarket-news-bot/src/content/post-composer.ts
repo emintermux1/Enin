@@ -26,8 +26,14 @@ function buildMarketUrl(market?: MarketData): string {
     : 'https://polymarket.com'
 }
 
-function buildMarketButtons(market?: MarketData): InlineButton[] {
-  const marketUrl = buildMarketUrl(market)
+function buildMarketButtons(
+  market?: MarketData,
+  fallbackUrl?: string
+): InlineButton[] {
+  let marketUrl = buildMarketUrl(market)
+  if (marketUrl === 'https://polymarket.com' && fallbackUrl) {
+    marketUrl = fallbackUrl
+  }
   if (marketUrl !== 'https://polymarket.com') {
     return [
       {
@@ -41,7 +47,7 @@ function buildMarketButtons(market?: MarketData): InlineButton[] {
     ]
   }
   return [
-    { text: '🔮 Open Polymarket', url: 'https://polymarket.com' },
+    { text: '🔮 Explore Markets', url: 'https://polymarket.com/markets' },
     {
       text: config.telegram.communityButtonText,
       url: config.telegram.communityUrl,
@@ -80,6 +86,10 @@ export class PostComposer {
     post: ScrapedPost,
     relatedMarket?: MarketData
   ): Promise<QueuedPost | null> {
+    const polymarketLink = post.links.find((link) =>
+      /polymarket\.com\/(?:event|market)\//i.test(link.url)
+    )
+    const fallbackUrl = polymarketLink?.url
     const cleanedText = post.text.replace(/\s+/g, ' ').trim()
     if (post.source === 'polymarket_markets') {
       if (cleanedText.length < 20 || isSpamMarket(cleanedText)) {
@@ -95,7 +105,7 @@ export class PostComposer {
           priority: 85,
           caption,
           imageUrl: relatedMarket.image || post.imageUrl,
-          buttons: buildMarketButtons(relatedMarket),
+          buttons: buildMarketButtons(relatedMarket, fallbackUrl),
           sourceId: `${post.source}:${post.messageId}`,
           createdAt: Date.now(),
           market: relatedMarket,
@@ -123,7 +133,7 @@ export class PostComposer {
       priority: 90,
       caption,
       imageUrl: relatedMarket?.image || post.imageUrl,
-      buttons: buildMarketButtons(relatedMarket),
+      buttons: buildMarketButtons(relatedMarket, fallbackUrl),
       sourceId: `${post.source}:${post.messageId}`,
       createdAt: Date.now(),
       market: relatedMarket,

@@ -122,6 +122,11 @@ async function processScrapedPost(
   if (post.polymarketSlug) {
     relatedMarket =
       (await polymarketApi.getEventBySlug(post.polymarketSlug)) ?? undefined
+
+    if (!relatedMarket) {
+      const slugAsText = post.polymarketSlug.replace(/-/g, ' ')
+      relatedMarket = await findRelatedMarket(polymarketApi, slugAsText)
+    }
   }
 
   if (!relatedMarket) {
