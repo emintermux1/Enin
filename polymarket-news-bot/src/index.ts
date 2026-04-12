@@ -120,7 +120,7 @@ async function processScrapedPost(
   post: ScrapedPost
 ): Promise<void> {
   const fingerprint = computeFingerprint(post.text)
-  if (db.hasRecentFingerprint(fingerprint)) {
+  if (fingerprint && db.hasRecentFingerprint(fingerprint)) {
     logger.debug(`Skipping duplicate content from ${post.source}:${post.messageId}`)
     return
   }
@@ -145,7 +145,9 @@ async function processScrapedPost(
   if (!queued) {
     return
   }
-  db.recordFingerprint(fingerprint, `${post.source}:${post.messageId}`)
+  if (fingerprint) {
+    db.recordFingerprint(fingerprint, `${post.source}:${post.messageId}`)
+  }
   publisher.queuePost(queued)
 }
 

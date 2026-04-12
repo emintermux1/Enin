@@ -48,6 +48,11 @@ export function computeFingerprint(text: string): string {
     .split(' ')
     .filter((word) => word.length >= 4 && !STOP_WORDS.has(word))
 
-  const key = [...new Set(tokens)].sort().slice(0, 6).join('|')
+  const unique = [...new Set(tokens)].sort().slice(0, 6)
+  if (unique.length === 0) {
+    return ''
+  }
+
+  const key = unique.join('|')
   return crypto.createHash('sha1').update(key).digest('hex').slice(0, 16)
 }
