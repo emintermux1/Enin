@@ -46,6 +46,10 @@ export const config: AppConfig = {
     minRequestSpacingMs: 40,
     hashdiveApiKey: readString('HASHDIVE_API_KEY', ''),
   },
+  struct: {
+    apiKey: readString('STRUCT_API_KEY', ''),
+    enabled: Boolean(readString('STRUCT_API_KEY', '')),
+  },
   polynter: {
     enabled: readNumber('POLYNTER_ENABLED', 1) === 1,
   },

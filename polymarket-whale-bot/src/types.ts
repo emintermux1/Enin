@@ -355,6 +355,10 @@ export interface AppConfig {
   tracking: TrackingConfig;
   scraping: ScrapingConfig;
   api: ApiConfig;
+  struct: {
+    enabled: boolean;
+    apiKey: string;
+  };
   polynter: {
     enabled: boolean;
   };
