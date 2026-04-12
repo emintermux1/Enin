@@ -73,6 +73,15 @@ function isSpamMarket(text: string): boolean {
   return SPAM_PATTERNS.some((pattern) => pattern.test(text))
 }
 
+function stripNewsPrefix(text: string): string {
+  return text
+    .replace(
+      /^(?:(?:BREAKING|JUST IN|NEW POLYMARKET|NEW|ALERT|FLASH|URGENT)\s*:\s*)+/i,
+      ''
+    )
+    .trim()
+}
+
 export class PostComposer {
   constructor(private readonly cardGenerator: MarketCardGenerator) {}
 
@@ -109,7 +118,10 @@ export class PostComposer {
       }
     }
 
-    const headline = truncateText(cleanedText, 220)
+    const headline = truncateText(stripNewsPrefix(cleanedText), 220)
+    if (headline.length < 30) {
+      return null
+    }
     const emojiPrefix = relatedMarket
       ? formatEmojiPrefix(relatedMarket)
       : formatEmojiPrefix({ question: headline, tags: [] })
