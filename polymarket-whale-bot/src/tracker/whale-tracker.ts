@@ -16,6 +16,7 @@ import { createSourceDedupKey, HashdiveDiscovery } from './hashdive-discovery';
 import { NewsCorrelator } from '../classifier/news-correlator';
 import { CoordinationDetector } from '../classifier/coordination-detector';
 import { PriceHistory } from './price-history';
+import { StructDiscovery } from './struct-discovery';
 import { TelegramChannelScraper } from './telegram-channel-scraper';
 import { TradeFirehose } from './trade-firehose';
 
@@ -111,6 +112,7 @@ export class WhaleTracker {
   private readonly tradeEnricher: TradeEnricher;
   private readonly coordinationDetector: CoordinationDetector;
   private readonly hashdiveDiscovery?: HashdiveDiscovery;
+  private readonly structDiscovery?: StructDiscovery;
   private readonly tradeFirehose: TradeFirehose;
   private readonly channelScraper?: TelegramChannelScraper;
   private readonly walletTradeRepo?: WalletTradeRepo;
@@ -168,6 +170,18 @@ export class WhaleTracker {
         dedupCache: this.dedupCache,
         minTradeSize: this.config.tracking.minTradeSize,
         pollIntervalMs: this.config.tracking.hashdivePollIntervalMs,
+        onTrade: async (trade) => this.publishTrade(trade),
+      });
+    }
+    if (config.struct.enabled) {
+      this.structDiscovery = new StructDiscovery({
+        apiKey: config.struct.apiKey,
+        gammaApi: this.gammaApi,
+        walletManager: this.walletManager,
+        tradeEnricher: this.tradeEnricher,
+        coordinationDetector: this.coordinationDetector,
+        dedupCache: this.dedupCache,
+        minTradeSize: this.config.tracking.minTradeSize,
         onTrade: async (trade) => this.publishTrade(trade),
       });
     }
@@ -233,6 +247,7 @@ export class WhaleTracker {
     }, this.config.tracking.pollIntervalMs);
     await this.tradeFirehose.start();
     await this.hashdiveDiscovery?.start();
+    await this.structDiscovery?.start();
     await this.channelScraper?.start();
     void this.tick();
   }
@@ -245,6 +260,7 @@ export class WhaleTracker {
     }
     this.tradeFirehose.stop();
     this.hashdiveDiscovery?.stop();
+    this.structDiscovery?.stop();
     this.channelScraper?.stop();
   }
 
