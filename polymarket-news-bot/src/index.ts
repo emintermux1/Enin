@@ -117,8 +117,21 @@ async function processScrapedPost(
   polymarketApi: PolymarketApi,
   post: ScrapedPost
 ): Promise<void> {
-  const relatedMarket = await findRelatedMarket(polymarketApi, post.text)
+  let relatedMarket: MarketData | undefined
+
+  if (post.polymarketSlug) {
+    relatedMarket =
+      (await polymarketApi.getEventBySlug(post.polymarketSlug)) ?? undefined
+  }
+
+  if (!relatedMarket) {
+    relatedMarket = await findRelatedMarket(polymarketApi, post.text)
+  }
+
   const queued = await postComposer.composeFromScraped(post, relatedMarket)
+  if (!queued) {
+    return
+  }
   publisher.queuePost(queued)
 }
 

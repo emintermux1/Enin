@@ -6,6 +6,7 @@ export interface ScrapedPost {
   timestamp: number
   links: { text: string; url: string }[]
   hasPhoto: boolean
+  polymarketSlug?: string
 }
 
 export interface MarketData {

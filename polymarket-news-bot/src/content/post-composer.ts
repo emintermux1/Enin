@@ -55,14 +55,49 @@ function buildId(prefix: string, value: string): string {
   return `${prefix}-${crypto.createHash('sha1').update(value).digest('hex').slice(0, 12)}`
 }
 
+const SPAM_PATTERNS = [
+  /Will the price of .+ be (?:above|below) \$[\d.,]+ on /i,
+  /multistrike/i,
+  /4h-\d+/i,
+]
+
+function isSpamMarket(text: string): boolean {
+  return SPAM_PATTERNS.some((pattern) => pattern.test(text))
+}
+
 export class PostComposer {
   constructor(private readonly cardGenerator: MarketCardGenerator) {}
 
   async composeFromScraped(
     post: ScrapedPost,
     relatedMarket?: MarketData
-  ): Promise<QueuedPost> {
-    const headline = truncateText(post.text.replace(/\s+/g, ' ').trim(), 220)
+  ): Promise<QueuedPost | null> {
+    const cleanedText = post.text.replace(/\s+/g, ' ').trim()
+    if (post.source === 'polymarket_markets') {
+      if (cleanedText.length < 20 || isSpamMarket(cleanedText)) {
+        return null
+      }
+      if (relatedMarket) {
+        const caption = trimCaptionForPhoto(
+          `🆕 <b>New on Polymarket</b>\n\n<b>${escapeHtml(relatedMarket.question)}</b>\n\n${summarizeOutcomes(relatedMarket)}${relatedMarket.endDate ? `\n\n🗓 Ends: ${escapeHtml(formatDate(relatedMarket.endDate))}` : ''}`
+        )
+        return {
+          id: buildId('scraped-new', `${post.source}:${post.messageId}`),
+          type: 'new_market',
+          priority: 60,
+          caption,
+          imageBuffer:
+            await this.cardGenerator.generateNewMarketCard(relatedMarket),
+          imageUrl: post.imageUrl,
+          buttons: buildMarketButtons(relatedMarket),
+          sourceId: `${post.source}:${post.messageId}`,
+          createdAt: Date.now(),
+          market: relatedMarket,
+        }
+      }
+    }
+
+    const headline = truncateText(cleanedText, 220)
     const context = relatedMarket
       ? `\n\n<b>Related market:</b> ${escapeHtml(relatedMarket.question)}\n${summarizeOutcomes(relatedMarket)}`
       : ''

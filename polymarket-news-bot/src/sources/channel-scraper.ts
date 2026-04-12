@@ -30,6 +30,20 @@ function extractPhotoUrl(style: string | undefined): string | undefined {
   return match?.[1]
 }
 
+function extractPolymarketSlug(
+  links: { text: string; url: string }[]
+): string | undefined {
+  for (const link of links) {
+    const match = link.url.match(
+      /polymarket\.com\/(?:market|event)\/([a-z0-9-]+)/i
+    )
+    if (match) {
+      return match[1]
+    }
+  }
+  return undefined
+}
+
 export class ChannelScraper {
   async scrapeChannel(channelName: string): Promise<ScrapedPost[]> {
     const url = `https://t.me/s/${channelName}`
@@ -67,6 +81,7 @@ export class ChannelScraper {
           .filter((link) => link.url)
         const photoWrap = root.find('.tgme_widget_message_photo_wrap').first()
         const imageUrl = extractPhotoUrl(photoWrap.attr('style'))
+        const polymarketSlug = extractPolymarketSlug(links)
         const datetime = root
           .find('.tgme_widget_message_date time')
           .attr('datetime')
@@ -82,6 +97,7 @@ export class ChannelScraper {
           timestamp,
           links,
           hasPhoto: Boolean(imageUrl),
+          polymarketSlug,
         })
       })
 

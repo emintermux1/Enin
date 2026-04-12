@@ -87,7 +87,11 @@ export const config: AppConfig = {
     minRequestSpacingMs: readNumber('POLYMARKET_MIN_SPACING_MS', 50),
   },
   scraping: {
-    channels: readCsv('SCRAPE_CHANNELS', ['polymarketg', 'predictiondesknews']),
+    channels: readCsv('SCRAPE_CHANNELS', [
+      'polymarketg',
+      'predictiondesknews',
+      'polymarket_markets',
+    ]),
     pollIntervalMs: readNumber('SCRAPE_POLL_INTERVAL_MS', 90_000),
   },
   monitoring: {
