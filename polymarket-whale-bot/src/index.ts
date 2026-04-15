@@ -178,7 +178,7 @@ async function main() {
   const sampleTrade = await tracker.runStartupSmokeTest(poster.getCardGenerator(), config.runtime.sampleCardPath);
   await poster.writeSampleOutput(sampleTrade, config.runtime.sampleCaptionPath);
   await poster.launch();
-  await poster.getBot().launch({ dropPendingUpdates: true });
+  void poster.getBot().launch({ dropPendingUpdates: true });
   await tracker.start();
   resolutionChecker.start();
   dailyLeaderboard.start();
