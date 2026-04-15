@@ -124,20 +124,45 @@ export class PostComposer {
         return null
       }
       if (relatedMarket) {
+        let secondaryImageUrl: string | undefined
+        let secondaryImageBuffer: Buffer | undefined
+        const scrapedImage = post.imageUrl
+        const marketImage = relatedMarket.image
+
+        if (scrapedImage && marketImage && scrapedImage !== marketImage) {
+          secondaryImageUrl = marketImage
+        } else if (scrapedImage || marketImage) {
+          try {
+            secondaryImageBuffer =
+              await this.cardGenerator.generateNewMarketCard(relatedMarket)
+          } catch {}
+        }
+
+        const hasDualImages = Boolean(secondaryImageUrl || secondaryImageBuffer)
+        const captionFooter = hasDualImages
+          ? `\n\n<a href="${buildMarketUrl(relatedMarket)}">Polymarket</a> · <a href="${config.telegram.communityUrl}">Traders Community</a>`
+          : ''
         const caption = trimCaptionForPhoto(
-          `${formatEmojiPrefix(relatedMarket)}🆕 <b>New on Polymarket</b>\n\n<b>${escapeHtml(relatedMarket.question)}</b>\n\n${summarizeOutcomes(relatedMarket)}${relatedMarket.endDate ? `\n\n🗓 Ends: ${escapeHtml(formatDate(relatedMarket.endDate))}` : ''}${POLYTECH_FOOTER}`
+          `${formatEmojiPrefix(relatedMarket)}🆕 <b>New on Polymarket</b>\n\n<b>${escapeHtml(relatedMarket.question)}</b>\n\n${summarizeOutcomes(relatedMarket)}${relatedMarket.endDate ? `\n\n🗓 Ends: ${escapeHtml(formatDate(relatedMarket.endDate))}` : ''}${captionFooter}${POLYTECH_FOOTER}`
         )
         return {
           id: buildId('scraped-new', `${post.source}:${post.messageId}`),
           type: 'new_market',
           priority: 85,
           caption,
-          imageUrl: relatedMarket.image || post.imageUrl,
-          buttons: buildMarketButtons(
-            relatedMarket,
-            fallbackUrl,
-            relatedMarket.question
-          ),
+          imageUrl: scrapedImage || marketImage,
+          imageBuffer:
+            scrapedImage || marketImage ? undefined : secondaryImageBuffer,
+          secondaryImageUrl,
+          secondaryImageBuffer:
+            scrapedImage || marketImage ? secondaryImageBuffer : undefined,
+          buttons: hasDualImages
+            ? []
+            : buildMarketButtons(
+                relatedMarket,
+                fallbackUrl,
+                relatedMarket.question
+              ),
           sourceId: `${post.source}:${post.messageId}`,
           createdAt: Date.now(),
           market: relatedMarket,
@@ -245,8 +270,17 @@ export class PostComposer {
   }
 
   async composeNewMarket(market: MarketData): Promise<QueuedPost> {
+    let secondaryImageBuffer: Buffer | undefined
+    try {
+      secondaryImageBuffer = await this.cardGenerator.generateNewMarketCard(market)
+    } catch {}
+
+    const hasDualImages = Boolean(market.image && secondaryImageBuffer)
+    const captionFooter = hasDualImages
+      ? `\n\n<a href="${buildMarketUrl(market)}">Polymarket</a> · <a href="${config.telegram.communityUrl}">Traders Community</a>`
+      : ''
     const caption = trimCaptionForPhoto(
-      `${formatEmojiPrefix(market)}🆕 <b>New on Polymarket</b>\n\n<b>${escapeHtml(market.question)}</b>\n\n${summarizeOutcomes(market)}${market.endDate ? `\n\n🗓 Ends: ${escapeHtml(formatDate(market.endDate))}` : ''}${POLYTECH_FOOTER}`
+      `${formatEmojiPrefix(market)}🆕 <b>New on Polymarket</b>\n\n<b>${escapeHtml(market.question)}</b>\n\n${summarizeOutcomes(market)}${market.endDate ? `\n\n🗓 Ends: ${escapeHtml(formatDate(market.endDate))}` : ''}${captionFooter}${POLYTECH_FOOTER}`
     )
     return {
       id: buildId('new', market.slug),
@@ -254,7 +288,11 @@ export class PostComposer {
       priority: 85,
       caption,
       imageUrl: market.image || undefined,
-      buttons: buildMarketButtons(market, undefined, market.question),
+      imageBuffer: market.image ? undefined : secondaryImageBuffer,
+      secondaryImageBuffer: market.image ? secondaryImageBuffer : undefined,
+      buttons: hasDualImages
+        ? []
+        : buildMarketButtons(market, undefined, market.question),
       sourceId: `market:new_market:${market.slug}:${sourceHour()}`,
       createdAt: Date.now(),
       market,
@@ -267,21 +305,33 @@ export class PostComposer {
     direction: 'up' | 'down'
   ): Promise<QueuedPost> {
     const signed = `${direction === 'up' ? '+' : '-'}${formatPercent(change, 0)}`
+    let cardBuffer: Buffer | undefined
+    try {
+      cardBuffer = await this.cardGenerator.generatePriceMoverCard(
+        market,
+        change,
+        direction
+      )
+    } catch {}
+
+    const hasDualImages = Boolean(market.image && cardBuffer)
+    const captionFooter = hasDualImages
+      ? `\n\n<a href="${buildMarketUrl(market)}">Polymarket</a> · <a href="${config.telegram.communityUrl}">Traders Community</a>`
+      : ''
     const caption = trimCaptionForPhoto(
-      `${formatEmojiPrefix(market)}📈 <b>Market Mover</b> (${escapeHtml(signed)})\n\n<b>${escapeHtml(market.question)}</b>\n\n${summarizeOutcomes(market)}\n\n⚡ Move detected across the leading outcome.${POLYTECH_FOOTER}`
-    )
-    const card = await this.cardGenerator.generatePriceMoverCard(
-      market,
-      change,
-      direction
+      `${formatEmojiPrefix(market)}📈 <b>Market Mover</b> (${escapeHtml(signed)})\n\n<b>${escapeHtml(market.question)}</b>\n\n${summarizeOutcomes(market)}\n\n⚡ Move detected across the leading outcome.${captionFooter}${POLYTECH_FOOTER}`
     )
     return {
       id: buildId('mover', `${market.slug}:${signed}`),
       type: 'price_mover',
       priority: change >= 20 ? 80 : 75,
       caption,
-      imageBuffer: card,
-      buttons: buildMarketButtons(market, undefined, market.question),
+      imageUrl: market.image || undefined,
+      imageBuffer: market.image ? undefined : cardBuffer,
+      secondaryImageBuffer: market.image ? cardBuffer : undefined,
+      buttons: hasDualImages
+        ? []
+        : buildMarketButtons(market, undefined, market.question),
       sourceId: `market:price_mover:${market.slug}:${sourceHour()}`,
       createdAt: Date.now(),
       market,
@@ -295,21 +345,33 @@ export class PostComposer {
   ): Promise<QueuedPost> {
     const arrow = direction === 'up' ? '🚀' : '💥'
     const signed = `${direction === 'up' ? '+' : '-'}${formatPercent(change, 0)}`
+    let cardBuffer: Buffer | undefined
+    try {
+      cardBuffer = await this.cardGenerator.generateFlashAlertCard(
+        market,
+        change,
+        direction
+      )
+    } catch {}
+
+    const hasDualImages = Boolean(market.image && cardBuffer)
+    const captionFooter = hasDualImages
+      ? `\n\n<a href="${buildMarketUrl(market)}">Polymarket</a> · <a href="${config.telegram.communityUrl}">Traders Community</a>`
+      : ''
     const caption = trimCaptionForPhoto(
-      `⚡ <b>FLASH ALERT</b> (${escapeHtml(signed)})\n\n${arrow} <b>${escapeHtml(market.question)}</b>\n\n${summarizeOutcomes(market)}\n\n🔥 Massive ${escapeHtml(signed)} swing detected!${POLYTECH_FOOTER}`
-    )
-    const card = await this.cardGenerator.generateFlashAlertCard(
-      market,
-      change,
-      direction
+      `⚡ <b>FLASH ALERT</b> (${escapeHtml(signed)})\n\n${arrow} <b>${escapeHtml(market.question)}</b>\n\n${summarizeOutcomes(market)}\n\n🔥 Massive ${escapeHtml(signed)} swing detected!${captionFooter}${POLYTECH_FOOTER}`
     )
     return {
       id: buildId('flash', `${market.slug}:${signed}`),
       type: 'flash_alert',
       priority: 92,
       caption,
-      imageBuffer: card,
-      buttons: buildMarketButtons(market, undefined, market.question),
+      imageUrl: market.image || undefined,
+      imageBuffer: market.image ? undefined : cardBuffer,
+      secondaryImageBuffer: market.image ? cardBuffer : undefined,
+      buttons: hasDualImages
+        ? []
+        : buildMarketButtons(market, undefined, market.question),
       sourceId: `market:flash_alert:${market.slug}:${sourceHour()}`,
       createdAt: Date.now(),
       market,
