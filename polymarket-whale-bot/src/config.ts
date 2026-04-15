@@ -58,6 +58,9 @@ export const config: AppConfig = {
     apiKey: readString('POLYGONSCAN_API_KEY', ''),
     enabled: Boolean(readString('POLYGONSCAN_API_KEY', '')),
   },
+  admin: {
+    userId: readNumber('ADMIN_USER_ID', 0),
+  },
   runtime: {
     sampleCardPath: path.resolve(process.cwd(), 'sample-card.png'),
     sampleCaptionPath: path.resolve(process.cwd(), 'sample-caption.txt'),

@@ -16,7 +16,7 @@ export interface TradeFirehoseOptions {
   coordinationDetector: CoordinationDetector;
   dedupCache: DedupCache;
   priceHistory?: PriceHistory;
-  minTradeSize: number;
+  getMinTradeSize: () => number;
   pollIntervalMs: number;
   onTrade: (trade: EnrichedTrade) => Promise<void>;
 }
@@ -59,6 +59,7 @@ export class TradeFirehose {
     this.processing = true;
     try {
       const allTrades = await this.options.dataApi.getRecentTrades(200);
+      const minTradeSize = this.options.getMinTradeSize();
 
       if (this.options.priceHistory) {
         for (const trade of allTrades) {
@@ -67,7 +68,7 @@ export class TradeFirehose {
       }
 
       const bigTrades = allTrades
-        .filter((trade) => Number(trade.usdcSize || trade.size || 0) >= this.options.minTradeSize)
+        .filter((trade) => Number(trade.usdcSize || trade.size || 0) >= minTradeSize)
         .filter((trade) => {
           const price = Number(trade.price || 0);
           return price >= 0.03 && price <= 0.93;

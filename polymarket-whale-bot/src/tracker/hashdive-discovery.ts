@@ -29,7 +29,7 @@ export interface HashdiveDiscoveryOptions {
   tradeEnricher: TradeEnricher;
   coordinationDetector: CoordinationDetector;
   dedupCache: DedupCache;
-  minTradeSize: number;
+  getMinTradeSize: () => number;
   pollIntervalMs: number;
   onTrade: (trade: EnrichedTrade) => Promise<void>;
 }
@@ -73,9 +73,10 @@ export class HashdiveDiscovery {
     }
     this.processing = true;
     try {
+      const minTradeSize = this.options.getMinTradeSize();
       const trades = await Promise.race([
         this.options.hashdiveApi.getLatestWhaleTrades(
-          this.options.minTradeSize,
+          minTradeSize,
           50,
         ),
         new Promise<[]>(resolve =>
@@ -117,9 +118,10 @@ export class HashdiveDiscovery {
       gammaApi: this.options.gammaApi,
       trackedWallet: this.options.walletManager.getWallet(walletAddress),
     });
+    const minTradeSize = this.options.getMinTradeSize();
     const price = Number(mappedTrade.price || 0);
     if (
-      mappedTrade.usdcSize < this.options.minTradeSize ||
+      mappedTrade.usdcSize < minTradeSize ||
       price < 0.03 ||
       price > 0.93
     ) {
