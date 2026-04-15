@@ -22,6 +22,12 @@ function stripTemplateFooter(text: string): string {
     .replace(/(?:\n|\s)*(Open on Polymarket\s*[\|·•]?\s*Discord?.*)$/is, '')
     .replace(/(?:\n|\s)*(Trade the News on PolyGun.*)$/is, '')
     .replace(/(?:\n|\s)*(Open on Twitter\s*[\|·•]\s*Open on Polymarket.*)$/is, '')
+    .replace(/\s*[—–-]\s*@\w+\s*$/i, '')
+    .replace(/\s*(?:via|from|by|source:?)\s*@\w+\s*$/i, '')
+    .replace(
+      /\s*@(?:Polymarketzone|polymarketg|predictiondesknews|polytwitter)\s*$/i,
+      ''
+    )
     .trim()
 }
 

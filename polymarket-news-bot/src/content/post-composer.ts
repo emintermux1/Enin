@@ -80,6 +80,10 @@ const SPAM_PATTERNS = [
   /4h-\d+/i,
 ]
 
+const POLYTECH_REFERRAL_URL =
+  'https://t.me/PolytechTradeBot?start=ref_cococooker'
+const POLYTECH_FOOTER = `\n\n<a href="${POLYTECH_REFERRAL_URL}">Trade News on PolyTech</a>`
+
 function isSpamMarket(text: string): boolean {
   return SPAM_PATTERNS.some((pattern) => pattern.test(text))
 }
@@ -91,6 +95,13 @@ function stripNewsPrefix(text: string): string {
       ''
     )
     .replace(/^[\p{Emoji_Presentation}\p{Extended_Pictographic}\u200d\ufe0f\s]+/u, '')
+    .trim()
+}
+
+function stripSourceAttribution(text: string): string {
+  return text
+    .replace(/\s*[—–-]\s*@\w+\s*$/i, '')
+    .replace(/\s*(?:via|from|by|source:?)\s*@\w+\s*$/i, '')
     .trim()
 }
 
@@ -114,7 +125,7 @@ export class PostComposer {
       }
       if (relatedMarket) {
         const caption = trimCaptionForPhoto(
-          `${formatEmojiPrefix(relatedMarket)}🆕 <b>New on Polymarket</b>\n\n<b>${escapeHtml(relatedMarket.question)}</b>\n\n${summarizeOutcomes(relatedMarket)}${relatedMarket.endDate ? `\n\n🗓 Ends: ${escapeHtml(formatDate(relatedMarket.endDate))}` : ''}`
+          `${formatEmojiPrefix(relatedMarket)}🆕 <b>New on Polymarket</b>\n\n<b>${escapeHtml(relatedMarket.question)}</b>\n\n${summarizeOutcomes(relatedMarket)}${relatedMarket.endDate ? `\n\n🗓 Ends: ${escapeHtml(formatDate(relatedMarket.endDate))}` : ''}${POLYTECH_FOOTER}`
         )
         return {
           id: buildId('scraped-new', `${post.source}:${post.messageId}`),
@@ -134,7 +145,10 @@ export class PostComposer {
       }
     }
 
-    const headline = truncateText(stripNewsPrefix(cleanedText), 220)
+    const headline = truncateText(
+      stripNewsPrefix(stripSourceAttribution(cleanedText)),
+      220
+    )
     if (headline.length < 30) {
       return null
     }
@@ -146,15 +160,27 @@ export class PostComposer {
       : ''
     const scrapedImage = post.imageUrl
     const marketImage = relatedMarket?.image
-    const hasDualImages = Boolean(
-      scrapedImage && marketImage && scrapedImage !== marketImage
-    )
+    let secondaryImageUrl: string | undefined
+    let secondaryImageBuffer: Buffer | undefined
+
+    if (scrapedImage && relatedMarket) {
+      if (marketImage && marketImage !== scrapedImage) {
+        secondaryImageUrl = marketImage
+      } else {
+        try {
+          secondaryImageBuffer =
+            await this.cardGenerator.generateMarketCard(relatedMarket)
+        } catch {}
+      }
+    }
+
+    const hasDualImages = Boolean(secondaryImageUrl || secondaryImageBuffer)
     const captionFooter =
       hasDualImages && relatedMarket
         ? `\n\n<a href="${buildMarketUrl(relatedMarket)}">Polymarket</a> · <a href="${config.telegram.communityUrl}">Traders Community</a>`
         : ''
     const caption = trimCaptionForPhoto(
-      `${emojiPrefix}🚨 <b>BREAKING:</b> ${escapeHtml(headline)}${context}${captionFooter}`
+      `${emojiPrefix}🚨 <b>BREAKING:</b> ${escapeHtml(headline)}${context}${captionFooter}${POLYTECH_FOOTER}`
     )
     return {
       id: buildId('breaking', `${post.source}:${post.messageId}`),
@@ -162,7 +188,8 @@ export class PostComposer {
       priority: 90,
       caption,
       imageUrl: scrapedImage || marketImage,
-      secondaryImageUrl: hasDualImages ? marketImage : undefined,
+      secondaryImageUrl,
+      secondaryImageBuffer,
       buttons: hasDualImages
         ? []
         : buildMarketButtons(relatedMarket, fallbackUrl, headline),
@@ -195,7 +222,7 @@ export class PostComposer {
     })
 
     caption +=
-      '📊 <a href="https://polymarket.com/markets?_s=volume24hr&_od=desc">View all on Polymarket</a>'
+      `📊 <a href="https://polymarket.com/markets?_s=volume24hr&_od=desc">View all on Polymarket</a>${POLYTECH_FOOTER}`
 
     return {
       id: `trending-digest-${sourceHour()}`,
@@ -219,7 +246,7 @@ export class PostComposer {
 
   async composeNewMarket(market: MarketData): Promise<QueuedPost> {
     const caption = trimCaptionForPhoto(
-      `${formatEmojiPrefix(market)}🆕 <b>New on Polymarket</b>\n\n<b>${escapeHtml(market.question)}</b>\n\n${summarizeOutcomes(market)}${market.endDate ? `\n\n🗓 Ends: ${escapeHtml(formatDate(market.endDate))}` : ''}`
+      `${formatEmojiPrefix(market)}🆕 <b>New on Polymarket</b>\n\n<b>${escapeHtml(market.question)}</b>\n\n${summarizeOutcomes(market)}${market.endDate ? `\n\n🗓 Ends: ${escapeHtml(formatDate(market.endDate))}` : ''}${POLYTECH_FOOTER}`
     )
     return {
       id: buildId('new', market.slug),
@@ -241,7 +268,7 @@ export class PostComposer {
   ): Promise<QueuedPost> {
     const signed = `${direction === 'up' ? '+' : '-'}${formatPercent(change, 0)}`
     const caption = trimCaptionForPhoto(
-      `${formatEmojiPrefix(market)}📈 <b>Market Mover</b> (${escapeHtml(signed)})\n\n<b>${escapeHtml(market.question)}</b>\n\n${summarizeOutcomes(market)}\n\n⚡ Move detected across the leading outcome.`
+      `${formatEmojiPrefix(market)}📈 <b>Market Mover</b> (${escapeHtml(signed)})\n\n<b>${escapeHtml(market.question)}</b>\n\n${summarizeOutcomes(market)}\n\n⚡ Move detected across the leading outcome.${POLYTECH_FOOTER}`
     )
     const card = await this.cardGenerator.generatePriceMoverCard(
       market,
@@ -269,7 +296,7 @@ export class PostComposer {
     const arrow = direction === 'up' ? '🚀' : '💥'
     const signed = `${direction === 'up' ? '+' : '-'}${formatPercent(change, 0)}`
     const caption = trimCaptionForPhoto(
-      `⚡ <b>FLASH ALERT</b> (${escapeHtml(signed)})\n\n${arrow} <b>${escapeHtml(market.question)}</b>\n\n${summarizeOutcomes(market)}\n\n🔥 Massive ${escapeHtml(signed)} swing detected!`
+      `⚡ <b>FLASH ALERT</b> (${escapeHtml(signed)})\n\n${arrow} <b>${escapeHtml(market.question)}</b>\n\n${summarizeOutcomes(market)}\n\n🔥 Massive ${escapeHtml(signed)} swing detected!${POLYTECH_FOOTER}`
     )
     const card = await this.cardGenerator.generateFlashAlertCard(
       market,
@@ -295,7 +322,7 @@ export class PostComposer {
   ): Promise<QueuedPost> {
     const emojiPrefix = formatEmojiPrefix(market)
     const caption = trimCaptionForPhoto(
-      `${emojiPrefix}✅ <b>MARKET RESOLVED</b>\n\n<b>${escapeHtml(market.question)}</b>\n\n🏆 Winner: <b>${escapeHtml(resolvedOutcome)}</b>\n\n💰 Total Volume: ${escapeHtml(formatCompactUsd(market.volume))}${market.endDate ? `\n📅 Closed: ${escapeHtml(formatDate(market.endDate))}` : ''}`
+      `${emojiPrefix}✅ <b>MARKET RESOLVED</b>\n\n<b>${escapeHtml(market.question)}</b>\n\n🏆 Winner: <b>${escapeHtml(resolvedOutcome)}</b>\n\n💰 Total Volume: ${escapeHtml(formatCompactUsd(market.volume))}${market.endDate ? `\n📅 Closed: ${escapeHtml(formatDate(market.endDate))}` : ''}${POLYTECH_FOOTER}`
     )
     const hasMarketImage = market.image && market.image.length > 0
     return {
