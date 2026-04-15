@@ -367,6 +367,9 @@ export interface AppConfig {
     apiKey: string;
     enabled: boolean;
   };
+  admin: {
+    userId: number;
+  };
   runtime: {
     sampleCardPath: string;
     sampleCaptionPath: string;

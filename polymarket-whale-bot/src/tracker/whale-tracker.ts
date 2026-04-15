@@ -20,6 +20,7 @@ import { StructDiscovery } from './struct-discovery';
 import { TelegramChannelScraper } from './telegram-channel-scraper';
 import { TradeFirehose } from './trade-firehose';
 import { AlertThrottle } from './alert-throttle';
+import { RuntimeConfigManager } from '../admin/runtime-config';
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -127,6 +128,7 @@ export class WhaleTracker {
 
   constructor(
     private readonly config: AppConfig,
+    private readonly runtimeConfig: RuntimeConfigManager,
     private readonly onTrade: (trade: EnrichedTrade) => Promise<void>,
     options: WhaleTrackerOptions = {},
   ) {
@@ -150,16 +152,17 @@ export class WhaleTracker {
       options.newsCorrelator,
       this.priceHistory,
       options.polynterApi,
+      () => this.runtimeConfig.get('polynterEnabled'),
     );
     this.coordinationDetector = new CoordinationDetector();
-    this.alertThrottle = new AlertThrottle(config.tracking.maxAlertsPerWalletPerMarket);
+    this.alertThrottle = new AlertThrottle(() => this.runtimeConfig.get('maxAlertsPerWalletPerMarket'));
     this.tradeFirehose = new TradeFirehose({
       dataApi: this.dataApi,
       tradeEnricher: this.tradeEnricher,
       coordinationDetector: this.coordinationDetector,
       dedupCache: this.dedupCache,
       priceHistory: this.priceHistory,
-      minTradeSize: this.config.tracking.minTradeSize,
+      getMinTradeSize: () => this.runtimeConfig.get('minTradeSize'),
       pollIntervalMs: this.config.tracking.firehosePollIntervalMs ?? 5_000,
       onTrade: async (trade) => this.publishTrade(trade),
     });
@@ -171,12 +174,12 @@ export class WhaleTracker {
         tradeEnricher: this.tradeEnricher,
         coordinationDetector: this.coordinationDetector,
         dedupCache: this.dedupCache,
-        minTradeSize: this.config.tracking.minTradeSize,
+        getMinTradeSize: () => this.runtimeConfig.get('minTradeSize'),
         pollIntervalMs: this.config.tracking.hashdivePollIntervalMs,
         onTrade: async (trade) => this.publishTrade(trade),
       });
     }
-    if (config.struct.enabled) {
+    if (config.struct.apiKey) {
       this.structDiscovery = new StructDiscovery({
         apiKey: config.struct.apiKey,
         gammaApi: this.gammaApi,
@@ -184,7 +187,7 @@ export class WhaleTracker {
         tradeEnricher: this.tradeEnricher,
         coordinationDetector: this.coordinationDetector,
         dedupCache: this.dedupCache,
-        minTradeSize: this.config.tracking.minTradeSize,
+        getMinTradeSize: () => this.runtimeConfig.get('minTradeSize'),
         onTrade: async (trade) => this.publishTrade(trade),
       });
     }
@@ -197,6 +200,9 @@ export class WhaleTracker {
         config.scraping.channels,
       );
     }
+    this.runtimeConfig.on('change', (key) => {
+      void this.handleRuntimeChange(String(key));
+    });
   }
 
   async runStartupSmokeTest(cardGenerator: CardGenerator, outputPath: string): Promise<EnrichedTrade> {
@@ -212,7 +218,7 @@ export class WhaleTracker {
     for (const wallet of wallets.slice(0, 10)) {
       const activity = await this.dataApi.getActivity(wallet.proxyWallet, 10).catch(() => []);
       const eligibleTrade = activity.find(
-        (trade) => Number(trade.usdcSize || 0) >= this.config.tracking.minTradeSize,
+        (trade) => Number(trade.usdcSize || 0) >= this.runtimeConfig.get('minTradeSize'),
       );
       if (eligibleTrade) {
         sampleTrade = eligibleTrade;
@@ -224,7 +230,7 @@ export class WhaleTracker {
 
     if (!sampleTrade) {
       throw new Error(
-        `Smoke test failed: unable to fetch sample activity >= $${this.config.tracking.minTradeSize} from tracked wallets`,
+        `Smoke test failed: unable to fetch sample activity >= $${this.runtimeConfig.get('minTradeSize')} from tracked wallets`,
       );
     }
 
@@ -248,10 +254,7 @@ export class WhaleTracker {
     this.timer = setInterval(() => {
       void this.tick();
     }, this.config.tracking.pollIntervalMs);
-    await this.tradeFirehose.start();
-    await this.hashdiveDiscovery?.start();
-    await this.structDiscovery?.start();
-    await this.channelScraper?.start();
+    await this.syncSourceStates();
     void this.tick();
   }
 
@@ -334,7 +337,7 @@ export class WhaleTracker {
 
     const newTrades = trades
       .filter((trade) => Number(trade.timestamp || 0) > lastSeen)
-      .filter((trade) => Number(trade.usdcSize || 0) >= this.config.tracking.minTradeSize)
+      .filter((trade) => Number(trade.usdcSize || 0) >= this.runtimeConfig.get('minTradeSize'))
       .filter((trade) => {
         const price = Number(trade.price || 0);
         return price >= 0.03 && price <= 0.93;
@@ -362,6 +365,12 @@ export class WhaleTracker {
 
   private async publishTrade(trade: EnrichedTrade): Promise<void> {
     const enriched = trade.walletPattern ? trade : await this.decorateTrade(trade);
+    if (this.runtimeConfig.get('paused')) {
+      return;
+    }
+    if (enriched.trade.usdcSize < this.runtimeConfig.get('minTradeSize')) {
+      return;
+    }
     if (!this.alertThrottle.shouldAlert(enriched.trade.proxyWallet, enriched.trade.conditionId)) {
       return;
     }
@@ -376,7 +385,7 @@ export class WhaleTracker {
 
     const mappedTrade = await this.resolveScrapedMarket(mapScrapedToPolymarketTrade(scrapedTrade), scrapedTrade);
     if (
-      mappedTrade.usdcSize < this.config.tracking.minTradeSize
+      mappedTrade.usdcSize < this.runtimeConfig.get('minTradeSize')
       || mappedTrade.price < 0.03
       || mappedTrade.price > 0.93
     ) {
@@ -594,5 +603,58 @@ export class WhaleTracker {
     }
 
     return updated;
+  }
+
+  private async handleRuntimeChange(key: string): Promise<void> {
+    if (
+      key !== 'firehoseEnabled'
+      && key !== 'hashdiveEnabled'
+      && key !== 'structEnabled'
+      && key !== 'scraperEnabled'
+    ) {
+      return;
+    }
+
+    try {
+      await this.syncSourceStates();
+    } catch (error) {
+      logger.warn(`Failed to apply runtime source toggle for ${key}`, error);
+    }
+  }
+
+  private async syncSourceStates(): Promise<void> {
+    if (!this.running) {
+      return;
+    }
+
+    if (this.runtimeConfig.get('firehoseEnabled')) {
+      await this.tradeFirehose.start();
+    } else {
+      this.tradeFirehose.stop();
+    }
+
+    if (this.hashdiveDiscovery) {
+      if (this.runtimeConfig.get('hashdiveEnabled')) {
+        await this.hashdiveDiscovery.start();
+      } else {
+        this.hashdiveDiscovery.stop();
+      }
+    }
+
+    if (this.structDiscovery) {
+      if (this.runtimeConfig.get('structEnabled')) {
+        await this.structDiscovery.start();
+      } else {
+        this.structDiscovery.stop();
+      }
+    }
+
+    if (this.channelScraper) {
+      if (this.runtimeConfig.get('scraperEnabled')) {
+        await this.channelScraper.start();
+      } else {
+        this.channelScraper.stop();
+      }
+    }
   }
 }

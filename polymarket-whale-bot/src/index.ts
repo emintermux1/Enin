@@ -16,6 +16,8 @@ import { ResolutionChecker } from './tracker/resolution-checker';
 import { DailyLeaderboard } from './tracker/daily-leaderboard';
 import { MarketHeatmap } from './tracker/market-heatmap';
 import { ChannelPoster } from './telegram/channel-poster';
+import { RuntimeConfigManager } from './admin/runtime-config';
+import { AdminPanel } from './admin/admin-panel';
 import { logger } from './utils/logger';
 
 let fatalExitTimer: NodeJS.Timeout | null = null;
@@ -42,15 +44,41 @@ async function main() {
   logger.info('Starting Polymarket Whale Bot...');
 
   database = initDatabase();
+  const startTime = Date.now();
   let polynterRefreshTimer: NodeJS.Timeout | null = null;
   const walletTradeRepo = new WalletTradeRepo(database);
   const insiderTracker = new InsiderTracker(database);
   const traderPerformanceRepo = new TraderPerformanceRepo(database);
   const gammaApi = new GammaApi(config.api);
-  const polynterApi = config.polynter.enabled
-    ? new PolynterApi()
+  const runtimeConfig = new RuntimeConfigManager({
+    minTradeSize: config.tracking.minTradeSize,
+    maxAlertsPerWalletPerMarket: config.tracking.maxAlertsPerWalletPerMarket,
+    referralUrl: config.telegram.referralUrl,
+    referralButtonText: config.telegram.referralButtonText,
+    firehoseEnabled: true,
+    hashdiveEnabled: Boolean(config.api.hashdiveApiKey),
+    structEnabled: config.struct.enabled,
+    scraperEnabled: config.scraping.enabled,
+    polynterEnabled: config.polynter.enabled,
+    paused: false,
+  });
+  const polynterApi = new PolynterApi();
+  const polygonscanApi = config.polygonscan.enabled
+    ? new PolygonscanApi(config.polygonscan.apiKey)
     : undefined;
-  if (polynterApi) {
+  const newsCorrelator = new NewsCorrelator(new NewsApi());
+  const priceHistory = new PriceHistory();
+  const poster = new ChannelPoster(config.telegram, runtimeConfig);
+  const syncPolynterRefresh = () => {
+    if (polynterRefreshTimer) {
+      clearInterval(polynterRefreshTimer);
+      polynterRefreshTimer = null;
+    }
+
+    if (!runtimeConfig.get('polynterEnabled')) {
+      return;
+    }
+
     polynterApi.refreshAllMarkets().catch((error) => {
       logger.warn('Polynter initial refresh failed', error);
     });
@@ -59,13 +87,25 @@ async function main() {
         logger.warn('Polynter refresh failed', error);
       });
     }, 30 * 60 * 1000);
-  }
-  const polygonscanApi = config.polygonscan.enabled
-    ? new PolygonscanApi(config.polygonscan.apiKey)
-    : undefined;
-  const newsCorrelator = new NewsCorrelator(new NewsApi());
-  const priceHistory = new PriceHistory();
-  const poster = new ChannelPoster(config.telegram);
+  };
+  syncPolynterRefresh();
+  runtimeConfig.on('change', (key) => {
+    if (key === 'polynterEnabled') {
+      syncPolynterRefresh();
+    }
+  });
+  const adminPanel = new AdminPanel(poster.getBot(), runtimeConfig, {
+    adminUserId: config.admin.userId,
+    database,
+    startTime,
+    channelId: config.telegram.channelId,
+    hasApiKeys: {
+      hashdive: Boolean(config.api.hashdiveApiKey),
+      struct: Boolean(config.struct.apiKey),
+      polygonscan: Boolean(config.polygonscan.apiKey),
+    },
+  });
+  adminPanel.register();
   const dailyLeaderboard = new DailyLeaderboard(new DataApi(config.api), poster, database);
   const marketHeatmap = new MarketHeatmap(poster, database);
   const postWalletPerformanceUpdates = async (wallet: string, walletName?: string) => {
@@ -92,7 +132,7 @@ async function main() {
       }
     }
   };
-  const tracker = new WhaleTracker(config, async (enrichedTrade) => {
+  const tracker = new WhaleTracker(config, runtimeConfig, async (enrichedTrade) => {
     try {
       await poster.postAlert(enrichedTrade);
       walletTradeRepo.markAlerted(
@@ -138,6 +178,7 @@ async function main() {
   const sampleTrade = await tracker.runStartupSmokeTest(poster.getCardGenerator(), config.runtime.sampleCardPath);
   await poster.writeSampleOutput(sampleTrade, config.runtime.sampleCaptionPath);
   await poster.launch();
+  await poster.getBot().launch({ dropPendingUpdates: true });
   await tracker.start();
   resolutionChecker.start();
   dailyLeaderboard.start();
@@ -154,6 +195,7 @@ async function main() {
     dailyLeaderboard.stop();
     marketHeatmap.stop();
     poster.stop();
+    poster.getBot().stop('SIGTERM');
     database?.close();
     database = null;
     process.exit(0);

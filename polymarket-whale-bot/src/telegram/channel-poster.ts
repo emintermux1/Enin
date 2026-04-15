@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import { Markup, Telegraf } from 'telegraf'
 import { CardGenerator } from '../image/card-generator'
 import type { BacktestResult, PerformanceAlertTrigger } from '../db/trader-performance-repo'
+import type { RuntimeConfigManager } from '../admin/runtime-config'
 import {
   EnrichedTrade,
   LeaderboardTrader,
@@ -142,7 +143,10 @@ export class ChannelPoster {
   private readonly dryRun = process.env.TELEGRAM_DRY_RUN === '1'
   private launched = false
 
-  constructor(private readonly config: TelegramConfig) {
+  constructor(
+    private readonly config: TelegramConfig,
+    private readonly runtimeConfig?: RuntimeConfigManager
+  ) {
     this.bot = new Telegraf(config.botToken)
   }
 
@@ -163,12 +167,17 @@ export class ChannelPoster {
 
   stop(reason = 'shutdown'): void {
     if (this.launched) {
+      this.bot.stop(reason)
       this.launched = false
     }
   }
 
   getCardGenerator(): CardGenerator {
     return this.cardGenerator
+  }
+
+  getBot(): Telegraf {
+    return this.bot
   }
 
   async writeSampleOutput(
@@ -447,8 +456,8 @@ export class ChannelPoster {
     return Markup.inlineKeyboard([
       [
         Markup.button.url(
-          this.config.referralButtonText,
-          this.config.referralUrl
+          this.getReferralButtonText(),
+          this.getReferralUrl()
         ),
       ],
       [
@@ -458,6 +467,14 @@ export class ChannelPoster {
         ),
       ],
     ])
+  }
+
+  private getReferralUrl(): string {
+    return this.runtimeConfig?.get('referralUrl') || this.config.referralUrl
+  }
+
+  private getReferralButtonText(): string {
+    return this.runtimeConfig?.get('referralButtonText') || this.config.referralButtonText
   }
 
   private buildCaption(trade: EnrichedTrade): CaptionResult {
@@ -539,7 +556,7 @@ export class ChannelPoster {
     }
     builder.newLine()
     builder.addText('├ ')
-    let priceText = `Price: ${formatPriceCents(trade.trade.price)}`
+    let priceText = `Entry: ${formatPriceCents(trade.trade.price)}`
     const currentPrice = trade.marketInfo.outcomePrices?.[trade.trade.outcomeIndex]
     if (
       currentPrice !== undefined &&
@@ -573,7 +590,7 @@ export class ChannelPoster {
       builder.addLink('𝕏', `https://x.com/${trade.xUsername}`)
     }
     builder.addText(' · ')
-    builder.addLink('Copy Trade', this.config.referralUrl)
+    builder.addLink('Copy Trade', this.getReferralUrl())
     builder.newLine()
 
     const traderLines: Array<{ emoji: PremiumEmoji | null; text: string }> = []
@@ -808,7 +825,7 @@ export class ChannelPoster {
     builder.addPremiumEmoji(EMOJI_TRADER, ' Trader: ')
     builder.addLink(alert.traderName, traderUrl)
     builder.addText(' · ')
-    builder.addLink('Copy Trade', this.config.referralUrl)
+    builder.addLink('Copy Trade', this.getReferralUrl())
     builder.newLine()
     builder.addText(`├ Called ${formatCalledAgo(alert.daysAgo)}`)
     builder.newLine()

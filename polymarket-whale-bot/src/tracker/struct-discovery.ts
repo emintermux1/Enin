@@ -24,7 +24,7 @@ export interface StructDiscoveryOptions {
   tradeEnricher: TradeEnricher;
   coordinationDetector: CoordinationDetector;
   dedupCache: DedupCache;
-  minTradeSize: number;
+  getMinTradeSize: () => number;
   onTrade: (trade: EnrichedTrade) => Promise<void>;
 }
 
@@ -66,8 +66,9 @@ export class StructDiscovery {
     const wallet = String(data.wallet || data.user_address || '').toLowerCase();
     const amount = Number(data.amount || 0);
     const price = Number(data.price || 0);
+    const minTradeSize = this.options.getMinTradeSize();
 
-    if (!wallet || amount < this.options.minTradeSize) {
+    if (!wallet || amount < minTradeSize) {
       return;
     }
     if (price < 0.03 || price > 0.93) {

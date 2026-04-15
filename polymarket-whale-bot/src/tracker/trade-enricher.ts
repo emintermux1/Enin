@@ -74,6 +74,7 @@ export class TradeEnricher {
     private readonly newsCorrelator?: NewsCorrelator,
     private readonly priceHistory?: PriceHistory,
     private readonly polynterApi?: PolynterApi,
+    private readonly isPolynterEnabled: () => boolean = () => true,
   ) {}
 
   async enrichTrade(trade: PolymarketTrade, options: { smartScore?: number } = {}): Promise<EnrichedTrade> {
@@ -330,7 +331,7 @@ export class TradeEnricher {
         : undefined,
     };
 
-    if (this.polynterApi) {
+    if (this.polynterApi && this.isPolynterEnabled()) {
       const polynterMarket = this.polynterApi.findMarket(trade.slug, marketInfo.question);
       if (polynterMarket) {
         enrichedTrade.polynterData = {

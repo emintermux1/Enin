@@ -8,10 +8,8 @@ interface ThrottleEntry {
 
 export class AlertThrottle {
   private readonly cache: LRUCache<string, ThrottleEntry>;
-  private readonly maxAlertsPerDay: number;
 
-  constructor(maxAlertsPerDay = 3) {
-    this.maxAlertsPerDay = maxAlertsPerDay;
+  constructor(private readonly getMaxAlerts: () => number = () => 5) {
     this.cache = new LRUCache<string, ThrottleEntry>({
       max: 50_000,
       ttl: 1000 * 60 * 60 * 24,
@@ -25,23 +23,24 @@ export class AlertThrottle {
 
     const key = `${wallet.toLowerCase()}:${conditionId.toLowerCase()}`;
     const entry = this.cache.get(key);
+    const maxAlertsPerDay = Math.max(1, Math.floor(this.getMaxAlerts()));
 
     if (!entry) {
       this.cache.set(key, { count: 1, firstSeenAt: Date.now() });
       return true;
     }
 
-    if (entry.count < this.maxAlertsPerDay) {
+    if (entry.count < maxAlertsPerDay) {
       entry.count += 1;
       this.cache.set(key, entry);
       return true;
     }
 
-    if (entry.count === this.maxAlertsPerDay) {
+    if (entry.count === maxAlertsPerDay) {
       entry.count += 1;
       this.cache.set(key, entry);
       logger.info(
-        `Throttled: wallet ${wallet.slice(0, 8)}... on market ${conditionId.slice(0, 12)}... (>${this.maxAlertsPerDay} alerts/day)`,
+        `Throttled: wallet ${wallet.slice(0, 8)}... on market ${conditionId.slice(0, 12)}... (>${maxAlertsPerDay} alerts/day)`,
       );
     }
 
