@@ -38,10 +38,9 @@ function buildMarketButtons(
     marketUrl !== 'https://polymarket.com'
       ? marketUrl
       : fallbackUrl || 'https://polymarket.com'
-  const hasSpecificUrl = finalUrl !== 'https://polymarket.com'
   const buttons: InlineButton[] = [
     {
-      text: hasSpecificUrl ? '🔮 Trade on Polymarket' : '🔮 Open Polymarket',
+      text: '🔮 Polymarket',
       url: finalUrl,
     },
   ]
@@ -152,7 +151,7 @@ export class PostComposer {
     )
     const captionFooter =
       hasDualImages && relatedMarket
-        ? `\n\n<a href="${buildMarketUrl(relatedMarket)}">Trade on Polymarket</a> · <a href="${config.telegram.communityUrl}">Traders Community</a>`
+        ? `\n\n<a href="${buildMarketUrl(relatedMarket)}">Polymarket</a> · <a href="${config.telegram.communityUrl}">Traders Community</a>`
         : ''
     const caption = trimCaptionForPhoto(
       `${emojiPrefix}🚨 <b>BREAKING:</b> ${escapeHtml(headline)}${context}${captionFooter}`
@@ -205,7 +204,7 @@ export class PostComposer {
       caption: trimCaptionForMessage(caption),
       buttons: [
         {
-          text: '🔮 Open on Polymarket',
+          text: '🔮 Polymarket',
           url: 'https://polymarket.com/markets?_s=volume24hr&_od=desc',
         },
         {

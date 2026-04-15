@@ -201,23 +201,26 @@ async function main() {
           return
         }
         const queued = await postComposer.composeTrendingDigest(markets)
-        const today = new Date().toISOString().slice(0, 10)
-        const lastDigestDate = database?.getPinnedDigestDate() ?? null
         const pinnedMessageId = database?.getPinnedDigestMessageId() ?? null
 
-        if (lastDigestDate === today && pinnedMessageId) {
-          const edited = await publisher.editPinnedDigest(
-            pinnedMessageId,
-            queued.caption,
-            queued.buttons
-          )
-          if (edited) {
-            logger.info(`Updated pinned trending digest #${pinnedMessageId}`)
-            return
-          }
+        if (!pinnedMessageId) {
+          logger.warn('No pinned digest to update, skipping trending-digest')
+          return
         }
 
-        publisher.queuePost(queued)
+        const edited = await publisher.editPinnedDigest(
+          pinnedMessageId,
+          queued.caption,
+          queued.buttons
+        )
+        if (edited) {
+          logger.info(`Updated pinned trending digest #${pinnedMessageId}`)
+          return
+        }
+
+        logger.warn(
+          `Failed to update pinned trending digest #${pinnedMessageId}, skipping`
+        )
       }
     )
   )
@@ -276,23 +279,6 @@ async function main() {
           market,
           change,
           direction
-        )
-        publisher.queuePost(queued)
-      }
-    })
-  )
-
-  timers.push(
-    startLoop('resolutions', config.monitoring.resolutionPollMs, async () => {
-      const resolved = await marketMonitor.getResolvedMarkets()
-      for (const market of resolved) {
-        const highestPrice = Math.max(...market.outcomePrices, 0)
-        const resolvedOutcome =
-          market.outcomes[market.outcomePrices.indexOf(highestPrice)] ||
-          'Resolved'
-        const queued = await postComposer.composeResolution(
-          market,
-          resolvedOutcome
         )
         publisher.queuePost(queued)
       }
