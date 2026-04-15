@@ -15,6 +15,7 @@ import {
   trimCaptionForPhoto,
 } from '../telegram/formatters'
 import { formatEmojiPrefix } from '../utils/emoji-tagger'
+import { buildTwitterSearchUrl } from '../utils/twitter-search'
 
 function sourceHour(): string {
   return new Date().toISOString().slice(0, 13)
@@ -29,7 +30,8 @@ function buildMarketUrl(market?: MarketData): string {
 
 function buildMarketButtons(
   market?: MarketData,
-  fallbackUrl?: string
+  fallbackUrl?: string,
+  searchText?: string
 ): InlineButton[] {
   const marketUrl = buildMarketUrl(market)
   const finalUrl =
@@ -37,16 +39,26 @@ function buildMarketButtons(
       ? marketUrl
       : fallbackUrl || 'https://polymarket.com'
   const hasSpecificUrl = finalUrl !== 'https://polymarket.com'
-  return [
+  const buttons: InlineButton[] = [
     {
       text: hasSpecificUrl ? '🔮 Trade on Polymarket' : '🔮 Open Polymarket',
       url: finalUrl,
     },
-    {
-      text: config.telegram.communityButtonText,
-      url: config.telegram.communityUrl,
-    },
   ]
+
+  if (searchText) {
+    buttons.push({
+      text: '🔍 Search on X',
+      url: buildTwitterSearchUrl(searchText),
+    })
+  }
+
+  buttons.push({
+    text: config.telegram.communityButtonText,
+    url: config.telegram.communityUrl,
+  })
+
+  return buttons
 }
 
 function summarizeOutcomes(market: MarketData): string {
@@ -111,7 +123,11 @@ export class PostComposer {
           priority: 85,
           caption,
           imageUrl: relatedMarket.image || post.imageUrl,
-          buttons: buildMarketButtons(relatedMarket, fallbackUrl),
+          buttons: buildMarketButtons(
+            relatedMarket,
+            fallbackUrl,
+            relatedMarket.question
+          ),
           sourceId: `${post.source}:${post.messageId}`,
           createdAt: Date.now(),
           market: relatedMarket,
@@ -138,7 +154,7 @@ export class PostComposer {
       priority: 90,
       caption,
       imageUrl: relatedMarket?.image || post.imageUrl,
-      buttons: buildMarketButtons(relatedMarket, fallbackUrl),
+      buttons: buildMarketButtons(relatedMarket, fallbackUrl, headline),
       sourceId: `${post.source}:${post.messageId}`,
       createdAt: Date.now(),
       market: relatedMarket,
@@ -155,7 +171,7 @@ export class PostComposer {
       priority: 50,
       caption,
       imageBuffer: await this.cardGenerator.generateMarketCard(market),
-      buttons: buildMarketButtons(market),
+      buttons: buildMarketButtons(market, undefined, market.question),
       sourceId: `market:market_spotlight:${market.slug}:${sourceHour()}`,
       createdAt: Date.now(),
       market,
@@ -217,7 +233,7 @@ export class PostComposer {
       priority: 85,
       caption,
       imageUrl: market.image || undefined,
-      buttons: buildMarketButtons(market),
+      buttons: buildMarketButtons(market, undefined, market.question),
       sourceId: `market:new_market:${market.slug}:${sourceHour()}`,
       createdAt: Date.now(),
       market,
@@ -244,7 +260,7 @@ export class PostComposer {
       priority: change >= 20 ? 80 : 75,
       caption,
       imageBuffer: card,
-      buttons: buildMarketButtons(market),
+      buttons: buildMarketButtons(market, undefined, market.question),
       sourceId: `market:price_mover:${market.slug}:${sourceHour()}`,
       createdAt: Date.now(),
       market,
@@ -272,7 +288,7 @@ export class PostComposer {
       priority: 92,
       caption,
       imageBuffer: card,
-      buttons: buildMarketButtons(market),
+      buttons: buildMarketButtons(market, undefined, market.question),
       sourceId: `market:flash_alert:${market.slug}:${sourceHour()}`,
       createdAt: Date.now(),
       market,
@@ -300,7 +316,7 @@ export class PostComposer {
             resolvedOutcome
           ),
       imageUrl: hasMarketImage ? market.image : undefined,
-      buttons: buildMarketButtons(market),
+      buttons: buildMarketButtons(market, undefined, market.question),
       sourceId: `market:resolution:${market.slug}`,
       createdAt: Date.now(),
       market,

@@ -61,9 +61,7 @@ export class TelegramPublisher {
       return true
     }
     try {
-      const keyboard = Markup.inlineKeyboard([
-        buttons.map((button) => Markup.button.url(button.text, button.url)),
-      ])
+      const keyboard = this.buildKeyboard(buttons)
       await this.bot.telegram.editMessageText(
         this.telegramConfig.channelId,
         messageId,
@@ -141,10 +139,19 @@ export class TelegramPublisher {
     return this.postTimestamps.length < maxPostsPerHour
   }
 
+  private buildKeyboard(buttons: InlineButton[]) {
+    const buttonWidgets = buttons.map((button) =>
+      Markup.button.url(button.text, button.url)
+    )
+    const rows: Array<Array<(typeof buttonWidgets)[number]>> = []
+    for (let i = 0; i < buttonWidgets.length; i += 2) {
+      rows.push(buttonWidgets.slice(i, i + 2))
+    }
+    return Markup.inlineKeyboard(rows)
+  }
+
   private async sendPost(post: QueuedPost): Promise<number | undefined> {
-    const keyboard = Markup.inlineKeyboard([
-      post.buttons.map((button) => Markup.button.url(button.text, button.url)),
-    ])
+    const keyboard = this.buildKeyboard(post.buttons)
 
     if (config.runtime.dryRun) {
       logger.info(`[DRY RUN] ${post.type}: ${post.caption}`)
@@ -166,9 +173,17 @@ export class TelegramPublisher {
 
     if (post.imageUrl) {
       try {
+        const response = await axios.get<ArrayBuffer>(post.imageUrl, {
+          responseType: 'arraybuffer',
+          timeout: 15_000,
+          headers: {
+            'User-Agent':
+              'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0 Safari/537.36',
+          },
+        })
         const sentMessage = await this.bot.telegram.sendPhoto(
           this.telegramConfig.channelId,
-          post.imageUrl,
+          { source: Buffer.from(response.data) },
           {
             caption: trimCaptionForPhoto(post.caption),
             parse_mode: 'HTML',
@@ -176,26 +191,8 @@ export class TelegramPublisher {
           }
         )
         return sentMessage.message_id
-      } catch (urlError) {
-        logger.warn(`Direct URL send failed, downloading image: ${post.imageUrl}`)
-        try {
-          const response = await axios.get<ArrayBuffer>(post.imageUrl, {
-            responseType: 'arraybuffer',
-            timeout: 15_000,
-          })
-          const sentMessage = await this.bot.telegram.sendPhoto(
-            this.telegramConfig.channelId,
-            { source: Buffer.from(response.data) },
-            {
-              caption: trimCaptionForPhoto(post.caption),
-              parse_mode: 'HTML',
-              reply_markup: keyboard.reply_markup,
-            }
-          )
-          return sentMessage.message_id
-        } catch (downloadError) {
-          logger.warn(`Image download also failed, sending text-only`, downloadError)
-        }
+      } catch (error) {
+        logger.warn(`Image download failed for ${post.imageUrl}, sending text-only`)
       }
     }
 

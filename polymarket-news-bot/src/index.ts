@@ -7,6 +7,7 @@ import { ChannelScraper } from './sources/channel-scraper'
 import { MarketMonitor } from './sources/market-monitor'
 import { TelegramPublisher } from './telegram/publisher'
 import { MarketData, ScrapedPost } from './types'
+import { computeFingerprint } from './utils/fingerprint'
 import { logger } from './utils/logger'
 
 let fatalExitTimer: NodeJS.Timeout | null = null
@@ -115,8 +116,15 @@ async function processScrapedPost(
   postComposer: PostComposer,
   publisher: TelegramPublisher,
   polymarketApi: PolymarketApi,
+  db: NewsDatabase,
   post: ScrapedPost
 ): Promise<void> {
+  const fingerprint = computeFingerprint(post.text)
+  if (fingerprint && db.hasRecentFingerprint(fingerprint)) {
+    logger.debug(`Skipping duplicate content from ${post.source}:${post.messageId}`)
+    return
+  }
+
   let relatedMarket: MarketData | undefined
 
   if (post.polymarketSlug) {
@@ -136,6 +144,9 @@ async function processScrapedPost(
   const queued = await postComposer.composeFromScraped(post, relatedMarket)
   if (!queued) {
     return
+  }
+  if (fingerprint) {
+    db.recordFingerprint(fingerprint, `${post.source}:${post.messageId}`)
   }
   publisher.queuePost(queued)
 }
@@ -164,6 +175,7 @@ async function main() {
               postComposer,
               publisher,
               polymarketApi,
+              database!,
               post
             )
           } catch (error) {
