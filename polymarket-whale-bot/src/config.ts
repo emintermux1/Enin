@@ -22,8 +22,8 @@ export const config: AppConfig = {
   telegram: {
     botToken: readString('TELEGRAM_BOT_TOKEN'),
     channelId: readString('TELEGRAM_CHANNEL_ID'),
-    referralUrl: readString('REFERRAL_URL', 'https://t.me/PolytechTradeBot?start=ref_cococooker'),
-    referralButtonText: readString('REFERRAL_BUTTON_TEXT', '⚡ Trade on Polytech'),
+    referralUrl: readString('REFERRAL_URL', 'https://t.me/predictr_trade_bot?start=ref_Hadeshacks'),
+    referralButtonText: readString('REFERRAL_BUTTON_TEXT', '⚡ Trade on Predictr'),
   },
   tracking: {
     minTradeSize: readNumber('MIN_TRADE_SIZE', 10_000),
