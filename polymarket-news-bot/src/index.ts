@@ -5,6 +5,7 @@ import { initDatabase, NewsDatabase } from './db/database'
 import { PolymarketApi } from './sources/polymarket-api'
 import { ChannelScraper } from './sources/channel-scraper'
 import { MarketMonitor } from './sources/market-monitor'
+import { TwitterScraper } from './sources/twitter-scraper'
 import { TelegramPublisher } from './telegram/publisher'
 import { MarketData, ScrapedPost } from './types'
 import { computeFingerprint } from './utils/fingerprint'
@@ -157,6 +158,7 @@ async function main() {
   database = initDatabase()
   const polymarketApi = new PolymarketApi()
   const channelScraper = new ChannelScraper()
+  const twitterScraper = new TwitterScraper()
   const marketMonitor = new MarketMonitor(polymarketApi, database)
   const cardGenerator = new MarketCardGenerator()
   const postComposer = new PostComposer(cardGenerator)
@@ -190,16 +192,6 @@ async function main() {
   )
 
   timers.push(
-    startLoop('trending', config.monitoring.trendingPollMs, async () => {
-      const trending = await marketMonitor.getTrendingMarkets()
-      for (const market of trending.slice(0, 3)) {
-        const queued = await postComposer.composeTrendingMarket(market)
-        publisher.queuePost(queued)
-      }
-    })
-  )
-
-  timers.push(
     startLoop(
       'trending-digest',
       config.monitoring.trendingDigestIntervalMs,
@@ -228,6 +220,28 @@ async function main() {
         publisher.queuePost(queued)
       }
     )
+  )
+
+  timers.push(
+    startLoop('twitter-polymarket', 300_000, async () => {
+      const tweets = await twitterScraper.scrapePolymarketTweets()
+      for (const tweet of tweets) {
+        try {
+          await processScrapedPost(
+            postComposer,
+            publisher,
+            polymarketApi,
+            database!,
+            tweet
+          )
+        } catch (error) {
+          logger.warn(
+            `Failed to process scraped post ${tweet.source}:${tweet.messageId}`,
+            error
+          )
+        }
+      }
+    })
   )
 
   timers.push(

@@ -14,23 +14,6 @@ export class MarketMonitor {
     private readonly db: NewsDatabase
   ) {}
 
-  async getTrendingMarkets(): Promise<MarketData[]> {
-    const markets = await this.polymarketApi.getTopEvents(50, 0)
-    return markets
-      .filter(
-        (market) => market.volume24hr >= config.monitoring.minVolumeForTrending
-      )
-      .filter(
-        (market) =>
-          !this.db.hasRecentMarketPost(
-            'market_spotlight',
-            market.slug,
-            6 * 60 * 60 * 1000
-          )
-      )
-      .slice(0, 8)
-  }
-
   async getTrendingDigestMarkets(): Promise<MarketData[]> {
     const markets = await this.polymarketApi.getTopEvents(50, 0)
     return markets
@@ -61,7 +44,7 @@ export class MarketMonitor {
       this.db.rememberMarket(market)
     }
 
-    return fresh.slice(0, 6)
+    return fresh.slice(0, 3)
   }
 
   async getPriceMovers(): Promise<PriceMover[]> {
@@ -104,7 +87,7 @@ export class MarketMonitor {
           )
       )
       .sort((a, b) => b.change - a.change)
-      .slice(0, 5)
+      .slice(0, 2)
   }
 
   async getFlashAlerts(): Promise<PriceMover[]> {
@@ -147,7 +130,10 @@ export class MarketMonitor {
   async getResolvedMarkets(): Promise<MarketData[]> {
     const markets = await this.polymarketApi.getResolvedMarkets(12)
     return markets
-      .filter((market) => market.volume >= 50_000)
+      .filter(
+        (market) =>
+          market.volume >= config.monitoring.minVolumeForResolution
+      )
       .filter(
         (market) =>
           !this.db.hasRecentMarketPost(
@@ -157,6 +143,6 @@ export class MarketMonitor {
           )
       )
       .sort((a, b) => b.volume - a.volume)
-      .slice(0, 5)
+      .slice(0, 2)
   }
 }

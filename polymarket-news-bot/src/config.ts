@@ -19,6 +19,7 @@ export interface AppConfig {
   scraping: {
     channels: string[]
     pollIntervalMs: number
+    nitterInstances: string[]
   }
   monitoring: {
     trendingPollMs: number
@@ -31,6 +32,7 @@ export interface AppConfig {
     minPriceChangePercent: number
     flashAlertMinChange: number
     minVolumeForNewMarket: number
+    minVolumeForResolution: number
   }
   posting: {
     minIntervalMs: number
@@ -96,6 +98,11 @@ export const config: AppConfig = {
       'polymarket_markets',
     ]),
     pollIntervalMs: readNumber('SCRAPE_POLL_INTERVAL_MS', 90_000),
+    nitterInstances: readCsv('NITTER_INSTANCES', [
+      'nitter.privacydev.net',
+      'nitter.poast.org',
+      'nitter.cz',
+    ]),
   },
   monitoring: {
     trendingPollMs: readNumber('TRENDING_POLL_MS', 300_000),
@@ -107,14 +114,15 @@ export const config: AppConfig = {
     priceMovePollMs: readNumber('PRICE_MOVE_POLL_MS', 180_000),
     flashAlertPollMs: readNumber('FLASH_ALERT_POLL_MS', 120_000),
     resolutionPollMs: readNumber('RESOLUTION_POLL_MS', 300_000),
-    minVolumeForTrending: readNumber('MIN_VOLUME_TRENDING', 1_000),
-    minPriceChangePercent: readNumber('MIN_PRICE_CHANGE_PERCENT', 10),
+    minVolumeForTrending: readNumber('MIN_VOLUME_TRENDING', 50_000),
+    minPriceChangePercent: readNumber('MIN_PRICE_CHANGE_PERCENT', 20),
     flashAlertMinChange: readNumber('FLASH_ALERT_MIN_CHANGE', 50),
-    minVolumeForNewMarket: readNumber('MIN_VOLUME_NEW_MARKET', 2_000),
+    minVolumeForNewMarket: readNumber('MIN_VOLUME_NEW_MARKET', 20_000),
+    minVolumeForResolution: readNumber('MIN_VOLUME_RESOLUTION', 500_000),
   },
   posting: {
-    minIntervalMs: readNumber('MIN_POST_INTERVAL_MS', 120_000),
-    maxPostsPerHour: readNumber('MAX_POSTS_PER_HOUR', 15),
+    minIntervalMs: readNumber('MIN_POST_INTERVAL_MS', 300_000),
+    maxPostsPerHour: readNumber('MAX_POSTS_PER_HOUR', 5),
     quietHoursStart: readNumber('QUIET_HOURS_START', 2),
     quietHoursEnd: readNumber('QUIET_HOURS_END', 6),
   },

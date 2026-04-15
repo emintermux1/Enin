@@ -145,36 +145,31 @@ export class PostComposer {
     const context = relatedMarket
       ? `\n\n<b>Related market:</b> ${escapeHtml(relatedMarket.question)}\n${summarizeOutcomes(relatedMarket)}`
       : ''
+    const scrapedImage = post.imageUrl
+    const marketImage = relatedMarket?.image
+    const hasDualImages = Boolean(
+      scrapedImage && marketImage && scrapedImage !== marketImage
+    )
+    const captionFooter =
+      hasDualImages && relatedMarket
+        ? `\n\n<a href="${buildMarketUrl(relatedMarket)}">Trade on Polymarket</a> · <a href="${config.telegram.communityUrl}">Traders Community</a>`
+        : ''
     const caption = trimCaptionForPhoto(
-      `${emojiPrefix}🚨 <b>BREAKING:</b> ${escapeHtml(headline)}${context}`
+      `${emojiPrefix}🚨 <b>BREAKING:</b> ${escapeHtml(headline)}${context}${captionFooter}`
     )
     return {
       id: buildId('breaking', `${post.source}:${post.messageId}`),
       type: 'breaking_news',
       priority: 90,
       caption,
-      imageUrl: relatedMarket?.image || post.imageUrl,
-      buttons: buildMarketButtons(relatedMarket, fallbackUrl, headline),
+      imageUrl: scrapedImage || marketImage,
+      secondaryImageUrl: hasDualImages ? marketImage : undefined,
+      buttons: hasDualImages
+        ? []
+        : buildMarketButtons(relatedMarket, fallbackUrl, headline),
       sourceId: `${post.source}:${post.messageId}`,
       createdAt: Date.now(),
       market: relatedMarket,
-    }
-  }
-
-  async composeTrendingMarket(market: MarketData): Promise<QueuedPost> {
-    const caption = trimCaptionForPhoto(
-      `${formatEmojiPrefix(market)}📊 <b>Trending Market</b>\n\n<b>${escapeHtml(market.question)}</b>\n\n${summarizeOutcomes(market)}\n\n💰 Volume: ${escapeHtml(formatCompactUsd(market.volume24hr || market.volume))}`
-    )
-    return {
-      id: buildId('trending', market.slug),
-      type: 'market_spotlight',
-      priority: 50,
-      caption,
-      imageBuffer: await this.cardGenerator.generateMarketCard(market),
-      buttons: buildMarketButtons(market, undefined, market.question),
-      sourceId: `market:market_spotlight:${market.slug}:${sourceHour()}`,
-      createdAt: Date.now(),
-      market,
     }
   }
 
