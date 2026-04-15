@@ -156,7 +156,10 @@ export class TelegramPublisher {
       return undefined
     }
 
-    if (post.secondaryImageUrl && (post.imageUrl || post.imageBuffer)) {
+    if (
+      (post.secondaryImageUrl || post.secondaryImageBuffer) &&
+      (post.imageUrl || post.imageBuffer)
+    ) {
       return this.sendMediaGroup(post)
     }
 
@@ -227,7 +230,11 @@ export class TelegramPublisher {
       const primaryBuffer =
         post.imageBuffer ||
         (post.imageUrl ? await this.downloadImage(post.imageUrl) : null)
-      const secondaryBuffer = await this.downloadImage(post.secondaryImageUrl!)
+      const secondaryBuffer =
+        post.secondaryImageBuffer ||
+        (post.secondaryImageUrl
+          ? await this.downloadImage(post.secondaryImageUrl)
+          : null)
 
       if (!primaryBuffer || !secondaryBuffer) {
         return this.sendSinglePhoto(post)
