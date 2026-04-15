@@ -540,6 +540,14 @@ export class ChannelPoster {
     builder.newLine()
     builder.addText('├ ')
     let priceText = `Price: ${formatPriceCents(trade.trade.price)}`
+    const currentPrice = trade.marketInfo.outcomePrices?.[trade.trade.outcomeIndex]
+    if (
+      currentPrice !== undefined &&
+      currentPrice > 0 &&
+      Math.abs(currentPrice - trade.trade.price) >= 0.01
+    ) {
+      priceText += ` → Now: ${formatPriceCents(currentPrice)}`
+    }
     if (
       trade.priceMomentum &&
       Math.abs(trade.priceMomentum.changePercent) >= 10 &&
