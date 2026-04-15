@@ -151,12 +151,34 @@ export class TelegramPublisher {
   }
 
   private async sendPost(post: QueuedPost): Promise<number | undefined> {
-    const keyboard = this.buildKeyboard(post.buttons)
-
     if (config.runtime.dryRun) {
       logger.info(`[DRY RUN] ${post.type}: ${post.caption}`)
       return undefined
     }
+
+    if (post.secondaryImageUrl && (post.imageUrl || post.imageBuffer)) {
+      return this.sendMediaGroup(post)
+    }
+
+    if (post.imageBuffer || post.imageUrl) {
+      return this.sendSinglePhoto(post)
+    }
+
+    const keyboard = this.buildKeyboard(post.buttons)
+    const sentMessage = await this.bot.telegram.sendMessage(
+      this.telegramConfig.channelId,
+      trimCaptionForMessage(post.caption),
+      {
+        parse_mode: 'HTML',
+        reply_markup: keyboard.reply_markup,
+        link_preview_options: { is_disabled: true },
+      }
+    )
+    return sentMessage.message_id
+  }
+
+  private async sendSinglePhoto(post: QueuedPost): Promise<number | undefined> {
+    const keyboard = this.buildKeyboard(post.buttons)
 
     if (post.imageBuffer) {
       const sentMessage = await this.bot.telegram.sendPhoto(
@@ -172,18 +194,11 @@ export class TelegramPublisher {
     }
 
     if (post.imageUrl) {
-      try {
-        const response = await axios.get<ArrayBuffer>(post.imageUrl, {
-          responseType: 'arraybuffer',
-          timeout: 15_000,
-          headers: {
-            'User-Agent':
-              'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0 Safari/537.36',
-          },
-        })
+      const imageBuffer = await this.downloadImage(post.imageUrl)
+      if (imageBuffer) {
         const sentMessage = await this.bot.telegram.sendPhoto(
           this.telegramConfig.channelId,
-          { source: Buffer.from(response.data) },
+          { source: imageBuffer },
           {
             caption: trimCaptionForPhoto(post.caption),
             parse_mode: 'HTML',
@@ -191,9 +206,8 @@ export class TelegramPublisher {
           }
         )
         return sentMessage.message_id
-      } catch (error) {
-        logger.warn(`Image download failed for ${post.imageUrl}, sending text-only`)
       }
+      logger.warn(`Image download failed for ${post.imageUrl}, sending text-only`)
     }
 
     const sentMessage = await this.bot.telegram.sendMessage(
@@ -206,6 +220,55 @@ export class TelegramPublisher {
       }
     )
     return sentMessage.message_id
+  }
+
+  private async sendMediaGroup(post: QueuedPost): Promise<number | undefined> {
+    try {
+      const primaryBuffer =
+        post.imageBuffer ||
+        (post.imageUrl ? await this.downloadImage(post.imageUrl) : null)
+      const secondaryBuffer = await this.downloadImage(post.secondaryImageUrl!)
+
+      if (!primaryBuffer || !secondaryBuffer) {
+        return this.sendSinglePhoto(post)
+      }
+
+      const messages = await this.bot.telegram.sendMediaGroup(
+        this.telegramConfig.channelId,
+        [
+          {
+            type: 'photo',
+            media: { source: primaryBuffer },
+            caption: trimCaptionForPhoto(post.caption),
+            parse_mode: 'HTML',
+          },
+          {
+            type: 'photo',
+            media: { source: secondaryBuffer },
+          },
+        ]
+      )
+      return messages[0]?.message_id
+    } catch (error) {
+      logger.warn('sendMediaGroup failed, falling back to single photo', error)
+      return this.sendSinglePhoto(post)
+    }
+  }
+
+  private async downloadImage(url: string): Promise<Buffer | null> {
+    try {
+      const response = await axios.get<ArrayBuffer>(url, {
+        responseType: 'arraybuffer',
+        timeout: 15_000,
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0 Safari/537.36',
+        },
+      })
+      return Buffer.from(response.data)
+    } catch {
+      return null
+    }
   }
 
   private async pinTrendingDigest(messageId: number): Promise<void> {

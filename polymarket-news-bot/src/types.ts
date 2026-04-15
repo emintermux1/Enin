@@ -51,6 +51,7 @@ export interface QueuedPost {
   caption: string
   imageBuffer?: Buffer
   imageUrl?: string
+  secondaryImageUrl?: string
   buttons: InlineButton[]
   sourceId: string
   createdAt: number
