@@ -2,3 +2,6 @@
 node_modules
 *.log
 data/
+sample-caption.txt
+sample-card.png
+pnl-layout-smoke.png
