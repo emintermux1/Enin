@@ -556,7 +556,7 @@ export class ChannelPoster {
     }
     builder.newLine()
     builder.addText('├ ')
-    let priceText = `Price: ${formatPriceCents(trade.trade.price)}`
+    let priceText = `Entry: ${formatPriceCents(trade.trade.price)}`
     const currentPrice = trade.marketInfo.outcomePrices?.[trade.trade.outcomeIndex]
     if (
       currentPrice !== undefined &&
