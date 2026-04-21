@@ -94,7 +94,7 @@ async function findRelatedMarket(
   const ranked = candidates
     .map((market) => ({ market, score: scoreOverlap(text, market) }))
     .sort((a, b) => b.score - a.score)
-  return ranked[0] && ranked[0].score >= 8 ? ranked[0].market : undefined
+  return ranked[0] && ranked[0].score >= 5 ? ranked[0].market : undefined
 }
 
 function startLoop(
