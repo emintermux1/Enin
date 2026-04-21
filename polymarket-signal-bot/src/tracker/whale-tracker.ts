@@ -374,6 +374,9 @@ export class WhaleTracker {
     if (!this.alertThrottle.shouldAlert(enriched.trade.proxyWallet, enriched.trade.conditionId)) {
       return;
     }
+    if (this.alertThrottle.isMarketThrottled(enriched.trade.conditionId)) {
+      return;
+    }
     await this.onTrade(enriched);
   }
 

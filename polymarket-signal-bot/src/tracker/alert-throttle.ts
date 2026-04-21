@@ -6,8 +6,14 @@ interface ThrottleEntry {
   firstSeenAt: number;
 }
 
+interface MarketDailyCountEntry {
+  date: string;
+  count: number;
+}
+
 export class AlertThrottle {
   private readonly cache: LRUCache<string, ThrottleEntry>;
+  private readonly marketDailyCounts = new Map<string, MarketDailyCountEntry>();
 
   constructor(private readonly getMaxAlerts: () => number = () => 5) {
     this.cache = new LRUCache<string, ThrottleEntry>({
@@ -44,6 +50,36 @@ export class AlertThrottle {
       );
     }
 
+    return false;
+  }
+
+  isMarketThrottled(conditionId: string): boolean {
+    if (!conditionId) {
+      return false;
+    }
+
+    const normalizedConditionId = conditionId.toLowerCase();
+    const today = new Date().toISOString().slice(0, 10);
+    const entry = this.marketDailyCounts.get(normalizedConditionId);
+
+    if (!entry || entry.date !== today) {
+      this.marketDailyCounts.set(normalizedConditionId, { date: today, count: 1 });
+      return false;
+    }
+
+    if (entry.count >= 5) {
+      if (entry.count === 5) {
+        entry.count += 1;
+        this.marketDailyCounts.set(normalizedConditionId, entry);
+        logger.info(
+          `Throttled: market ${conditionId.slice(0, 12)}... (>5 alerts/day across all wallets)`,
+        );
+      }
+      return true;
+    }
+
+    entry.count += 1;
+    this.marketDailyCounts.set(normalizedConditionId, entry);
     return false;
   }
 }
