@@ -98,6 +98,7 @@ export const config: AppConfig = {
       'polymarket_markets',
       'polytwitter',
       'Polymarketzone',
+      'FastNews_Ag',
     ]),
     pollIntervalMs: readNumber('SCRAPE_POLL_INTERVAL_MS', 90_000),
     nitterInstances: readCsv('NITTER_INSTANCES', [
