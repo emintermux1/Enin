@@ -124,8 +124,8 @@ export const config: AppConfig = {
     minVolumeForResolution: readNumber('MIN_VOLUME_RESOLUTION', 500_000),
   },
   posting: {
-    minIntervalMs: readNumber('MIN_POST_INTERVAL_MS', 300_000),
-    maxPostsPerHour: readNumber('MAX_POSTS_PER_HOUR', 5),
+    minIntervalMs: readNumber('MIN_POST_INTERVAL_MS', 60_000),
+    maxPostsPerHour: readNumber('MAX_POSTS_PER_HOUR', 15),
     quietHoursStart: readNumber('QUIET_HOURS_START', 2),
     quietHoursEnd: readNumber('QUIET_HOURS_END', 6),
   },

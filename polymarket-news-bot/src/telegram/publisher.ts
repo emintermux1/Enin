@@ -48,6 +48,7 @@ export class TelegramPublisher {
     this.postQueue.sort(
       (a, b) => b.priority - a.priority || a.createdAt - b.createdAt
     )
+    logger.info(`Queued ${post.type} [${post.sourceId}] (queue: ${this.postQueue.length}, dual: ${Boolean(post.secondaryImageUrl)})`)
     return true
   }
 
@@ -96,6 +97,7 @@ export class TelegramPublisher {
     this.processing = true
     try {
       const messageId = await this.sendPost(nextPost)
+      logger.info(`Sent ${nextPost.type} [${nextPost.sourceId}] msgId=${messageId} (remaining: ${this.postQueue.length})`)
       if (nextPost.type === 'trending_digest' && messageId) {
         await this.pinTrendingDigest(messageId)
         this.db.setPinnedDigestMessageId(messageId)
