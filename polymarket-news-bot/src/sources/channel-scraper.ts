@@ -25,7 +25,7 @@ function stripTemplateFooter(text: string): string {
     .replace(/\s*[—–-]\s*@\w+\s*$/i, '')
     .replace(/\s*(?:via|from|by|source:?)\s*@\w+\s*$/i, '')
     .replace(
-      /\s*@(?:Polymarketzone|polymarketg|predictiondesknews|polytwitter)\s*$/i,
+      /\s*@(?:Polymarketzone|polymarketg|predictiondesknews|polytwitter|FastNews_Ag)\s*$/i,
       ''
     )
     .trim()
