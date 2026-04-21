@@ -1,5 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import axios from 'axios'
+import { LRUCache } from 'lru-cache'
 import { EnrichedTrade, ResolutionAlert, TraderType } from '../types'
 import { getTradeTypeLabel } from '../classifier/trader-classifier'
 import {
@@ -23,25 +25,21 @@ type CanvasModule = {
   GlobalFonts?: { registerFromPath: (path: string, family: string) => boolean }
 }
 
-type MetricPanelOptions = {
-  x: number
-  y: number
-  width: number
-  height: number
-  label: string
-  value: string
-  accent: string
-  valueColor?: string
-  secondary?: string
-  valueSize?: number
-}
+const BG_OUTER = '#050a08'
+const BG_CARD = '#091a14'
+const EMERALD = '#10b981'
+const TEAL = '#14b8a6'
+const AMBER = '#f59e0b'
+const VIOLET = '#a78bfa'
+const PINK = '#f472b6'
+const SELL_RED = '#ef4444'
 
 const LABEL_COLORS: Record<TraderType, string> = {
-  WHALE: '#06b6d4',
-  INSIDER: '#f59e0b',
-  SMART_MONEY: '#10b981',
-  TOP_HOLDER: '#8b5cf6',
-  CONVICTION_BUILD: '#ec4899',
+  WHALE: TEAL,
+  INSIDER: AMBER,
+  SMART_MONEY: EMERALD,
+  TOP_HOLDER: VIOLET,
+  CONVICTION_BUILD: PINK,
 }
 
 function roundedRect(
@@ -52,13 +50,12 @@ function roundedRect(
   height: number,
   radius: number
 ) {
-  const safeRadius = Math.max(0, Math.min(radius, width / 2, height / 2))
   ctx.beginPath()
-  ctx.moveTo(x + safeRadius, y)
-  ctx.arcTo(x + width, y, x + width, y + height, safeRadius)
-  ctx.arcTo(x + width, y + height, x, y + height, safeRadius)
-  ctx.arcTo(x, y + height, x, y, safeRadius)
-  ctx.arcTo(x, y, x + width, y, safeRadius)
+  ctx.moveTo(x + radius, y)
+  ctx.arcTo(x + width, y, x + width, y + height, radius)
+  ctx.arcTo(x + width, y + height, x, y + height, radius)
+  ctx.arcTo(x, y + height, x, y, radius)
+  ctx.arcTo(x, y, x + width, y, radius)
   ctx.closePath()
 }
 
@@ -143,7 +140,7 @@ function fitFontSize(
   maxWidth: number,
   startingSize: number,
   minSize: number,
-  fontWeight = 700
+  fontWeight = 600
 ): number {
   for (let size = startingSize; size >= minSize; size -= 1) {
     ctx.font = `${fontWeight} ${size}px Inter, Arial, sans-serif`
@@ -186,59 +183,12 @@ function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`
 }
 
-function drawPill(
-  ctx: any,
-  x: number,
-  y: number,
-  text: string,
-  options: {
-    background: any
-    color: string
-    border?: any
-    height?: number
-    fontSize?: number
-    fontWeight?: number
-    paddingX?: number
-  }
-): number {
-  const height = options.height ?? 38
-  const fontSize = options.fontSize ?? 16
-  const fontWeight = options.fontWeight ?? 700
-  const paddingX = options.paddingX ?? 16
-
-  ctx.font = `${fontWeight} ${fontSize}px Inter, Arial, sans-serif`
-  const width = Math.ceil(ctx.measureText(text).width) + paddingX * 2
-
-  fillRoundedRect(ctx, x, y, width, height, Math.min(18, height / 2), options.background)
-  if (options.border) {
-    strokeRoundedRect(
-      ctx,
-      x + 0.5,
-      y + 0.5,
-      width - 1,
-      height - 1,
-      Math.min(17, height / 2),
-      options.border,
-      1
-    )
-  }
-
-  ctx.save()
-  ctx.fillStyle = options.color
-  ctx.textAlign = 'left'
-  ctx.textBaseline = 'middle'
-  ctx.fillText(text, x + paddingX, y + height / 2 + 1)
-  ctx.restore()
-
-  return width
-}
-
-function joinNonEmpty(parts: Array<string | null | undefined>): string {
-  return parts.filter(Boolean).join(' · ')
-}
-
 export class CardGenerator {
   private modulePromise: Promise<CanvasModule | null> | null = null
+  private readonly imageCache = new LRUCache<string, Buffer>({
+    max: 100,
+    ttl: 1000 * 60 * 60 * 6,
+  })
   private fontsReady = false
   private readonly dynamicImport = new Function(
     'specifier',
@@ -255,283 +205,324 @@ export class CardGenerator {
 
     const canvas = canvasModule.createCanvas(1280, 720)
     const ctx = canvas.getContext('2d')
-    const cardX = 32
-    const cardY = 32
-    const cardWidth = 1216
-    const cardHeight = 656
-    const radius = 24
-    const contentX = 88
-    const contentRight = 1160
+    const cardX = 24
+    const cardY = 24
+    const cardWidth = 1232
+    const cardHeight = 672
+    const cardRadius = 34
+    const textLeftX = 76
+    const textMaxWidth = 620
+    const textRightX = textLeftX + textMaxWidth
+    const barY = 530
+    const barHeight = cardY + cardHeight - barY
+    const question = trade.marketInfo.question || trade.trade.title
+    const displayName =
+      trade.trade.name ||
+      trade.trade.pseudonym ||
+      trade.trade.proxyWallet.slice(0, 10)
+    const side = trade.trade.side === 'BUY' ? 'Buy' : 'Sell'
+    const action = trade.trade.side === 'BUY' ? 'BUY' : 'SELL'
+    const outcome = trade.trade.outcome || String(trade.trade.outcomeIndex)
+    const badgeColor = trade.trade.side === 'BUY' ? EMERALD : SELL_RED
+    const badgeTextColor = trade.trade.side === 'BUY' ? '#04120d' : '#ffffff'
+    const priceMomentum =
+      trade.priceMomentum && Math.abs(trade.priceMomentum.changePercent) >= 10
+        ? trade.priceMomentum
+        : null
     const label = getTradeTypeLabel(
       trade.primaryType,
       trade.trade.side,
       trade.isFreshWallet,
       trade.risk.level
     )
-    const question = trade.marketInfo.question || trade.trade.title
-    const displayName = truncateText(
-      trade.trade.name || trade.trade.pseudonym || trade.trade.proxyWallet.slice(0, 10),
-      24
+    const labelColor = LABEL_COLORS[trade.primaryType]
+    const riskColor = trade.risk.color || EMERALD
+    const titleLineHeight = 52
+
+    ctx.fillStyle = BG_OUTER
+    ctx.fillRect(0, 0, 1280, 720)
+
+    fillRoundedRect(ctx, cardX, cardY, cardWidth, cardHeight, cardRadius, BG_CARD)
+
+    const [heroImage, profileImage] = await Promise.all([
+      this.loadMarketImage(canvasModule, trade.marketInfo.image || trade.trade.icon),
+      this.loadMarketImage(canvasModule, trade.trade.profileImage),
+    ])
+
+    ctx.save()
+    roundedRect(ctx, cardX, cardY, cardWidth, cardHeight, cardRadius)
+    ctx.clip()
+
+    if (heroImage) {
+      this.drawCoverImage(ctx, heroImage, cardX, cardY, cardWidth, cardHeight)
+    } else {
+      const fallback = ctx.createLinearGradient(
+        cardX,
+        cardY,
+        cardX + cardWidth,
+        cardY + cardHeight
+      )
+      fallback.addColorStop(0, '#0d2a20')
+      fallback.addColorStop(0.5, '#091a14')
+      fallback.addColorStop(1, '#142f26')
+      ctx.fillStyle = fallback
+      ctx.fillRect(cardX, cardY, cardWidth, cardHeight)
+    }
+
+    const textOverlay = ctx.createLinearGradient(cardX, 0, cardX + cardWidth, 0)
+    textOverlay.addColorStop(0, 'rgba(5,10,8,0.96)')
+    textOverlay.addColorStop(0.35, 'rgba(5,10,8,0.90)')
+    textOverlay.addColorStop(0.55, 'rgba(5,10,8,0.55)')
+    textOverlay.addColorStop(0.75, 'rgba(5,10,8,0.18)')
+    textOverlay.addColorStop(1, 'rgba(5,10,8,0.08)')
+    ctx.fillStyle = textOverlay
+    ctx.fillRect(cardX, cardY, cardWidth, cardHeight)
+
+    const vignette = ctx.createLinearGradient(0, cardY, 0, cardY + cardHeight)
+    vignette.addColorStop(0, 'rgba(3,8,6,0.16)')
+    vignette.addColorStop(0.55, 'rgba(3,8,6,0)')
+    vignette.addColorStop(1, 'rgba(3,8,6,0.34)')
+    ctx.fillStyle = vignette
+    ctx.fillRect(cardX, cardY, cardWidth, cardHeight)
+
+    const topAccent = ctx.createLinearGradient(cardX, cardY, cardX + cardWidth, cardY)
+    topAccent.addColorStop(0, EMERALD)
+    topAccent.addColorStop(0.45, TEAL)
+    topAccent.addColorStop(1, 'rgba(20,184,166,0.12)')
+    ctx.fillStyle = topAccent
+    ctx.fillRect(cardX, cardY, cardWidth, 3)
+
+    ctx.fillStyle = EMERALD
+    ctx.fillRect(cardX, cardY + cardRadius, 3, cardHeight - cardRadius * 2)
+
+    const sepGradient = ctx.createLinearGradient(cardX, barY, cardX + cardWidth, barY)
+    sepGradient.addColorStop(0, EMERALD)
+    sepGradient.addColorStop(0.6, TEAL)
+    sepGradient.addColorStop(1, 'rgba(20,184,166,0.1)')
+    ctx.fillStyle = sepGradient
+    ctx.fillRect(cardX, barY, cardWidth, 2)
+
+    ctx.fillStyle = 'rgba(5,10,8,0.94)'
+    ctx.fillRect(cardX, barY + 2, cardWidth, barHeight - 2)
+
+    ctx.restore()
+
+    strokeRoundedRect(
+      ctx,
+      cardX + 0.5,
+      cardY + 0.5,
+      cardWidth - 1,
+      cardHeight - 1,
+      cardRadius - 0.5,
+      'rgba(255,255,255,0.05)',
+      1
     )
-    const outcome = trade.trade.outcome || String(trade.trade.outcomeIndex)
-    const actionLabel = trade.trade.side === 'BUY' ? 'BUY' : 'SELL'
-    const actionColor = trade.trade.side === 'BUY' ? '#10b981' : '#ef4444'
-    const actionTextColor = trade.trade.side === 'BUY' ? '#02110b' : '#ffffff'
-    const riskColor =
-      trade.risk.level === 'HIGH'
-        ? '#ef4444'
-        : trade.risk.level === 'MED'
-          ? '#f59e0b'
-          : '#10b981'
-    const currentPrice = trade.marketInfo.outcomePrices?.[trade.trade.outcomeIndex]
-    const priceValue =
-      currentPrice !== undefined &&
-      currentPrice > 0 &&
-      Math.abs(currentPrice - trade.trade.price) >= 0.01
-        ? `${formatPriceCents(trade.trade.price)} → ${formatPriceCents(currentPrice)}`
-        : formatPriceCents(trade.trade.price)
-    const momentumValue =
-      trade.priceMomentum &&
-      Math.abs(trade.priceMomentum.changePercent) >= 10 &&
-      trade.priceMomentum.direction !== 'flat'
-        ? `${trade.priceMomentum.direction === 'up' ? '↑' : '↓'}${Math.abs(
-            trade.priceMomentum.changePercent
-          )}% ${trade.priceMomentum.periodLabel}`
-        : null
-    const topSideSummary =
-      trade.holderStats.topHoldersOnSide > 0
-        ? `${trade.holderStats.topHoldersOnSide}/20 top holders ${truncateText(
-            trade.holderStats.side,
-            18
-          )}`
-        : null
 
-    this.drawBackdrop(ctx, 1280, 720, '#10b981', '#06b6d4')
-    this.drawShell(ctx, cardX, cardY, cardWidth, cardHeight, radius, '#10b981', '#06b6d4')
-
-    const labelWidth = drawPill(ctx, contentX, 72, label, {
-      background: hexToRgba(LABEL_COLORS[trade.primaryType], 0.16),
-      color: LABEL_COLORS[trade.primaryType],
-      border: hexToRgba(LABEL_COLORS[trade.primaryType], 0.4),
-      fontSize: 17,
-      height: 40,
-      paddingX: 18,
-    })
-
-    let chipX = contentX + labelWidth + 12
+    if ('letterSpacing' in ctx) {
+      ctx.letterSpacing = '1.5px'
+    }
+    ctx.font = '700 24px Inter, Arial, sans-serif'
+    ctx.fillStyle = labelColor
+    ctx.fillText(label, textLeftX, 78)
+    const labelWidth = ctx.measureText(label).width
     if (trade.isFreshWallet) {
-      chipX +=
-        drawPill(ctx, chipX, 74, 'FRESH WALLET', {
-          background: 'rgba(255,255,255,0.04)',
-          color: '#e4e4e7',
-          border: 'rgba(255,255,255,0.08)',
-          fontSize: 14,
-          height: 36,
-          paddingX: 14,
-        }) + 10
+      ctx.font = '700 18px Inter, Arial, sans-serif'
+      ctx.fillStyle = '#5eead4'
+      const freshX = textLeftX + labelWidth + 20
+      ctx.fillText('• NEW WALLET', freshX, 78)
     }
-    if (trade.smartScore && trade.smartScore > 0) {
-      drawPill(ctx, chipX, 74, `SMART ${trade.smartScore}`, {
-        background: 'rgba(6,182,212,0.12)',
-        color: '#67e8f9',
-        border: 'rgba(6,182,212,0.26)',
-        fontSize: 14,
-        height: 36,
-        paddingX: 14,
-      })
+    if ('letterSpacing' in ctx) {
+      ctx.letterSpacing = '0px'
     }
 
-    const riskText = `RISK ${trade.risk.level}`
+    ctx.font = '800 120px Inter, Arial, sans-serif'
+    ctx.fillStyle = 'rgba(16,185,129,0.04)'
+    ctx.textAlign = 'right'
+    ctx.fillText('SIGNAL', cardX + cardWidth - 40, 160)
+    ctx.textAlign = 'left'
+    this.drawSignalWatermark(ctx, cardX + cardWidth - 108, 86)
+
     ctx.font = '700 16px Inter, Arial, sans-serif'
-    const riskWidth = Math.ceil(ctx.measureText(riskText).width) + 32
-    drawPill(ctx, contentRight - riskWidth, 72, riskText, {
-      background: hexToRgba(riskColor, 0.14),
-      color: riskColor,
-      border: hexToRgba(riskColor, 0.34),
-      fontSize: 16,
-      height: 40,
-      paddingX: 16,
-    })
+    const riskText = trade.risk.level
+    const riskBadgeWidth = ctx.measureText(riskText).width + 24
+    const riskBadgeHeight = 30
+    const riskBadgeX = textRightX - riskBadgeWidth
+    const riskBadgeY = 56
+    fillRoundedRect(
+      ctx,
+      riskBadgeX,
+      riskBadgeY,
+      riskBadgeWidth,
+      riskBadgeHeight,
+      15,
+      hexToRgba(labelColor, 0.16)
+    )
+    strokeRoundedRect(
+      ctx,
+      riskBadgeX + 0.5,
+      riskBadgeY + 0.5,
+      riskBadgeWidth - 1,
+      riskBadgeHeight - 1,
+      14.5,
+      hexToRgba(riskColor, 0.42),
+      1
+    )
+    ctx.fillStyle = riskColor
+    ctx.textBaseline = 'middle'
+    ctx.fillText(riskText, riskBadgeX + 12, riskBadgeY + riskBadgeHeight / 2)
+    ctx.textBaseline = 'alphabetic'
 
-    ctx.font = '800 54px Inter, Arial, sans-serif'
-    ctx.fillStyle = '#ffffff'
-    const titleLines = wrapText(ctx, question, contentRight - contentX, 2)
-    let titleY = 164
+    const scoreBadges = [
+      trade.insiderScore && trade.insiderScore.score >= 60
+        ? { text: 'INSIDER', color: AMBER, background: hexToRgba(AMBER, 0.2) }
+        : null,
+      trade.unusualScore && trade.unusualScore.score >= 50
+        ? { text: 'UNUSUAL', color: PINK, background: hexToRgba(PINK, 0.2) }
+        : null,
+    ].filter(
+      (badge): badge is { text: string; color: string; background: string } =>
+        Boolean(badge)
+    )
+    let scoreBadgeCursorX = riskBadgeX - 12
+    ctx.font = '700 14px Inter, Arial, sans-serif'
+    for (const badge of scoreBadges.reverse()) {
+      const badgeWidth = ctx.measureText(badge.text).width + 24
+      const badgeHeight = 28
+      const badgeX = scoreBadgeCursorX - badgeWidth
+      fillRoundedRect(
+        ctx,
+        badgeX,
+        riskBadgeY + 1,
+        badgeWidth,
+        badgeHeight,
+        14,
+        badge.background
+      )
+      ctx.fillStyle = badge.color
+      ctx.textBaseline = 'middle'
+      ctx.fillText(badge.text, badgeX + 12, riskBadgeY + riskBadgeHeight / 2)
+      ctx.textBaseline = 'alphabetic'
+      scoreBadgeCursorX = badgeX - 10
+    }
+
+    ctx.font = '800 44px Inter, Arial, sans-serif'
+    ctx.fillStyle = '#f8fafc'
+    const titleLines = wrapText(ctx, question, textMaxWidth, 3)
+    const titleY = 148
     titleLines.forEach((line, index) => {
-      ctx.fillText(line, contentX, titleY + index * 58)
+      ctx.fillText(line, textLeftX, titleY + index * titleLineHeight)
     })
 
-    const subtitleY = titleY + (titleLines.length - 1) * 58 + 48
-    const actionWidth = drawPill(ctx, contentX, subtitleY - 28, actionLabel, {
-      background: actionColor,
-      color: actionTextColor,
-      fontSize: 16,
-      height: 36,
-      paddingX: 16,
-      fontWeight: 800,
-    })
-
-    ctx.font = '600 20px Inter, Arial, sans-serif'
-    ctx.fillStyle = '#a1a1aa'
+    const lastTitleY = titleY + (titleLines.length - 1) * titleLineHeight
+    const subtitleY = lastTitleY + 52
+    ctx.font = '600 28px Inter, Arial, sans-serif'
+    ctx.fillStyle = 'rgba(223,244,239,0.82)'
     ctx.fillText(
-      `${outcome} • Resolves ${formatResolveDate(trade.marketInfo.endDate)}`,
-      contentX + actionWidth + 18,
+      `${side} ${outcome} · Resolves ${formatResolveDate(trade.marketInfo.endDate)}`,
+      textLeftX,
       subtitleY
     )
 
-    const gridTop = subtitleY + 36
-    const gridGapX = 28
-    const gridGapY = 18
-    const panelWidth = (contentRight - contentX - gridGapX) / 2
-    const panelHeight = 86
-    const leftX = contentX
-    const rightX = contentX + panelWidth + gridGapX
+    ctx.fillStyle = '#f8fafc'
+    ctx.font = '800 64px Inter, Arial, sans-serif'
+    const amountText = formatUsd(trade.trade.usdcSize)
+    const amountY = 618
+    ctx.fillText(amountText, textLeftX, amountY)
+    const amountWidth = ctx.measureText(amountText).width
 
-    this.drawMetricPanel(ctx, {
-      x: leftX,
-      y: gridTop,
-      width: panelWidth,
-      height: panelHeight,
-      label: 'Amount',
-      value: formatUsd(trade.trade.usdcSize),
-      accent: actionColor,
-      valueColor: '#ffffff',
-      valueSize: 34,
-      secondary:
-        trade.trade.usdcSize >= 50_000 ? 'High-conviction size' : 'Tracked entry size',
-    })
-    this.drawMetricPanel(ctx, {
-      x: rightX,
-      y: gridTop,
-      width: panelWidth,
-      height: panelHeight,
-      label: 'Win Potential',
-      value: formatUsd(trade.potentialWin),
-      accent: '#10b981',
-      valueColor: '#ffffff',
-      valueSize: 34,
-      secondary: trade.trade.side === 'BUY' ? 'Upside if market resolves' : 'Recovered capital path',
-    })
+    ctx.font = '800 22px Inter, Arial, sans-serif'
+    const actionBadgeWidth = ctx.measureText(action).width + 28
+    const actionBadgeHeight = 36
+    const actionBadgeX = textLeftX + amountWidth + 20
+    const actionBadgeY = 592
+    fillRoundedRect(
+      ctx,
+      actionBadgeX,
+      actionBadgeY,
+      actionBadgeWidth,
+      actionBadgeHeight,
+      18,
+      badgeColor
+    )
+    ctx.fillStyle = badgeTextColor
+    ctx.textBaseline = 'middle'
+    ctx.fillText(
+      action,
+      actionBadgeX + 14,
+      actionBadgeY + actionBadgeHeight / 2
+    )
+    ctx.textBaseline = 'alphabetic'
 
-    this.drawMetricPanel(ctx, {
-      x: leftX,
-      y: gridTop + panelHeight + gridGapY,
-      width: panelWidth,
-      height: panelHeight,
-      label: 'Price',
-      value: priceValue,
-      accent: '#06b6d4',
-      valueColor: '#ffffff',
-      valueSize: 30,
-      secondary: momentumValue || 'Live pricing stable',
-    })
-    this.drawMetricPanel(ctx, {
-      x: rightX,
-      y: gridTop + panelHeight + gridGapY,
-      width: panelWidth,
-      height: panelHeight,
-      label: 'Multiplier',
-      value: formatMultiplier(trade.multiplier),
-      accent: '#06b6d4',
-      valueColor: '#ffffff',
-      valueSize: 30,
-      secondary:
-        trade.traderStats.bestWinStreak && trade.traderStats.bestWinStreak > 1
-          ? `Best streak ${trade.traderStats.bestWinStreak}`
-          : 'Reward / risk snapshot',
-    })
+    const infoParts = [`Win ${formatUsd(trade.potentialWin)}`]
+    if (
+      trade.traderStats.bestWinAmount &&
+      trade.traderStats.bestWinAmount > 0
+    ) {
+      infoParts.push(`Best ${formatUsd(trade.traderStats.bestWinAmount)}`)
+    }
+    infoParts.push(formatMultiplier(trade.multiplier))
+    if (trade.traderStats.bestWinStreak) {
+      infoParts.push(`Streak: ${trade.traderStats.bestWinStreak}`)
+    }
+    const infoText = infoParts.join('     ')
 
-    this.drawMetricPanel(ctx, {
-      x: leftX,
-      y: gridTop + (panelHeight + gridGapY) * 2,
-      width: panelWidth,
-      height: panelHeight,
-      label: 'Outcome',
-      value: `${trade.trade.side} ${truncateText(outcome, 24)}`,
-      accent: LABEL_COLORS[trade.primaryType],
-      valueColor: '#ffffff',
-      valueSize: 28,
-      secondary: topSideSummary || 'No concentrated top-holder signal',
-    })
-    this.drawMetricPanel(ctx, {
-      x: rightX,
-      y: gridTop + (panelHeight + gridGapY) * 2,
-      width: panelWidth,
-      height: panelHeight,
-      label: 'Trader',
-      value: displayName,
-      accent: '#f59e0b',
-      valueColor: '#ffffff',
-      valueSize: 28,
-      secondary: joinNonEmpty([
-        trade.xUsername ? `𝕏 @${trade.xUsername}` : null,
-        `P&L ${formatSignedUsd(trade.traderStats.totalRealizedPnl)}`,
-      ]),
-    })
-
-    const separatorY = cardY + cardHeight - 110
-    const separator = ctx.createLinearGradient(contentX, separatorY, contentRight, separatorY)
-    separator.addColorStop(0, 'rgba(16,185,129,0.9)')
-    separator.addColorStop(0.5, 'rgba(6,182,212,0.7)')
-    separator.addColorStop(1, 'rgba(245,158,11,0.15)')
-    ctx.fillStyle = separator
-    ctx.fillRect(contentX, separatorY, contentRight - contentX, 1)
-
-    const footerItems = [
-      {
-        label: 'Resolve',
-        value: formatResolveDate(trade.marketInfo.endDate),
-      },
-      {
-        label: 'Market',
-        value:
-          trade.marketInfo.volume > 0
-            ? `${formatCompactUsd(trade.marketInfo.volume)} vol`
-            : `${formatCompactUsd(trade.marketInfo.liquidity)} liq`,
-      },
-      {
-        label: 'Tracker',
-        value:
-          trade.traderStats.closedPositions >= 3
-            ? `${Math.round(trade.traderStats.winRate)}% win`
-            : `${trade.traderStats.livePositions} live`,
-      },
-      {
-        label: 'Flow',
-        value:
-          trade.holderStats.whalesInMarket > 0 ||
-          trade.holderStats.insidersInMarket > 0 ||
-          trade.freshWalletsInMarket > 0
-            ? joinNonEmpty([
-                trade.holderStats.whalesInMarket > 0
-                  ? `${trade.holderStats.whalesInMarket} whales`
-                  : null,
-                trade.holderStats.insidersInMarket > 0
-                  ? `${trade.holderStats.insidersInMarket} insiders`
-                  : null,
-                trade.freshWalletsInMarket > 0
-                  ? `${trade.freshWalletsInMarket} fresh`
-                  : null,
-              ])
-            : 'Single-wallet read',
-      },
+    const traderName = truncateText(displayName, profileImage ? 16 : 18)
+    ctx.font = '700 24px Inter, Arial, sans-serif'
+    const traderNameWidth = ctx.measureText(traderName).width
+    const profileAvatarSize = profileImage ? 52 : 0
+    const profileGap = profileImage ? 14 : 0
+    const profileChipWidth = Math.ceil(32 + profileAvatarSize + profileGap + traderNameWidth)
+    const profileChipX = cardX + cardWidth - 32 - profileChipWidth
+    const infoMaxWidth = profileChipX - (actionBadgeX + actionBadgeWidth + 34)
+    const priceLabel = `at ${formatPriceCents(trade.trade.price)}`
+    const momentumLabel = priceMomentum
+      ? ` | ${priceMomentum.direction === 'up' ? '↑' : '↓'}${Math.abs(priceMomentum.changePercent)}% ${priceMomentum.periodLabel}`
+      : ''
+    const fullInfoText = `${priceLabel}${momentumLabel}${infoText ? `     ${infoText}` : ''}`
+    const infoFontSize = fitFontSize(
+      ctx,
+      fullInfoText,
+      infoMaxWidth,
+      28,
+      20,
+      600
+    )
+    ctx.font = `600 ${infoFontSize}px Inter, Arial, sans-serif`
+    const segments = [
+      { text: priceLabel, color: 'rgba(231,246,241,0.72)' },
+      ...(momentumLabel
+        ? [
+            {
+              text: momentumLabel,
+              color: priceMomentum?.direction === 'up' ? '#34d399' : SELL_RED,
+            },
+          ]
+        : []),
+      ...(infoText
+        ? [{ text: `     ${infoText}`, color: 'rgba(231,246,241,0.72)' }]
+        : []),
     ]
+    const totalInfoWidth = segments.reduce(
+      (width, segment) => width + ctx.measureText(segment.text).width,
+      0
+    )
+    let infoCursorX = Math.max(actionBadgeX + actionBadgeWidth + 34, profileChipX - totalInfoWidth - 22)
+    for (const segment of segments) {
+      ctx.fillStyle = segment.color
+      ctx.fillText(segment.text, infoCursorX, 620)
+      infoCursorX += ctx.measureText(segment.text).width
+    }
 
-    const footerStartX = contentX
-    const footerWidth = contentRight - contentX
-    const footerColumnWidth = footerWidth / footerItems.length
-    footerItems.forEach((item, index) => {
-      const itemX = footerStartX + footerColumnWidth * index
-      ctx.font = '700 13px Inter, Arial, sans-serif'
-      ctx.fillStyle = '#71717a'
-      ctx.fillText(item.label.toUpperCase(), itemX, separatorY + 26)
-      const valueSize = fitFontSize(ctx, item.value, footerColumnWidth - 20, 22, 15, 700)
-      ctx.font = `700 ${valueSize}px Inter, Arial, sans-serif`
-      ctx.fillStyle = '#f4f4f5'
-      ctx.fillText(item.value, itemX, separatorY + 58)
+    this.drawTraderIdentityChip(ctx, {
+      x: profileChipX,
+      y: 581,
+      width: profileChipWidth,
+      height: 56,
+      name: traderName,
+      profileImage,
     })
 
-    this.applyGrain(ctx, 1280, 720, 5)
+    this.applyGrain(ctx, 1280, 720, 8)
 
     return this.canvasToBuffer(canvas)
   }
@@ -546,172 +537,143 @@ export class CardGenerator {
 
     const canvas = canvasModule.createCanvas(1280, 720)
     const ctx = canvas.getContext('2d')
-    const primary = alert.won ? '#10b981' : '#ef4444'
-    const secondary = alert.won ? '#06b6d4' : '#f59e0b'
-    const cardX = 32
-    const cardY = 32
-    const cardWidth = 1216
-    const cardHeight = 656
-    const radius = 24
-    const contentX = 88
-    const contentRight = 1160
+    const palette = alert.won
+      ? {
+          primary: EMERALD,
+          secondary: '#059669',
+          glow: 'rgba(16,185,129,0.26)',
+          panel: '#071410',
+          chip: 'rgba(16,185,129,0.14)',
+          value: '#34d399',
+        }
+      : {
+          primary: SELL_RED,
+          secondary: '#dc2626',
+          glow: 'rgba(239,68,68,0.24)',
+          panel: '#18090b',
+          chip: 'rgba(239,68,68,0.14)',
+          value: '#f87171',
+        }
     const question = alert.marketQuestion
     const pnlText = formatSignedUsd(alert.pnl)
-    const originalLabel = truncateText(alert.originalAlertLabel || 'Signal', 24)
+    const resultLabel = alert.won ? 'Won' : 'Lost'
     const outcomeSummary = `${truncateText(alert.outcome, 18)} ${alert.won ? 'WIN' : 'LOSS'}`
-    const footerFlow =
-      alert.whalesInMarket > 0 || alert.insidersInMarket > 0 || alert.freshWalletsInMarket > 0
-        ? joinNonEmpty([
-            alert.whalesInMarket > 0 ? `${alert.whalesInMarket} whales` : null,
-            alert.insidersInMarket > 0 ? `${alert.insidersInMarket} insiders` : null,
-            alert.freshWalletsInMarket > 0 ? `${alert.freshWalletsInMarket} fresh` : null,
-          ])
-        : 'Standalone signal'
+    const traderLabel = truncateText(alert.traderName, 26)
+    const originalLabel = truncateText(alert.originalAlertLabel || 'Signal', 22)
 
-    this.drawBackdrop(ctx, 1280, 720, primary, secondary)
-    this.drawShell(ctx, cardX, cardY, cardWidth, cardHeight, radius, primary, secondary)
+    const background = ctx.createLinearGradient(0, 0, 1280, 720)
+    background.addColorStop(0, '#040805')
+    background.addColorStop(0.5, '#07120e')
+    background.addColorStop(1, '#030605')
+    ctx.fillStyle = background
+    ctx.fillRect(0, 0, 1280, 720)
 
-    drawPill(ctx, contentX, 72, 'RESULT CARD', {
-      background: hexToRgba(primary, 0.16),
-      color: primary,
-      border: hexToRgba(primary, 0.34),
-      fontSize: 16,
-      height: 38,
-      paddingX: 16,
+    const aura = ctx.createRadialGradient(960, 160, 80, 960, 160, 540)
+    aura.addColorStop(0, palette.glow)
+    aura.addColorStop(1, 'rgba(0,0,0,0)')
+    ctx.fillStyle = aura
+    ctx.fillRect(0, 0, 1280, 720)
+
+    const sideAura = ctx.createRadialGradient(180, 620, 40, 180, 620, 420)
+    sideAura.addColorStop(0, 'rgba(20,184,166,0.12)')
+    sideAura.addColorStop(1, 'rgba(20,184,166,0)')
+    ctx.fillStyle = sideAura
+    ctx.fillRect(0, 0, 1280, 720)
+
+    fillRoundedRect(ctx, 28, 28, 1224, 664, 36, 'rgba(255,255,255,0.04)')
+    fillRoundedRect(ctx, 44, 44, 1192, 632, 30, palette.panel)
+
+    const panelGradient = ctx.createLinearGradient(44, 44, 1236, 676)
+    panelGradient.addColorStop(0, 'rgba(255,255,255,0.03)')
+    panelGradient.addColorStop(0.55, 'rgba(255,255,255,0.015)')
+    panelGradient.addColorStop(1, 'rgba(255,255,255,0.01)')
+    fillRoundedRect(ctx, 44, 44, 1192, 632, 30, panelGradient)
+
+    ctx.fillStyle = EMERALD
+    ctx.fillRect(44, 74, 4, 572)
+
+    fillRoundedRect(ctx, 74, 76, 236, 44, 22, palette.chip)
+    ctx.font = '800 22px Inter, Arial, sans-serif'
+    ctx.fillStyle = '#f8fafc'
+    ctx.fillText('SIGNAL RESULT', 96, 105)
+
+    fillRoundedRect(ctx, 934, 78, 230, 42, 21, 'rgba(255,255,255,0.06)')
+    ctx.font = '700 20px Inter, Arial, sans-serif'
+    ctx.fillStyle = '#dbe7e2'
+    ctx.textAlign = 'center'
+    ctx.fillText(outcomeSummary, 1049, 106)
+    ctx.textAlign = 'left'
+
+    ctx.font = '800 44px Inter, Arial, sans-serif'
+    ctx.fillStyle = '#f8fafc'
+    const questionLines = wrapText(ctx, question, 1060, 2)
+    let y = 170
+    questionLines.forEach((line) => {
+      ctx.fillText(line, 78, y)
+      y += 52
     })
 
-    ctx.font = '700 16px Inter, Arial, sans-serif'
-    const outcomeWidth = Math.ceil(ctx.measureText(outcomeSummary).width) + 32
-    drawPill(ctx, contentRight - outcomeWidth, 72, outcomeSummary, {
-      background: 'rgba(255,255,255,0.04)',
-      color: '#f4f4f5',
-      border: 'rgba(255,255,255,0.08)',
-      fontSize: 15,
-      height: 38,
-      paddingX: 16,
-    })
+    y += 24
+    ctx.font = '700 22px Inter, Arial, sans-serif'
+    ctx.fillStyle = 'rgba(226,241,236,0.82)'
+    ctx.fillText(`${resultLabel} on ${alert.outcome}`, 82, y)
 
-    ctx.font = '800 50px Inter, Arial, sans-serif'
-    ctx.fillStyle = '#ffffff'
-    const titleLines = wrapText(ctx, question, contentRight - contentX, 2)
-    let titleY = 160
-    titleLines.forEach((line, index) => {
-      ctx.fillText(line, contentX, titleY + index * 54)
-    })
+    y += 16
+    const pnlFontSize = fitFontSize(ctx, pnlText, 700, 88, 64, 800)
+    ctx.font = `800 ${pnlFontSize}px Inter, Arial, sans-serif`
+    ctx.fillStyle = palette.value
+    y += pnlFontSize
+    ctx.fillText(pnlText, 74, y)
 
-    const pnlY = titleY + (titleLines.length - 1) * 54 + 92
-    ctx.font = `800 ${fitFontSize(ctx, pnlText, 520, 86, 58, 800)}px Inter, Arial, sans-serif`
-    ctx.fillStyle = primary
-    ctx.fillText(pnlText, contentX, pnlY)
+    y += 40
+    const panelHeight = 130
+    const panelY = Math.max(y, 500)
 
-    ctx.font = '600 22px Inter, Arial, sans-serif'
-    ctx.fillStyle = '#a1a1aa'
-    ctx.fillText(
-      `${alert.won ? 'Resolved in profit' : 'Resolved in loss'} • ${formatResolveDate(alert.resolvedAt)}`,
-      contentX,
-      pnlY + 34
+    fillRoundedRect(
+      ctx,
+      76,
+      panelY,
+      1128,
+      panelHeight,
+      28,
+      'rgba(255,255,255,0.04)'
     )
+    ctx.fillStyle = EMERALD
+    ctx.fillRect(76, panelY, 8, panelHeight)
 
-    const gridTop = pnlY + 72
-    const cols = 3
-    const gap = 18
-    const panelWidth = (contentRight - contentX - gap * (cols - 1)) / cols
-    const rowHeight = 92
-
-    const panels: MetricPanelOptions[] = [
-      {
-        x: contentX,
-        y: gridTop,
-        width: panelWidth,
-        height: rowHeight,
-        label: 'Trader',
-        value: truncateText(alert.traderName, 22),
-        accent: primary,
-        secondary: formatCalledAgo(alert.daysAgo),
-        valueSize: 28,
-      },
-      {
-        x: contentX + panelWidth + gap,
-        y: gridTop,
-        width: panelWidth,
-        height: rowHeight,
-        label: 'Original Signal',
-        value: originalLabel,
-        accent: secondary,
-        secondary: toTradeResultLabel(alert.primaryType),
-        valueSize: 24,
-      },
-      {
-        x: contentX + (panelWidth + gap) * 2,
-        y: gridTop,
-        width: panelWidth,
-        height: rowHeight,
-        label: 'Entry',
-        value: `${formatUsd(alert.entryAmount)} @ ${formatPriceCents(alert.entryPrice)}`,
-        accent: '#06b6d4',
-        secondary: 'Recorded alert entry',
-        valueSize: 23,
-      },
-      {
-        x: contentX,
-        y: gridTop + rowHeight + gap,
-        width: panelWidth,
-        height: rowHeight,
-        label: 'Shares',
-        value: formatShares(alert.shares),
-        accent: '#06b6d4',
-        secondary: `Outcome ${truncateText(alert.outcome, 18)}`,
-        valueSize: 30,
-      },
-      {
-        x: contentX + panelWidth + gap,
-        y: gridTop + rowHeight + gap,
-        width: panelWidth,
-        height: rowHeight,
-        label: 'Payout',
-        value: formatMultiplier(alert.multiplier),
-        accent: primary,
-        secondary: `Potential ${formatUsd(alert.potentialWin)}`,
-        valueSize: 30,
-      },
-      {
-        x: contentX + (panelWidth + gap) * 2,
-        y: gridTop + rowHeight + gap,
-        width: panelWidth,
-        height: rowHeight,
-        label: 'Market Read',
-        value: footerFlow,
-        accent: '#f59e0b',
-        secondary: 'Context at resolution',
-        valueSize: 21,
-      },
+    const statLabels = [
+      { label: 'Trader', value: traderLabel },
+      { label: 'Original', value: originalLabel },
+      { label: 'Shares', value: formatShares(alert.shares) },
+      { label: 'Called', value: formatCalledAgo(alert.daysAgo) },
     ]
 
-    panels.forEach((panel) => this.drawMetricPanel(ctx, panel))
+    const statColumns = [112, 398, 684, 936]
+    ctx.font = '700 16px Inter, Arial, sans-serif'
+    ctx.fillStyle = 'rgba(148,178,167,0.9)'
+    statLabels.forEach((stat, index) => {
+      ctx.fillText(stat.label.toUpperCase(), statColumns[index], panelY + 36)
+    })
 
-    const separatorY = cardY + cardHeight - 86
-    const separator = ctx.createLinearGradient(contentX, separatorY, contentRight, separatorY)
-    separator.addColorStop(0, hexToRgba(primary, 0.95))
-    separator.addColorStop(0.5, hexToRgba(secondary, 0.72))
-    separator.addColorStop(1, 'rgba(255,255,255,0.08)')
-    ctx.fillStyle = separator
-    ctx.fillRect(contentX, separatorY, contentRight - contentX, 1)
+    ctx.font = '700 26px Inter, Arial, sans-serif'
+    ctx.fillStyle = '#f8fafc'
+    statLabels.forEach((stat, index) => {
+      const x = statColumns[index]
+      const maxWidth = index === 3 ? 220 : 230
+      const size = fitFontSize(ctx, stat.value, maxWidth, 26, 18, 700)
+      ctx.font = `700 ${size}px Inter, Arial, sans-serif`
+      ctx.fillText(stat.value, x, panelY + 70)
+    })
 
-    const footerText = joinNonEmpty([
-      `Resolved ${formatResolveDate(alert.resolvedAt)}`,
-      `Entry ${formatUsd(alert.entryAmount)}`,
-      `Shares ${formatShares(alert.shares)}`,
-      `Payout ${formatMultiplier(alert.multiplier)}`,
-    ])
+    ctx.font = '600 20px Inter, Arial, sans-serif'
+    ctx.fillStyle = 'rgba(226,241,236,0.84)'
+    ctx.fillText(
+      `${formatUsd(alert.entryAmount)} at ${formatPriceCents(alert.entryPrice)} · ${formatMultiplier(alert.multiplier)} payout path`,
+      112,
+      panelY + 106
+    )
 
-    ctx.font = '600 18px Inter, Arial, sans-serif'
-    ctx.fillStyle = '#d4d4d8'
-    ctx.fillText(footerText, contentX, separatorY + 34)
-    ctx.font = '600 16px Inter, Arial, sans-serif'
-    ctx.fillStyle = '#71717a'
-    ctx.fillText('Signal archive • structured result feed', contentX, separatorY + 60)
-
-    this.applyGrain(ctx, 1280, 720, 4)
+    this.applyGrain(ctx, 1280, 720, 10)
 
     return this.canvasToBuffer(canvas)
   }
@@ -744,175 +706,448 @@ export class CardGenerator {
 
     const canvas = canvasModule.createCanvas(1280, 720)
     const ctx = canvas.getContext('2d')
-    const cardX = 32
-    const cardY = 32
-    const cardWidth = 1216
-    const cardHeight = 656
-    const radius = 24
-    const contentX = 88
-    const contentRight = 1160
     const timestamp = new Date().toLocaleTimeString('en-US', {
       hour: '2-digit',
       minute: '2-digit',
       timeZone: 'UTC',
     })
     const displayMarkets = markets.slice(0, 5)
-    const maxVolume = Math.max(1, ...displayMarkets.map((market) => Number(market.totalVolume || 0)))
-    const rowAccents = ['#10b981', '#06b6d4', '#f59e0b', '#14b8a6', '#8b5cf6']
+    const maxVolume = Math.max(
+      1,
+      ...displayMarkets.map((market) => Number(market.totalVolume || 0))
+    )
+    const medals = ['🥇', '🥈', '🥉', '4', '5']
+    const cardX = 28
+    const cardY = 28
+    const cardWidth = 1224
+    const cardHeight = 664
+    const contentX = 92
+    const contentRight = 1188
+    const rowX = 76
+    const rowWidth = 1128
+    const marketX = 176
+    const marketMaxWidth = 520
+    const tradeColumnX = 872
+    const volumeColumnX = 1008
+    const whaleColumnX = 1140
+    const rowGap = 14
+    const rowStyles = [
+      {
+        height: 100,
+        accent: AMBER,
+        edgeGlow: 'rgba(245,158,11,0.18)',
+        backgroundStart: 'rgba(245,158,11,0.11)',
+        backgroundEnd: 'rgba(9,26,20,0.92)',
+        stroke: 'rgba(251,191,36,0.16)',
+        titleColor: '#f8fafc',
+        titleSize: 32,
+        rankColor: '#fbbf24',
+        volumeColor: '#fbbf24',
+        barStart: '#f59e0b',
+        barEnd: '#fbbf24',
+      },
+      {
+        height: 82,
+        accent: TEAL,
+        edgeGlow: 'rgba(20,184,166,0.16)',
+        backgroundStart: 'rgba(20,184,166,0.08)',
+        backgroundEnd: 'rgba(9,26,20,0.9)',
+        stroke: 'rgba(94,234,212,0.12)',
+        titleColor: '#f8fafc',
+        titleSize: 28,
+        rankColor: '#99f6e4',
+        volumeColor: '#f8fafc',
+        barStart: EMERALD,
+        barEnd: TEAL,
+      },
+      {
+        height: 82,
+        accent: '#0d9488',
+        edgeGlow: 'rgba(13,148,136,0.16)',
+        backgroundStart: 'rgba(13,148,136,0.08)',
+        backgroundEnd: 'rgba(9,26,20,0.9)',
+        stroke: 'rgba(45,212,191,0.12)',
+        titleColor: '#f8fafc',
+        titleSize: 28,
+        rankColor: '#5eead4',
+        volumeColor: '#f8fafc',
+        barStart: '#0d9488',
+        barEnd: TEAL,
+      },
+      {
+        height: 82,
+        accent: '#2dd4bf',
+        edgeGlow: 'rgba(45,212,191,0.12)',
+        backgroundStart: 'rgba(255,255,255,0.03)',
+        backgroundEnd: 'rgba(9,26,20,0.88)',
+        stroke: 'rgba(94,234,212,0.1)',
+        titleColor: 'rgba(248,250,252,0.88)',
+        titleSize: 27,
+        rankColor: 'rgba(153,246,228,0.88)',
+        volumeColor: '#e6f8f3',
+        barStart: EMERALD,
+        barEnd: TEAL,
+      },
+      {
+        height: 82,
+        accent: '#5eead4',
+        edgeGlow: 'rgba(94,234,212,0.12)',
+        backgroundStart: 'rgba(255,255,255,0.03)',
+        backgroundEnd: 'rgba(9,26,20,0.88)',
+        stroke: 'rgba(153,246,228,0.1)',
+        titleColor: 'rgba(248,250,252,0.88)',
+        titleSize: 27,
+        rankColor: 'rgba(204,251,241,0.88)',
+        volumeColor: '#e6f8f3',
+        barStart: EMERALD,
+        barEnd: TEAL,
+      },
+    ] as const
 
-    this.drawBackdrop(ctx, 1280, 720, '#10b981', '#06b6d4')
-    this.drawShell(ctx, cardX, cardY, cardWidth, cardHeight, radius, '#10b981', '#06b6d4')
+    const background = ctx.createLinearGradient(0, 0, 1280, 720)
+    background.addColorStop(0, '#050a08')
+    background.addColorStop(0.52, '#08150f')
+    background.addColorStop(1, '#0a1812')
+    ctx.fillStyle = background
+    ctx.fillRect(0, 0, 1280, 720)
 
-    ctx.font = '800 32px Inter, Arial, sans-serif'
-    ctx.fillStyle = '#ffffff'
-    ctx.fillText('MARKET HEATMAP', contentX, 102)
-    ctx.font = '600 17px Inter, Arial, sans-serif'
-    ctx.fillStyle = '#a1a1aa'
-    ctx.fillText('Signal concentration over the last 12 hours', contentX, 132)
+    const emeraldGlow = ctx.createRadialGradient(1090, 96, 10, 1090, 96, 420)
+    emeraldGlow.addColorStop(0, 'rgba(16,185,129,0.22)')
+    emeraldGlow.addColorStop(0.45, 'rgba(20,184,166,0.08)')
+    emeraldGlow.addColorStop(1, 'rgba(16,185,129,0)')
+    ctx.fillStyle = emeraldGlow
+    ctx.fillRect(0, 0, 1280, 720)
 
-    drawPill(ctx, contentRight - 210, 72, `UPDATED ${timestamp} UTC`, {
-      background: 'rgba(6,182,212,0.12)',
-      color: '#67e8f9',
-      border: 'rgba(6,182,212,0.22)',
-      fontSize: 14,
-      height: 36,
-      paddingX: 14,
-    })
+    const goldGlow = ctx.createRadialGradient(260, 248, 0, 260, 248, 260)
+    goldGlow.addColorStop(0, 'rgba(245,158,11,0.12)')
+    goldGlow.addColorStop(1, 'rgba(245,158,11,0)')
+    ctx.fillStyle = goldGlow
+    ctx.fillRect(0, 0, 1280, 720)
 
-    const titleRule = ctx.createLinearGradient(contentX, 146, contentRight, 146)
-    titleRule.addColorStop(0, 'rgba(16,185,129,0.82)')
-    titleRule.addColorStop(0.5, 'rgba(6,182,212,0.42)')
-    titleRule.addColorStop(1, 'rgba(255,255,255,0.04)')
+    ctx.save()
+    ctx.strokeStyle = 'rgba(16,185,129,0.05)'
+    ctx.lineWidth = 1
+    for (let x = 0; x <= 1280; x += 96) {
+      ctx.beginPath()
+      ctx.moveTo(x, 0)
+      ctx.lineTo(x, 720)
+      ctx.stroke()
+    }
+    for (let y = 0; y <= 720; y += 96) {
+      ctx.beginPath()
+      ctx.moveTo(0, y)
+      ctx.lineTo(1280, y)
+      ctx.stroke()
+    }
+    ctx.restore()
+
+    const panelFill = ctx.createLinearGradient(
+      cardX,
+      cardY,
+      cardX + cardWidth,
+      cardY + cardHeight
+    )
+    panelFill.addColorStop(0, 'rgba(8,19,15,0.98)')
+    panelFill.addColorStop(0.38, 'rgba(9,26,20,0.96)')
+    panelFill.addColorStop(1, 'rgba(7,17,13,0.98)')
+    fillRoundedRect(ctx, cardX, cardY, cardWidth, cardHeight, 34, panelFill)
+
+    ctx.save()
+    roundedRect(ctx, cardX, cardY, cardWidth, cardHeight, 34)
+    ctx.clip()
+
+    const panelSheen = ctx.createLinearGradient(
+      cardX,
+      cardY,
+      cardX + 420,
+      cardY + 220
+    )
+    panelSheen.addColorStop(0, 'rgba(20,184,166,0.08)')
+    panelSheen.addColorStop(1, 'rgba(20,184,166,0)')
+    ctx.fillStyle = panelSheen
+    ctx.fillRect(cardX, cardY, 560, 260)
+
+    const panelVignette = ctx.createLinearGradient(
+      0,
+      cardY,
+      0,
+      cardY + cardHeight
+    )
+    panelVignette.addColorStop(0, 'rgba(255,255,255,0.02)')
+    panelVignette.addColorStop(0.55, 'rgba(255,255,255,0)')
+    panelVignette.addColorStop(1, 'rgba(2,10,7,0.24)')
+    ctx.fillStyle = panelVignette
+    ctx.fillRect(cardX, cardY, cardWidth, cardHeight)
+    ctx.fillStyle = EMERALD
+    ctx.fillRect(cardX, cardY + 36, 4, cardHeight - 72)
+    ctx.restore()
+
+    ctx.save()
+    ctx.shadowColor = 'rgba(16,185,129,0.12)'
+    ctx.shadowBlur = 24
+    roundedRect(ctx, cardX, cardY, cardWidth, cardHeight, 34)
+    ctx.strokeStyle = 'rgba(16,185,129,0.12)'
+    ctx.lineWidth = 1
+    ctx.stroke()
+    ctx.restore()
+
+    roundedRect(ctx, cardX + 1, cardY + 1, cardWidth - 2, cardHeight - 2, 33)
+    ctx.strokeStyle = 'rgba(255,255,255,0.04)'
+    ctx.lineWidth = 1
+    ctx.stroke()
+
+    ctx.font = '800 28px Inter, Arial, sans-serif'
+    ctx.fillStyle = '#f8fafc'
+    ctx.fillText('SIGNAL HEATMAP', contentX, 100)
+
+    ctx.font = '600 16px Inter, Arial, sans-serif'
+    ctx.fillStyle = 'rgba(148,178,167,0.82)'
+    ctx.fillText('Last 12h', contentX, 126)
+
+    ctx.textAlign = 'right'
+    ctx.font = '800 18px Inter, Arial, sans-serif'
+    ctx.fillStyle = '#99f6e4'
+    ctx.fillText('TOP 5', contentRight, 98)
+    ctx.font = '600 14px Inter, Arial, sans-serif'
+    ctx.fillStyle = 'rgba(148,178,167,0.68)'
+    ctx.fillText('by 12h volume', contentRight, 122)
+    ctx.textAlign = 'left'
+
+    const titleRule = ctx.createLinearGradient(contentX, 0, contentRight, 0)
+    titleRule.addColorStop(0, 'rgba(16,185,129,0.36)')
+    titleRule.addColorStop(0.5, 'rgba(20,184,166,0.12)')
+    titleRule.addColorStop(1, 'rgba(16,185,129,0)')
     ctx.fillStyle = titleRule
-    ctx.fillRect(contentX, 146, contentRight - contentX, 1)
-
-    const rankX = 118
-    const marketX = 188
-    const tradesX = 884
-    const volumeX = 1008
-    const walletsX = 1120
+    ctx.fillRect(contentX, 142, contentRight - contentX, 1)
 
     if ('letterSpacing' in ctx) {
-      ctx.letterSpacing = '1.4px'
+      ctx.letterSpacing = '2px'
     }
-    ctx.font = '700 13px Inter, Arial, sans-serif'
-    ctx.fillStyle = '#71717a'
-    ctx.fillText('RANK', rankX, 174)
-    ctx.fillText('MARKET', marketX, 174)
+    ctx.font = '700 14px Inter, Arial, sans-serif'
+    ctx.fillStyle = 'rgba(148,178,167,0.76)'
+    ctx.fillText('MARKET', 104, 173)
     ctx.textAlign = 'center'
-    ctx.fillText('TRADES', tradesX, 174)
-    ctx.fillText('VOLUME', volumeX, 174)
-    ctx.fillText('WALLETS', walletsX, 174)
+    ctx.fillText('TRADES', tradeColumnX, 173)
+    ctx.fillText('VOLUME', volumeColumnX, 173)
+    ctx.fillText('WALLETS', whaleColumnX, 173)
     ctx.textAlign = 'left'
     if ('letterSpacing' in ctx) {
       ctx.letterSpacing = '0px'
     }
 
-    let currentY = 194
-    const rowHeight = 84
-    const rowGap = 16
-
+    const fallbackRowStyle = rowStyles[rowStyles.length - 1]!
+    let currentY = 192
     displayMarkets.forEach((market, index) => {
-      const accent = rowAccents[index] ?? '#10b981'
-      const rowGradient = ctx.createLinearGradient(76, currentY, 1204, currentY + rowHeight)
-      rowGradient.addColorStop(0, 'rgba(255,255,255,0.038)')
-      rowGradient.addColorStop(1, 'rgba(255,255,255,0.016)')
-      fillRoundedRect(ctx, 76, currentY, 1128, rowHeight, 20, rowGradient)
-      strokeRoundedRect(ctx, 76.5, currentY + 0.5, 1127, rowHeight - 1, 19.5, 'rgba(255,255,255,0.08)', 1)
+      const rowStyle = rowStyles[index] ?? fallbackRowStyle
+      const rowHeight = rowStyle.height
+      const rowGradient = ctx.createLinearGradient(
+        rowX,
+        currentY,
+        rowX + rowWidth,
+        currentY + rowHeight
+      )
+      rowGradient.addColorStop(0, rowStyle.backgroundStart)
+      rowGradient.addColorStop(1, rowStyle.backgroundEnd)
+      fillRoundedRect(ctx, rowX, currentY, rowWidth, rowHeight, 26, rowGradient)
 
       ctx.save()
-      roundedRect(ctx, 76, currentY, 1128, rowHeight, 20)
+      roundedRect(ctx, rowX, currentY, rowWidth, rowHeight, 26)
       ctx.clip()
-      ctx.fillStyle = hexToRgba(accent, 0.95)
-      ctx.fillRect(76, currentY, 4, rowHeight)
-      ctx.fillStyle = hexToRgba(accent, 0.12)
-      ctx.fillRect(80, currentY, 16, rowHeight)
+      ctx.fillStyle = rowStyle.edgeGlow
+      ctx.fillRect(rowX, currentY, 18, rowHeight)
+      ctx.fillStyle = rowStyle.accent
+      ctx.fillRect(rowX, currentY, 4, rowHeight)
       ctx.restore()
 
-      drawPill(ctx, 104, currentY + 22, String(index + 1).padStart(2, '0'), {
-        background: hexToRgba(accent, 0.14),
-        color: accent,
-        border: hexToRgba(accent, 0.28),
-        fontSize: 15,
-        height: 36,
-        paddingX: 14,
-      })
+      roundedRect(ctx, rowX, currentY, rowWidth, rowHeight, 26)
+      ctx.strokeStyle = rowStyle.stroke
+      ctx.lineWidth = 1
+      ctx.stroke()
 
-      const marketTitle = truncateText(market.marketQuestion || market.conditionId, 42)
-      const titleSize = fitFontSize(ctx, marketTitle, 610, 28, 21, 700)
-      ctx.font = `700 ${titleSize}px Inter, Arial, sans-serif`
-      ctx.fillStyle = '#ffffff'
-      ctx.fillText(marketTitle, marketX, currentY + 34)
-
-      const trackX = marketX
-      const trackY = currentY + 56
-      const trackWidth = 420
-      fillRoundedRect(ctx, trackX, trackY, trackWidth, 6, 3, 'rgba(255,255,255,0.06)')
-      const fillWidth = Math.max(
-        24,
-        Math.min(trackWidth, Math.round((Number(market.totalVolume || 0) / maxVolume) * trackWidth))
-      )
-      const barGradient = ctx.createLinearGradient(trackX, trackY, trackX + fillWidth, trackY)
-      barGradient.addColorStop(0, hexToRgba(accent, 0.95))
-      barGradient.addColorStop(1, hexToRgba('#06b6d4', 0.95))
-      fillRoundedRect(ctx, trackX, trackY, fillWidth, 6, 3, barGradient)
-
-      ctx.font = '600 14px Inter, Arial, sans-serif'
-      ctx.fillStyle = '#71717a'
-      ctx.fillText(`${market.tradeCount} tracked prints`, marketX, currentY + 79)
-
+      ctx.textBaseline = 'middle'
       ctx.textAlign = 'center'
-      ctx.font = '800 26px Inter, Arial, sans-serif'
-      ctx.fillStyle = '#ffffff'
-      ctx.fillText(String(market.tradeCount), tradesX, currentY + 54)
+      ctx.fillStyle = rowStyle.rankColor
+      ctx.font =
+        index < 3
+          ? '800 30px Inter, Arial, sans-serif'
+          : '800 28px Inter, Arial, sans-serif'
+      ctx.fillText(
+        medals[index] ?? String(index + 1),
+        rowX + 42,
+        currentY + rowHeight / 2
+      )
+      ctx.textBaseline = 'alphabetic'
+      ctx.textAlign = 'left'
+
+      const marketTitle = truncateText(
+        market.marketQuestion || market.conditionId,
+        38
+      )
+      const titleSize = fitFontSize(
+        ctx,
+        marketTitle,
+        marketMaxWidth,
+        rowStyle.titleSize,
+        22,
+        700
+      )
+      ctx.font = `700 ${titleSize}px Inter, Arial, sans-serif`
+      ctx.fillStyle = rowStyle.titleColor
+      const titleY = currentY + (index === 0 ? 46 : 39)
+      ctx.fillText(marketTitle, marketX, titleY)
+
+      if (index < 3) {
+        const trackX = marketX
+        const trackY = currentY + rowHeight - 24
+        const trackWidth = 438
+        const trackHeight = 6
+        fillRoundedRect(
+          ctx,
+          trackX,
+          trackY,
+          trackWidth,
+          trackHeight,
+          3,
+          'rgba(255,255,255,0.06)'
+        )
+        const rawFillWidth = Math.round(
+          (Number(market.totalVolume || 0) / maxVolume) * trackWidth
+        )
+        if (rawFillWidth > 0) {
+          const fillWidth = Math.max(30, rawFillWidth)
+          const barGradient = ctx.createLinearGradient(
+            trackX,
+            trackY,
+            trackX + trackWidth,
+            trackY
+          )
+          barGradient.addColorStop(0, rowStyle.barStart)
+          barGradient.addColorStop(1, rowStyle.barEnd)
+          fillRoundedRect(
+            ctx,
+            trackX,
+            trackY,
+            Math.min(trackWidth, fillWidth),
+            trackHeight,
+            3,
+            barGradient
+          )
+        }
+      }
+
+      const statY = currentY + rowHeight / 2 + 10
+      const tradeText = String(market.tradeCount)
+      const tradeSize = fitFontSize(
+        ctx,
+        tradeText,
+        72,
+        index === 0 ? 28 : 26,
+        20,
+        800
+      )
+      ctx.font = `800 ${tradeSize}px Inter, Arial, sans-serif`
+      ctx.fillStyle = '#f8fafc'
+      ctx.textAlign = 'center'
+      ctx.fillText(tradeText, tradeColumnX, statY)
 
       const volumeText = formatCompactUsd(Number(market.totalVolume || 0))
-      ctx.font = `800 ${fitFontSize(ctx, volumeText, 120, 24, 18, 800)}px Inter, Arial, sans-serif`
-      ctx.fillStyle = index === 0 ? '#fbbf24' : '#e4e4e7'
-      ctx.fillText(volumeText, volumeX, currentY + 54)
+      const volumeSize = fitFontSize(
+        ctx,
+        volumeText,
+        126,
+        index === 0 ? 28 : 26,
+        18,
+        800
+      )
+      ctx.font = `800 ${volumeSize}px Inter, Arial, sans-serif`
+      ctx.fillStyle = rowStyle.volumeColor
+      ctx.fillText(volumeText, volumeColumnX, statY)
 
-      drawPill(ctx, walletsX - 28, currentY + 24, String(market.uniqueWallets), {
-        background: 'rgba(16,185,129,0.12)',
-        color: '#34d399',
-        border: 'rgba(16,185,129,0.24)',
-        fontSize: 18,
-        height: 34,
-        paddingX: 16,
-      })
+      const whaleChipWidth = 58
+      const whaleChipHeight = 36
+      const whaleChipX = whaleColumnX - whaleChipWidth / 2
+      const whaleChipY = currentY + rowHeight / 2 - whaleChipHeight / 2 + 3
+      fillRoundedRect(
+        ctx,
+        whaleChipX,
+        whaleChipY,
+        whaleChipWidth,
+        whaleChipHeight,
+        18,
+        'rgba(16,185,129,0.12)'
+      )
+      roundedRect(
+        ctx,
+        whaleChipX,
+        whaleChipY,
+        whaleChipWidth,
+        whaleChipHeight,
+        18
+      )
+      ctx.strokeStyle = 'rgba(52,211,153,0.18)'
+      ctx.lineWidth = 1
+      ctx.stroke()
+      ctx.font = '800 22px Inter, Arial, sans-serif'
+      ctx.fillStyle = '#34d399'
+      ctx.fillText(String(market.uniqueWallets), whaleColumnX, statY - 1)
       ctx.textAlign = 'left'
+
+      if (index < displayMarkets.length - 1) {
+        ctx.fillStyle = 'rgba(255,255,255,0.04)'
+        ctx.fillRect(
+          rowX + 18,
+          currentY + rowHeight + rowGap / 2,
+          rowWidth - 36,
+          1
+        )
+      }
 
       currentY += rowHeight + rowGap
     })
 
     if (displayMarkets.length === 0) {
-      fillRoundedRect(ctx, 76, 210, 1128, 156, 22, 'rgba(255,255,255,0.03)')
-      strokeRoundedRect(ctx, 76.5, 210.5, 1127, 155, 21.5, 'rgba(255,255,255,0.08)', 1)
+      fillRoundedRect(
+        ctx,
+        rowX,
+        212,
+        rowWidth,
+        188,
+        28,
+        'rgba(255,255,255,0.028)'
+      )
+      roundedRect(ctx, rowX, 212, rowWidth, 188, 28)
+      ctx.strokeStyle = 'rgba(16,185,129,0.12)'
+      ctx.lineWidth = 1
+      ctx.stroke()
       ctx.font = '800 30px Inter, Arial, sans-serif'
-      ctx.fillStyle = '#ffffff'
+      ctx.fillStyle = '#f8fafc'
       ctx.textAlign = 'center'
-      ctx.fillText('No signal clusters captured in the last 12h', 640, 286)
+      ctx.fillText('No signal activity captured in the last 12h', 640, 302)
       ctx.font = '600 18px Inter, Arial, sans-serif'
-      ctx.fillStyle = '#a1a1aa'
-      ctx.fillText('Rows will populate automatically once the market feed is active.', 640, 320)
+      ctx.fillStyle = 'rgba(148,178,167,0.84)'
+      ctx.fillText(
+        'Heatmap rows populate automatically once market flow appears.',
+        640,
+        336
+      )
       ctx.textAlign = 'left'
     }
 
-    const footerY = cardY + cardHeight - 54
-    const footerRule = ctx.createLinearGradient(contentX, footerY - 20, contentRight, footerY - 20)
-    footerRule.addColorStop(0, 'rgba(16,185,129,0.78)')
-    footerRule.addColorStop(0.5, 'rgba(6,182,212,0.4)')
-    footerRule.addColorStop(1, 'rgba(255,255,255,0.04)')
+    const footerRule = ctx.createLinearGradient(contentX, 0, contentRight, 0)
+    footerRule.addColorStop(0, 'rgba(16,185,129,0.28)')
+    footerRule.addColorStop(0.5, 'rgba(20,184,166,0.08)')
+    footerRule.addColorStop(1, 'rgba(16,185,129,0)')
     ctx.fillStyle = footerRule
-    ctx.fillRect(contentX, footerY - 20, contentRight - contentX, 1)
+    ctx.fillRect(contentX, 624, contentRight - contentX, 1)
 
     ctx.font = '600 16px Inter, Arial, sans-serif'
-    ctx.fillStyle = '#d4d4d8'
-    ctx.fillText(`Updated ${timestamp} UTC`, contentX, footerY)
+    ctx.fillStyle = 'rgba(226,241,236,0.78)'
+    ctx.fillText(`Updated ${timestamp} UTC`, contentX, 650)
     ctx.textAlign = 'right'
-    ctx.fillText('Ranked by 12h volume across tracked markets', contentRight, footerY)
+    ctx.fillText('Ranked by 12h volume', contentRight, 650)
     ctx.textAlign = 'left'
 
-    this.applyGrain(ctx, 1280, 720, 4)
+    this.applyGrain(ctx, 1280, 720, 6)
 
     return this.canvasToBuffer(canvas)
   }
@@ -933,183 +1168,105 @@ export class CardGenerator {
     return true
   }
 
-  private drawBackdrop(
-    ctx: any,
-    width: number,
-    height: number,
-    primary: string,
-    secondary: string
-  ) {
-    const background = ctx.createLinearGradient(0, 0, width, height)
-    background.addColorStop(0, '#0a0a0a')
-    background.addColorStop(0.55, '#0f0f10')
-    background.addColorStop(1, '#111111')
-    ctx.fillStyle = background
-    ctx.fillRect(0, 0, width, height)
-
-    const leftGlow = ctx.createRadialGradient(180, 120, 20, 180, 120, 360)
-    leftGlow.addColorStop(0, hexToRgba(primary, 0.18))
-    leftGlow.addColorStop(0.5, hexToRgba(primary, 0.05))
-    leftGlow.addColorStop(1, 'rgba(0,0,0,0)')
-    ctx.fillStyle = leftGlow
-    ctx.fillRect(0, 0, width, height)
-
-    const rightGlow = ctx.createRadialGradient(width - 220, height - 120, 30, width - 220, height - 120, 340)
-    rightGlow.addColorStop(0, hexToRgba(secondary, 0.16))
-    rightGlow.addColorStop(0.5, hexToRgba(secondary, 0.05))
-    rightGlow.addColorStop(1, 'rgba(0,0,0,0)')
-    ctx.fillStyle = rightGlow
-    ctx.fillRect(0, 0, width, height)
-
+  private drawSignalWatermark(ctx: any, centerX: number, centerY: number) {
     ctx.save()
-    ctx.strokeStyle = 'rgba(255,255,255,0.03)'
-    ctx.lineWidth = 1
-    for (let x = 0; x <= width; x += 64) {
+    ctx.strokeStyle = 'rgba(20,184,166,0.16)'
+    ctx.lineWidth = 2
+    for (const radius of [10, 18, 26]) {
       ctx.beginPath()
-      ctx.moveTo(x, 0)
-      ctx.lineTo(x, height)
+      ctx.arc(centerX, centerY, radius, Math.PI * 1.15, Math.PI * 1.85)
       ctx.stroke()
     }
-    for (let y = 0; y <= height; y += 64) {
-      ctx.beginPath()
-      ctx.moveTo(0, y)
-      ctx.lineTo(width, y)
-      ctx.stroke()
-    }
-    ctx.restore()
-
-    ctx.save()
-    ctx.strokeStyle = 'rgba(16,185,129,0.05)'
-    ctx.lineWidth = 1
-    for (let x = -height; x < width; x += 180) {
-      ctx.beginPath()
-      ctx.moveTo(x, 0)
-      ctx.lineTo(x + 220, 220)
-      ctx.stroke()
-    }
+    ctx.fillStyle = 'rgba(16,185,129,0.20)'
+    ctx.beginPath()
+    ctx.arc(centerX, centerY + 1, 4, 0, Math.PI * 2)
+    ctx.fill()
     ctx.restore()
   }
 
-  private drawShell(
+  private drawTraderIdentityChip(
     ctx: any,
-    x: number,
-    y: number,
-    width: number,
-    height: number,
-    radius: number,
-    primary: string,
-    secondary: string
+    options: {
+      x: number
+      y: number
+      width: number
+      height: number
+      name: string
+      profileImage: any | null
+    }
   ) {
-    const panelGradient = ctx.createLinearGradient(x, y, x + width, y + height)
-    panelGradient.addColorStop(0, 'rgba(16,16,17,0.98)')
-    panelGradient.addColorStop(0.52, 'rgba(12,12,13,0.985)')
-    panelGradient.addColorStop(1, 'rgba(17,17,17,0.98)')
-    fillRoundedRect(ctx, x, y, width, height, radius, panelGradient)
-
-    ctx.save()
-    roundedRect(ctx, x, y, width, height, radius)
-    ctx.clip()
-
-    const topSheen = ctx.createLinearGradient(x, y, x + 420, y + 240)
-    topSheen.addColorStop(0, 'rgba(255,255,255,0.05)')
-    topSheen.addColorStop(1, 'rgba(255,255,255,0)')
-    ctx.fillStyle = topSheen
-    ctx.fillRect(x, y, 500, 240)
-
-    const lowerTint = ctx.createLinearGradient(x, y + height, x + width, y + height - 180)
-    lowerTint.addColorStop(0, 'rgba(16,185,129,0.04)')
-    lowerTint.addColorStop(0.45, 'rgba(6,182,212,0.02)')
-    lowerTint.addColorStop(1, 'rgba(245,158,11,0.015)')
-    ctx.fillStyle = lowerTint
-    ctx.fillRect(x, y, width, height)
-
-    ctx.fillStyle = hexToRgba(primary, 0.96)
-    ctx.fillRect(x, y, 4, height)
-    ctx.fillStyle = hexToRgba(primary, 0.12)
-    ctx.fillRect(x + 4, y, 16, height)
-    ctx.restore()
-
-    const borderGradient = ctx.createLinearGradient(x, y, x + width, y)
-    borderGradient.addColorStop(0, hexToRgba(primary, 0.85))
-    borderGradient.addColorStop(0.45, hexToRgba(secondary, 0.55))
-    borderGradient.addColorStop(1, 'rgba(255,255,255,0.08)')
-
-    ctx.save()
-    ctx.shadowColor = hexToRgba(primary, 0.2)
-    ctx.shadowBlur = 28
-    strokeRoundedRect(ctx, x + 0.5, y + 0.5, width - 1, height - 1, radius - 0.5, borderGradient, 1.2)
-    ctx.restore()
-
-    strokeRoundedRect(ctx, x + 1.5, y + 1.5, width - 3, height - 3, radius - 1.5, 'rgba(255,255,255,0.06)', 1)
-  }
-
-  private drawMetricPanel(ctx: any, options: MetricPanelOptions) {
-    const panelGradient = ctx.createLinearGradient(
+    const panel = ctx.createLinearGradient(
       options.x,
       options.y,
       options.x + options.width,
       options.y + options.height
     )
-    panelGradient.addColorStop(0, 'rgba(255,255,255,0.04)')
-    panelGradient.addColorStop(1, 'rgba(255,255,255,0.018)')
-    fillRoundedRect(
-      ctx,
-      options.x,
-      options.y,
-      options.width,
-      options.height,
-      18,
-      panelGradient
-    )
+    panel.addColorStop(0, 'rgba(255,255,255,0.045)')
+    panel.addColorStop(1, 'rgba(255,255,255,0.018)')
+    fillRoundedRect(ctx, options.x, options.y, options.width, options.height, 28, panel)
     strokeRoundedRect(
       ctx,
       options.x + 0.5,
       options.y + 0.5,
       options.width - 1,
       options.height - 1,
-      17.5,
-      'rgba(255,255,255,0.08)',
+      27.5,
+      'rgba(20,184,166,0.24)',
       1
     )
 
-    ctx.save()
-    roundedRect(ctx, options.x, options.y, options.width, options.height, 18)
-    ctx.clip()
-    ctx.fillStyle = hexToRgba(options.accent, 0.95)
-    ctx.fillRect(options.x, options.y, 3, options.height)
-    ctx.fillStyle = hexToRgba(options.accent, 0.09)
-    ctx.fillRect(options.x + 3, options.y, 14, options.height)
-    ctx.restore()
-
-    if ('letterSpacing' in ctx) {
-      ctx.letterSpacing = '1.2px'
+    let textX = options.x + 18
+    if (options.profileImage) {
+      const avatarSize = 52
+      const avatarX = options.x + 2
+      const avatarY = options.y + 2
+      ctx.save()
+      ctx.beginPath()
+      ctx.arc(avatarX + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2, 0, Math.PI * 2)
+      ctx.closePath()
+      ctx.clip()
+      ctx.drawImage(options.profileImage, avatarX, avatarY, avatarSize, avatarSize)
+      ctx.restore()
+      ctx.beginPath()
+      ctx.arc(avatarX + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2 - 1, 0, Math.PI * 2)
+      ctx.strokeStyle = 'rgba(16,185,129,0.9)'
+      ctx.lineWidth = 2
+      ctx.stroke()
+      textX = avatarX + avatarSize + 14
     }
-    ctx.font = '700 12px Inter, Arial, sans-serif'
-    ctx.fillStyle = '#71717a'
-    ctx.fillText(options.label.toUpperCase(), options.x + 24, options.y + 22)
-    if ('letterSpacing' in ctx) {
-      ctx.letterSpacing = '0px'
+
+    ctx.font = '700 13px Inter, Arial, sans-serif'
+    ctx.fillStyle = 'rgba(148,178,167,0.74)'
+    ctx.fillText('TRADER', textX, options.y + 19)
+    ctx.font = `700 ${fitFontSize(ctx, options.name, options.width - (textX - options.x) - 16, 24, 16, 700)}px Inter, Arial, sans-serif`
+    ctx.fillStyle = '#f3faf7'
+    ctx.fillText(options.name, textX, options.y + 41)
+  }
+
+  private drawCoverImage(
+    ctx: any,
+    img: any,
+    dx: number,
+    dy: number,
+    dw: number,
+    dh: number
+  ) {
+    const imgRatio = img.width / img.height
+    const areaRatio = dw / dh
+    let sx = 0
+    let sy = 0
+    let sw = img.width
+    let sh = img.height
+
+    if (imgRatio > areaRatio) {
+      sw = img.height * areaRatio
+      sx = (img.width - sw) / 2
+    } else {
+      sh = img.width / areaRatio
+      sy = (img.height - sh) / 2
     }
 
-    const value = truncateText(options.value, 34)
-    const valueSize = fitFontSize(
-      ctx,
-      value,
-      options.width - 42,
-      options.valueSize ?? 30,
-      18,
-      700
-    )
-    ctx.font = `700 ${valueSize}px Inter, Arial, sans-serif`
-    ctx.fillStyle = options.valueColor ?? '#ffffff'
-    ctx.fillText(value, options.x + 24, options.y + 54)
-
-    if (options.secondary) {
-      const secondarySize = fitFontSize(ctx, options.secondary, options.width - 42, 15, 11, 600)
-      ctx.font = `600 ${secondarySize}px Inter, Arial, sans-serif`
-      ctx.fillStyle = '#a1a1aa'
-      ctx.fillText(truncateText(options.secondary, 48), options.x + 24, options.y + 76)
-    }
+    ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh)
   }
 
   private applyGrain(ctx: any, width: number, height: number, amount: number) {
@@ -1136,6 +1293,38 @@ export class CardGenerator {
       return canvas.toBuffer('image/png')
     }
     return null
+  }
+
+  private async loadMarketImage(
+    canvasModule: CanvasModule,
+    imageUrl: string
+  ): Promise<any | null> {
+    if (!imageUrl) {
+      return null
+    }
+    const cached = this.imageCache.get(imageUrl)
+    const imageBuffer =
+      cached ??
+      (await axios
+        .get<ArrayBuffer>(imageUrl, {
+          responseType: 'arraybuffer',
+          timeout: 15000,
+        })
+        .then((response) => Buffer.from(response.data))
+        .catch((error) => {
+          logger.warn(`Failed to download market image ${imageUrl}`, error)
+          return null
+        }))
+    if (!imageBuffer) {
+      return null
+    }
+    if (!cached) {
+      this.imageCache.set(imageUrl, imageBuffer)
+    }
+    return canvasModule.loadImage(imageBuffer).catch((error) => {
+      logger.warn(`Failed to decode market image ${imageUrl}`, error)
+      return null
+    })
   }
 
   private async getCanvasModule(): Promise<CanvasModule | null> {
@@ -1187,8 +1376,4 @@ export class CardGenerator {
     }
     this.fontsReady = true
   }
-}
-
-function toTradeResultLabel(primaryType: TraderType): string {
-  return getTradeTypeLabel(primaryType, 'BUY')
 }
