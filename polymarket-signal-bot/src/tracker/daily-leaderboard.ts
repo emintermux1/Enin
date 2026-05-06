@@ -13,9 +13,10 @@ export class DailyLeaderboard {
   private startupTimer: NodeJS.Timeout | null = null
   private pinnedMessageId: number | null = null
   private readonly refreshIntervalMs = 6 * 60 * 60 * 1000
-  private readonly minPnl = 100_000
+  private readonly minPnl = 50_000
   private readonly minLoss = -100_000
-  private readonly leaderboardFetchLimit = 30
+  private readonly minTrades = 3
+  private readonly leaderboardFetchLimit = 50
 
   constructor(
     private readonly dataApi: DataApi,
@@ -79,15 +80,15 @@ export class DailyLeaderboard {
       const winnerEntries = leaderboard
         .filter((entry) => Number(entry.pnl || 0) >= this.minPnl)
         .sort((a, b) => Number(b.pnl || 0) - Number(a.pnl || 0))
-        .slice(0, 5)
+        .slice(0, 20)
 
       const loserEntries = leaderboard
         .filter((entry) => Number(entry.pnl || 0) <= this.minLoss)
         .sort((a, b) => Number(a.pnl || 0) - Number(b.pnl || 0))
-        .slice(0, 5)
+        .slice(0, 10)
 
       if (winnerEntries.length === 0 && loserEntries.length === 0) {
-        logger.info('Daily leaderboard: no traders with ±$100K daily PnL')
+        logger.info('Daily leaderboard: no traders matching daily PnL thresholds')
         return
       }
 
@@ -107,24 +108,18 @@ export class DailyLeaderboard {
       }
 
       const winners = winnerEntries
-        .map((entry, index) => {
-          const trader = enrichedTraders.get(entry.proxyWallet.toLowerCase())
-          if (!trader) {
-            return null
-          }
-          return { ...trader, rank: index + 1 }
-        })
+        .map((entry) => enrichedTraders.get(entry.proxyWallet.toLowerCase()) ?? null)
         .filter((trader): trader is LeaderboardTrader => Boolean(trader))
+        .filter((trader) => trader.totalBets >= this.minTrades)
+        .slice(0, 10)
+        .map((trader, index) => ({ ...trader, rank: index + 1 }))
 
       const losers = loserEntries
-        .map((entry, index) => {
-          const trader = enrichedTraders.get(entry.proxyWallet.toLowerCase())
-          if (!trader) {
-            return null
-          }
-          return { ...trader, rank: winners.length + index + 1 }
-        })
+        .map((entry) => enrichedTraders.get(entry.proxyWallet.toLowerCase()) ?? null)
         .filter((trader): trader is LeaderboardTrader => Boolean(trader))
+        .filter((trader) => trader.totalBets >= this.minTrades)
+        .slice(0, 10)
+        .map((trader, index) => ({ ...trader, rank: winners.length + index + 1 }))
 
       if (this.pinnedMessageId) {
         try {
@@ -163,6 +158,17 @@ export class DailyLeaderboard {
       this.dataApi.getClosedPositions(wallet, 100).catch(() => []),
     ])
     const wins = closedPositions.filter((position) => Number(position.realizedPnl || 0) > 0).length
+    const openSevereLosses = positions.filter((position) => {
+      const percentPnl = Number(position.percentPnl || 0)
+      if (Number.isFinite(percentPnl) && percentPnl <= -80) {
+        return true
+      }
+
+      const initialValue = Number(position.initialValue || position.totalBought || 0)
+      const cashPnl = Number(position.cashPnl || 0)
+      return initialValue > 0 && cashPnl / initialValue <= -0.8
+    }).length
+    const adjustedTotalBets = closedPositions.length + openSevereLosses
 
     return {
       rank: 0,
@@ -171,7 +177,7 @@ export class DailyLeaderboard {
       xUsername: entry.xUsername,
       pnl: Number(entry.pnl || 0),
       wins,
-      totalBets: closedPositions.length,
+      totalBets: adjustedTotalBets,
       livePositions: positions.length,
     }
   }
