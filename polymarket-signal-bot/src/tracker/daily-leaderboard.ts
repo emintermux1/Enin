@@ -118,7 +118,7 @@ export class DailyLeaderboard {
         .map((entry) => enrichedTraders.get(entry.proxyWallet.toLowerCase()) ?? null)
         .filter((trader): trader is LeaderboardTrader => Boolean(trader))
         .filter((trader) => trader.totalBets >= this.minTrades)
-        .slice(0, 5)
+        .slice(0, 10)
         .map((trader, index) => ({ ...trader, rank: winners.length + index + 1 }))
 
       if (this.pinnedMessageId) {
