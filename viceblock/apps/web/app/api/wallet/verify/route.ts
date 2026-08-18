@@ -23,9 +23,13 @@ export async function POST(req: Request) {
 
   try {
     const sig = Uint8Array.from(Buffer.from(signature, "base64"));
-    const msg = new TextEncoder().encode(nonce ?? "");
+    const msg = new TextEncoder().encode(nonce);
     const pub = decodeBase58(address);
-    if (nonce && pub && !nacl.sign.detached.verify(msg, sig, pub)) {
+    // A malformed address must NEVER skip signature verification.
+    if (!pub || pub.length !== 32) {
+      return NextResponse.json({ error: "bad_address" }, { status: 400 });
+    }
+    if (!nacl.sign.detached.verify(msg, sig, pub)) {
       return NextResponse.json({ error: "bad_signature" }, { status: 401 });
     }
   } catch {

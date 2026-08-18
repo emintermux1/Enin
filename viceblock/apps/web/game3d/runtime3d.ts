@@ -208,6 +208,9 @@ export class ViceblockRuntime3D {
   private race: { checkpoint: number; t: number; marker: Mesh } | null = null;
   private missionStat = { t: 0, dmg: 0, maxHeat: 0 };
   private fenceOfferT = 0;
+  walletNfts = 0;
+  private chainCarSpawned = false;
+  private pickFireHeld = false;
 
   onHud?: (h: HudSnapshot) => void;
   onPersist?: (s: PlayerSave) => void;
@@ -335,6 +338,11 @@ export class ViceblockRuntime3D {
     this.player.raceBestMs = save.raceBestMs ?? 0;
     if (save.inventory.some((i) => i.id === "smg")) this.player.weapon = "smg";
     else if (save.inventory.some((i) => i.id === "pistol")) this.player.weapon = "pistol";
+    // Reconnect where you left off, as long as the spot is still walkable.
+    if (save.x > 0 && save.y > 0 && !blocked(this.world, save.x, save.y, PLAYER_CONFIG.radius)) {
+      this.player.x = save.x;
+      this.player.z = save.y;
+    }
     this.audio.setLevels(this.settings);
   }
 
@@ -669,8 +677,11 @@ export class ViceblockRuntime3D {
     // Lockpicking pauses movement; E (or the mobile action button) attempts the pick.
     if (this.lockpick && this.lockpickCar) {
       this.lockpick = tickLockpick(this.lockpick, dt);
-      if (this.input.consumeInteract() || this.input.firing()) {
-        this.input.fire = false;
+      // Edge-detect fire so a held button cannot burn every pick in one frame.
+      const fireHeld = this.input.firing();
+      const fireEdge = fireHeld && !this.pickFireHeld;
+      this.pickFireHeld = fireHeld;
+      if (this.input.consumeInteract() || fireEdge) {
         this.lockpick = attemptPick(this.lockpick, true);
         this.audio.uiClick();
       }
@@ -1279,6 +1290,7 @@ export class ViceblockRuntime3D {
         if (def.security !== "none" && !this.unlocked.has(car.rt.id) && !car.rt.stolen) {
           this.lockpick = createLockpick(def.security);
           this.lockpickCar = car;
+          this.pickFireHeld = this.input.firing();
           const label = def.security === "lock" ? "door lock" : def.security === "immobilizer" ? "immobilizer" : "immobilizer + GPS";
           this.flash(`LOCKED  ·  ${def.name} has ${label}  ·  E when the pin hits the zone`);
           this.audio.uiClick();
@@ -1634,6 +1646,42 @@ export class ViceblockRuntime3D {
     this.heat = createHeatState();
     this.flash(`COUNTY  ·  $${PLAYER_CONFIG.respawnMedicalFee} medical  ·  street cash lighter`);
     this.onPersist?.(this.snapshot());
+  }
+
+  /**
+   * Called by the shell after the chain indexer confirms wallet contents.
+   * Any verified NFT holder gets the Chainline Mirage parked by the walk-up:
+   * a registered (never "stolen"), GPS-clean prestige ride. On-chain
+   * ownership is never affected by anything that happens to it in-game.
+   */
+  setWalletAssets(nftCount: number): void {
+    this.walletNfts = nftCount;
+    if (nftCount > 0 && !this.chainCarSpawned) {
+      this.chainCarSpawned = true;
+      const rt = createVehicleRuntime("mirage", 15 * TILE, 65.5 * TILE, 0, "#d8b430", true);
+      rt.id = "chainline-mirage";
+      rt.registered = true;
+      this.cars.push({ rt, mesh: this.makeCarMesh(rt.id, "#d8b430", false), smoke: 0 });
+      this.flash("CHAINLINE MIRAGE  ·  your collector ride is parked by the walk-up");
+      this.pushNews("A verified collector just rolled into Southside.");
+    }
+  }
+
+  /** Vault: banked cash survives death and arrest. Called from the phone. */
+  bankDeposit(n: number): number {
+    const amt = Math.max(0, Math.min(n, this.player.cash));
+    this.player.cash -= amt;
+    this.player.bank += amt;
+    if (amt > 0) this.audio.cash();
+    return amt;
+  }
+
+  bankWithdraw(n: number): number {
+    const amt = Math.max(0, Math.min(n, this.player.bank));
+    this.player.bank -= amt;
+    this.player.cash += amt;
+    if (amt > 0) this.audio.cash();
+    return amt;
   }
 
   /** Called by the shell after the server issues a contract. */

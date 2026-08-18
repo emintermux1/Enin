@@ -59,6 +59,7 @@ export function GameShell() {
   const [walletOpen, setWalletOpen] = useState(false);
   const [debugOpen, setDebugOpen] = useState(false);
   const [session, setSession] = useState<string>("");
+  const [wallet, setWallet] = useState<{ address: string; sol: number; nfts: number; live: boolean } | null>(null);
 
   const resize = useCallback(() => {
     const c = canvasRef.current;
@@ -168,6 +169,20 @@ export function GameShell() {
       setStarted(true);
     } catch (e) {
       setBootError(e instanceof Error ? e.message : "boot failed");
+    }
+  }
+
+  async function syncWalletAssets(address: string): Promise<void> {
+    const token = sessionRef.current;
+    if (!token) return;
+    try {
+      const res = await fetch("/api/wallet/assets", { headers: { authorization: `Bearer ${token}` } });
+      const d = (await res.json()) as { ok?: boolean; sol?: number; nftCount?: number };
+      if (!res.ok) return;
+      setWallet({ address, sol: d.sol ?? 0, nfts: d.nftCount ?? 0, live: Boolean(d.ok) });
+      gameRef.current?.setWalletAssets(d.nftCount ?? 0);
+    } catch {
+      setWallet({ address, sol: 0, nfts: 0, live: false });
     }
   }
 
@@ -480,16 +495,38 @@ export function GameShell() {
                 {phoneTab === "map" && <p>Southside grid. Yellow jobs. Blue cops. Hide in alleys and Maya&apos;s.</p>}
                 {phoneTab === "crew" && <p>Crews unlock after Port Authority. Cupsey already thinks you&apos;re late.</p>}
                 {phoneTab === "bank" && (
-                  <p>
-                    Pocket ${hud.cash}
-                    <br />
-                    Vault ${hud.bank} — banked cash survives a bust
-                  </p>
+                  <div>
+                    <p>
+                      Pocket ${hud.cash}
+                      <br />
+                      Vault ${hud.bank} — banked cash survives a bust
+                    </p>
+                    <div className="bankrow">
+                      <button type="button" onClick={() => gameRef.current?.bankDeposit(100)}>
+                        DEPOSIT $100
+                      </button>
+                      <button type="button" onClick={() => gameRef.current?.bankWithdraw(100)}>
+                        WITHDRAW $100
+                      </button>
+                    </div>
+                    {wallet ? (
+                      <p>
+                        {wallet.address.slice(0, 4)}…{wallet.address.slice(-4)} · {wallet.sol} SOL · {wallet.nfts} NFT
+                        {wallet.live ? "" : " (cached)"}
+                        <br />
+                        {wallet.nfts > 0 ? "Chainline Mirage unlocked — parked by the walk-up." : "Hold any NFT to unlock the Chainline Mirage."}
+                      </p>
+                    ) : (
+                      <p>No wallet bound. On-chain assets are read from the chain, never trusted from the client.</p>
+                    )}
+                  </div>
                 )}
                 {phoneTab === "profile" && (
                   <p>
                     {hud.username} ·{" "}
-                    {hud.streetRep >= 40 ? "STREET KING" : hud.streetRep >= 15 ? "GETAWAY DRIVER" : hud.level >= 3 ? "UP-AND-COMER" : "FRESH OFF THE BUS"}
+                    {wallet && wallet.nfts > 0
+                      ? "COLLECTOR"
+                      : hud.streetRep >= 40 ? "STREET KING" : hud.streetRep >= 15 ? "GETAWAY DRIVER" : hud.level >= 3 ? "UP-AND-COMER" : "FRESH OFF THE BUS"}
                     <br />
                     {hud.raceBestMs > 0 ? `Midnight Line best: ${(hud.raceBestMs / 1000).toFixed(1)}s` : "No race record yet."}
                     <br />
@@ -500,7 +537,9 @@ export function GameShell() {
             </div>
           )}
 
-          {walletOpen && <WalletPanel session={session} onClose={() => setWalletOpen(false)} />}
+          {walletOpen && (
+            <WalletPanel session={session} onClose={() => setWalletOpen(false)} onVerified={(a) => void syncWalletAssets(a)} />
+          )}
         </>
       )}
 
@@ -791,6 +830,19 @@ export function GameShell() {
           padding: 8px 12px;
           font-weight: 700;
           letter-spacing: 0.08em;
+          cursor: pointer;
+        }
+        .bankrow {
+          display: flex;
+          gap: 6px;
+          margin: 6px 0;
+        }
+        .bankrow button {
+          background: #2a2018;
+          color: #f3e6d2;
+          border: 1px solid #6a4a38;
+          padding: 6px 8px;
+          font-size: 10px;
           cursor: pointer;
         }
         .talk {

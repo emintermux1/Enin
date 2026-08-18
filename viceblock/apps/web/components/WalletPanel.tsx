@@ -6,11 +6,12 @@ import { useState } from "react";
 interface Props {
   session: string;
   onClose: () => void;
+  onVerified?: (address: string) => void;
 }
 
 type Status = "idle" | "pending" | "ok" | "err";
 
-export function WalletPanel({ session, onClose }: Props) {
+export function WalletPanel({ session, onClose, onVerified }: Props) {
   const [status, setStatus] = useState<Status>("idle");
   const [msg, setMsg] = useState("Phantom, Solflare, or Backpack. We never ask for a seed.");
   const [addr, setAddr] = useState("");
@@ -46,7 +47,8 @@ export function WalletPanel({ session, onClose }: Props) {
       if (!ver.ok || !verJson.ok) throw new Error(verJson.error ?? "verify failed");
       setAddr(address);
       setStatus("ok");
-      setMsg("Session bound. Gameplay stays off-chain. Ownership can settle later.");
+      setMsg("Session bound. Syncing wallet assets from chain…");
+      onVerified?.(address);
     } catch (e) {
       setStatus("err");
       setMsg(e instanceof Error ? e.message : "wallet rejected");
