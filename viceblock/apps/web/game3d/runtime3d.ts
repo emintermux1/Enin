@@ -1034,7 +1034,12 @@ export class ViceblockRuntime3D {
       this.cops.some(
         (c) => Math.hypot(c.x - this.player.x, c.z - this.player.z) < sight && this.lineOpen(c.x, c.z, this.player.x, this.player.z),
       );
+    const heatBefore = this.heat.level;
     this.heat = tickHeat(this.heat, dt, seen, this.player.x, this.player.z, 0, this.player.vehicleId ? this.currentDefId() : "");
+    if (heatBefore > 0 && this.heat.level === 0) {
+      this.flash("EVADED  ·  they lost you  ·  lay low");
+      this.audio.uiClick();
+    }
     let want = copCountForHeat(this.heat.level);
     if (this.crackdown && this.heat.level > 0) want = Math.min(5, want + 1);
     while (this.cops.length < want) this.cops.push(this.makeCop());
