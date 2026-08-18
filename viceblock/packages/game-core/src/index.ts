@@ -4,4 +4,8 @@ export * from "./economy";
 export * from "./missions";
 export * from "./joystick";
 export * from "./config";
+export * from "./security";
+export * from "./crime";
+export * from "./contracts";
+export * from "./director";
 export { sanitizeText, looksLikeMarkup } from "@viceblock/shared";

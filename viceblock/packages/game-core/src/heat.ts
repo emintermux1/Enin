@@ -8,6 +8,14 @@ export interface HeatState {
   lastKnownX: number;
   lastKnownY: number;
   hasLastKnown: boolean;
+  /**
+   * Suspect description: what the police believe the player is driving
+   * (vehicle def id, or "" when the suspect was last seen on foot).
+   * Switching rides shrinks recognition range until re-spotted up close.
+   */
+  knownVehicle: string;
+  /** Radius of the active search zone around lastKnown (world units). */
+  searchRadius: number;
 }
 
 export function createHeatState(): HeatState {
@@ -19,7 +27,19 @@ export function createHeatState(): HeatState {
     lastKnownX: 0,
     lastKnownY: 0,
     hasLastKnown: false,
+    knownVehicle: "",
+    searchRadius: 0,
   };
+}
+
+/**
+ * Cop sight range against the player. If the player's current transport does
+ * not match the suspect description, cops need to get much closer to make
+ * the ID — switching cars is a real escape tool.
+ */
+export function recognitionRange(state: HeatState, currentVehicle: string, baseRange: number): number {
+  if (state.level === 0) return baseRange;
+  return state.knownVehicle === currentVehicle ? baseRange : baseRange * 0.42;
 }
 
 /** Easy-mode pursuit: cops forget fast, escalate slowly. */
@@ -30,6 +50,7 @@ export function tickHeat(
   playerX: number,
   playerY: number,
   crimeJustCommitted: number,
+  currentVehicle = "",
 ): HeatState {
   const next = { ...state };
   if (crimeJustCommitted > 0) {
@@ -39,6 +60,8 @@ export function tickHeat(
     next.hasLastKnown = true;
     next.lastKnownX = playerX;
     next.lastKnownY = playerY;
+    next.knownVehicle = currentVehicle;
+    next.searchRadius = 90;
   }
 
   if (seenByCop) {
@@ -47,6 +70,8 @@ export function tickHeat(
     next.hasLastKnown = true;
     next.lastKnownX = playerX;
     next.lastKnownY = playerY;
+    next.knownVehicle = currentVehicle;
+    next.searchRadius = 90;
     if (next.level >= 1 && next.seenTimer > 14 && next.level < 3) {
       next.level = clampHeat(next.level + 1);
       next.seenTimer = 0;
@@ -54,11 +79,17 @@ export function tickHeat(
   } else if (next.level > 0) {
     next.hiddenTimer += dt;
     next.seenTimer = 0;
+    // The search zone widens while cops sweep, then the whole thing cools off.
+    next.searchRadius = Math.min(240, next.searchRadius + dt * 14);
     const loseAfter = next.level <= 2 ? 3.2 : next.level === 3 ? 5.5 : 8;
     if (next.hiddenTimer >= loseAfter) {
       next.level = clampHeat(next.level - 1);
       next.hiddenTimer = 0;
-      if (next.level === 0) next.hasLastKnown = false;
+      if (next.level === 0) {
+        next.hasLastKnown = false;
+        next.knownVehicle = "";
+        next.searchRadius = 0;
+      }
     }
   }
   return next;

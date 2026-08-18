@@ -12,6 +12,7 @@ export const VEHICLES: VehicleStats[] = [
     durability: 110,
     traction: 0.86,
     seats: 2,
+    security: "none",
   },
   {
     id: "ironback",
@@ -24,6 +25,7 @@ export const VEHICLES: VehicleStats[] = [
     durability: 160,
     traction: 0.7,
     seats: 2,
+    security: "lock",
   },
   {
     id: "mirage",
@@ -36,6 +38,7 @@ export const VEHICLES: VehicleStats[] = [
     durability: 95,
     traction: 0.8,
     seats: 2,
+    security: "immobilizer",
   },
   {
     id: "needle",
@@ -48,6 +51,7 @@ export const VEHICLES: VehicleStats[] = [
     durability: 55,
     traction: 0.62,
     seats: 1,
+    security: "none",
   },
 ];
 
@@ -66,11 +70,16 @@ export interface VehicleRuntime {
   vy: number;
   heading: number;
   health: number;
+  /** Component damage: 1 = pristine, 0 = dead. */
+  engine: number;
+  tires: number;
   burning: boolean;
   exploded: boolean;
   explodeIn: number;
   stolen: boolean;
   registered: boolean;
+  /** True after the alarm was triggered by a failed pick. */
+  alarmed: boolean;
   color: string;
 }
 
@@ -92,11 +101,14 @@ export function createVehicleRuntime(
     vy: 0,
     heading,
     health: def.durability,
+    engine: 1,
+    tires: 1,
     burning: false,
     exploded: false,
     explodeIn: 0,
     stolen,
     registered: false,
+    alarmed: false,
     color,
   };
 }
@@ -105,6 +117,9 @@ export function applyVehicleDamage(v: VehicleRuntime, amount: number, highSpeedC
   if (v.exploded) return v;
   const next = { ...v };
   next.health = Math.max(0, next.health - amount);
+  // Crashes chew the engine; sustained damage eventually shreds tires too.
+  next.engine = Math.max(0.2, next.engine - amount * 0.004);
+  if (highSpeedCrash) next.tires = Math.max(0.35, next.tires - 0.12);
   next.burning = next.health < nextHealthBurn(next);
   if (next.health <= 0) {
     next.explodeIn = next.explodeIn > 0 ? next.explodeIn : 0.35;
@@ -114,6 +129,52 @@ export function applyVehicleDamage(v: VehicleRuntime, amount: number, highSpeedC
     next.explodeIn = 0.15;
   }
   return next;
+}
+
+/** Bullets can pop tires without needing to wreck the whole car. */
+export function shootTire(v: VehicleRuntime): VehicleRuntime {
+  return { ...v, tires: Math.max(0.3, v.tires - 0.35) };
+}
+
+/**
+ * Damage stage for visuals: 0 normal, 1 damaged, 2 heavy, 3 wrecked.
+ */
+export function damageStage(v: VehicleRuntime): 0 | 1 | 2 | 3 {
+  if (v.exploded || v.health <= 0) return 3;
+  const ratio = v.health / vehicleById(v.defId).durability;
+  if (ratio < 0.3) return 2;
+  if (ratio < 0.65) return 1;
+  return 0;
+}
+
+/** Engine damage cuts acceleration; tire damage cuts grip and top speed. */
+export function performanceMultipliers(v: VehicleRuntime): { accel: number; top: number; grip: number } {
+  return {
+    accel: 0.45 + v.engine * 0.55,
+    top: 0.6 + v.tires * 0.4,
+    grip: 0.5 + v.tires * 0.5,
+  };
+}
+
+export type Surface = "asphalt" | "wet-asphalt" | "grass" | "sand" | "gravel";
+
+export function surfaceGrip(surface: Surface): number {
+  switch (surface) {
+    case "asphalt":
+      return 1;
+    case "wet-asphalt":
+      return 0.74;
+    case "grass":
+      return 0.68;
+    case "sand":
+      return 0.55;
+    case "gravel":
+      return 0.8;
+    default: {
+      const _never: never = surface;
+      return _never;
+    }
+  }
 }
 
 function nextHealthBurn(v: VehicleRuntime): number {

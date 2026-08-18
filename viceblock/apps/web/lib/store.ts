@@ -3,22 +3,48 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { DEFAULT_SETTINGS, STARTER_CASH, type PlayerSave, type PresencePlayer, type WalletNonce } from "@viceblock/shared";
 
+export interface AuditEntry {
+  ts: number;
+  playerId: string;
+  kind: string;
+  amount: number;
+  reason: string;
+  ref: string;
+}
+
+interface ActiveContract {
+  id: string;
+  seed: number;
+  reward: number;
+  xp: number;
+  rep: number;
+  issuedAt: number;
+}
+
 interface Db {
   players: Record<string, PlayerSave>;
   sessions: Record<string, { playerId: string; createdAt: number }>;
   nonces: Record<string, WalletNonce>;
   presence: Record<string, PresencePlayer>;
   claimed: Record<string, string[]>;
+  contracts: Record<string, ActiveContract>;
+  contractsDone: Record<string, string[]>;
+  audit: AuditEntry[];
 }
 
 const dir = join(process.cwd(), "../../data");
 const file = join(dir, "viceblock.json");
 
 function empty(): Db {
-  return { players: {}, sessions: {}, nonces: {}, presence: {}, claimed: {} };
+  return { players: {}, sessions: {}, nonces: {}, presence: {}, claimed: {}, contracts: {}, contractsDone: {}, audit: [] };
 }
 
 let mem: Db | null = null;
+
+/** Drops the in-memory cache so tests can simulate a server restart. */
+export function resetStoreForTests(): void {
+  mem = null;
+}
 
 function load(): Db {
   if (mem) return mem;
@@ -28,6 +54,10 @@ function load(): Db {
     mem = empty();
   }
   mem ??= empty();
+  // Older data files predate the contract/audit fields.
+  mem.contracts ??= {};
+  mem.contractsDone ??= {};
+  mem.audit ??= [];
   return mem;
 }
 
@@ -157,23 +187,85 @@ export function claimServerMission(playerId: string, missionId: string): boolean
   return true;
 }
 
-export function applyAuthoritativeReward(playerId: string, cash: number, xp: number, streetRep: number): PlayerSave | null {
+export function applyAuthoritativeReward(
+  playerId: string,
+  cash: number,
+  xp: number,
+  streetRep: number,
+  reason = "mission",
+  ref = "",
+): PlayerSave | null {
   const db = load();
   const p = db.players[playerId];
   if (!p) return null;
-  p.cash += Math.max(0, Math.floor(cash));
+  const amount = Math.max(0, Math.floor(cash));
+  p.cash += amount;
   p.xp += Math.max(0, Math.floor(xp));
   p.streetRep += Math.max(0, Math.floor(streetRep));
+  db.audit.push({ ts: Date.now(), playerId, kind: "reward", amount, reason, ref });
+  if (db.audit.length > 5000) db.audit.splice(0, db.audit.length - 5000);
   persist();
   return p;
 }
 
-export function adminSnapshot(): { players: number; sessions: number; cash: number } {
+/**
+ * Issues (or returns the still-active) contract for a player. One active
+ * contract at a time; the server owns the seed so rewards can't be forged.
+ */
+export function issueContract(playerId: string): ActiveContract | null {
+  const db = load();
+  if (!db.players[playerId]) return null;
+  const existing = db.contracts[playerId];
+  if (existing && Date.now() - existing.issuedAt < 15 * 60_000) return existing;
+  const seed = Math.random();
+  const c: ActiveContract = {
+    id: `ct-${Math.floor(seed * 1e9).toString(36)}`,
+    seed,
+    reward: 0,
+    xp: 0,
+    rep: 0,
+    issuedAt: Date.now(),
+  };
+  db.contracts[playerId] = c;
+  persist();
+  return c;
+}
+
+/**
+ * Completes the player's active contract exactly once. The contract id acts
+ * as the idempotency key: replays and double-submits return false.
+ */
+export function completeContract(playerId: string, contractId: string, reward: number, xp: number, rep: number): boolean {
+  const db = load();
+  const active = db.contracts[playerId];
+  if (!active || active.id !== contractId) return false;
+  const done = db.contractsDone[playerId] ?? [];
+  if (done.includes(contractId)) return false;
+  db.contractsDone[playerId] = [...done, contractId];
+  delete db.contracts[playerId];
+  persist();
+  applyAuthoritativeReward(playerId, reward, xp, rep, "contract", contractId);
+  return true;
+}
+
+export function activeContractSeed(playerId: string): { id: string; seed: number } | null {
+  const db = load();
+  const c = db.contracts[playerId];
+  return c ? { id: c.id, seed: c.seed } : null;
+}
+
+export function auditTail(limit = 50): AuditEntry[] {
+  const db = load();
+  return db.audit.slice(-limit);
+}
+
+export function adminSnapshot(): { players: number; sessions: number; cash: number; auditEntries: number } {
   const db = load();
   const players = Object.values(db.players);
   return {
     players: players.length,
     sessions: Object.keys(db.sessions).length,
     cash: players.reduce((s, p) => s + p.cash, 0),
+    auditEntries: db.audit.length,
   };
 }

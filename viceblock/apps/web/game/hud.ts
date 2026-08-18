@@ -23,4 +23,11 @@ export interface HudSnapshot {
   interior: string | null;
   username: string;
   others: number;
+  lockpick: { pos: number; zoneStart: number; zoneEnd: number; picksLeft: number } | null;
+  jailLeft: number;
+  news: string;
+  lootValue: number;
+  searchZone: boolean;
+  gamepad: boolean;
+  contractLine: string;
 }

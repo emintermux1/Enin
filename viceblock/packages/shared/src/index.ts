@@ -40,6 +40,8 @@ export interface Vec2 {
   y: number;
 }
 
+export type VehicleSecurityTier = "none" | "lock" | "immobilizer" | "gps";
+
 export interface VehicleStats {
   id: string;
   name: string;
@@ -51,6 +53,7 @@ export interface VehicleStats {
   durability: number;
   traction: number;
   seats: number;
+  security: VehicleSecurityTier;
 }
 
 export interface MissionDef {

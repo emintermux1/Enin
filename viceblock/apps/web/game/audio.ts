@@ -198,6 +198,13 @@ export class GameAudio {
     this.siren.b.frequency.setTargetAtTime(high ? 900 : 700, this.ctx.currentTime, 0.05);
   }
 
+  /** Positional siren: gain falls off with distance to the nearest unit. */
+  setSirenDistance(distance: number): void {
+    if (!this.siren || !this.ctx) return;
+    const gain = 0.055 * Math.max(0.08, Math.min(1, 1 - distance / 900));
+    this.siren.gain.gain.setTargetAtTime(gain, this.ctx.currentTime, 0.15);
+  }
+
   gun(): void {
     this.noiseBurst(0.07, 1800, 0.18);
     this.beep(140, 0.04, "square", 0.08);
@@ -212,8 +219,15 @@ export class GameAudio {
     this.beep(880, 0.04, "square", 0.04 * this.levels.ui);
   }
 
-  foot(sprint: boolean): void {
-    this.beep(sprint ? 190 : 150, 0.03, "triangle", 0.03);
+  foot(sprint: boolean, surface: "concrete" | "grass" | "sand" | "metal" = "concrete"): void {
+    const base = surface === "metal" ? 230 : surface === "grass" ? 120 : surface === "sand" ? 95 : 150;
+    const type = surface === "metal" ? "square" : "triangle";
+    this.beep(sprint ? base * 1.25 : base, surface === "sand" ? 0.05 : 0.03, type, surface === "grass" ? 0.02 : 0.03);
+  }
+
+  alarm(): void {
+    this.beep(1200, 0.12, "square", 0.08);
+    this.beep(900, 0.12, "square", 0.08);
   }
 
   cash(): void {

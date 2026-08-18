@@ -14,23 +14,42 @@ import {
   applyVehicleDamage,
   assistAim,
   assistHint,
+  attemptPick,
   copCountForHeat,
+  createDirector,
   createHeatState,
+  createLockpick,
   createVehicleRuntime,
   ECONOMY_CONFIG,
+  fenceValue,
   HEIST_SUNSET,
+  lootLabel,
   MISSIONS,
   nextMission,
   normalizeAngle,
+  damageStage,
+  performanceMultipliers,
   PLAYER_CONFIG,
   POLICE_CONFIG,
+  recognitionRange,
+  shootTire,
+  surfaceGrip,
+  tickDirector,
   tickHeat,
+  tickLockpick,
   tickVehicleExplosion,
   vehicleById,
   VEHICLE_CONFIG,
+  witnessReport,
   WORLD_CONFIG,
+  type ContractDef,
+  type CrimeKind,
+  type DirectorState,
   type HeatState,
+  type LockpickState,
+  type LootItem,
   type VehicleRuntime,
+  type WorldEventDef,
 } from "@viceblock/game-core";
 import {
   DEFAULT_SETTINGS,
@@ -44,7 +63,7 @@ import {
 import { GameAudio } from "../game/audio";
 import { GameInput } from "../game/input";
 import type { HudSnapshot } from "../game/hud";
-import { blocked, buildSouthside, hideSpotNear, landmarkAt, type Landmark, type WorldData } from "../game/world";
+import { blocked, buildSouthside, Cell, cellAt, hideSpotNear, landmarkAt, type Landmark, type WorldData } from "../game/world";
 import { buildCity, type CityMeshes } from "./city";
 
 type Quality = "low" | "medium" | "high" | "auto";
@@ -60,6 +79,9 @@ interface Actor {
   panic: number;
   mesh: Mesh;
   talk?: string[];
+  searchT?: number;
+  searchX?: number;
+  searchZ?: number;
 }
 
 interface CarEntity {
@@ -149,9 +171,29 @@ export class ViceblockRuntime3D {
   running = false;
   aimAssistOn = true;
 
+  // Phase 2 systems
+  lockpick: LockpickState | null = null;
+  private lockpickCar: CarEntity | null = null;
+  private unlocked = new Set<string>();
+  loot: LootItem[] = [];
+  fenceRep = 0;
+  jailLeft = 0;
+  private pendingReports: Array<{ t: number; heatAdd: number }> = [];
+  private director: DirectorState = createDirector();
+  private news = "";
+  private newsT = 0;
+  private blackout = false;
+  private crackdown = false;
+  private storm = false;
+  private eventCarIds = new Set<string>();
+  contract: { def: ContractDef; stage: "pickup" | "drop" } | null = null;
+  private surrenderT = 0;
+  private gpsT = 0;
+
   onHud?: (h: HudSnapshot) => void;
   onPersist?: (s: PlayerSave) => void;
   onMissionComplete?: (missionId: string) => void;
+  onContractComplete?: (contractId: string) => void;
 
   private unbind: (() => void) | null = null;
   private dragYaw = { active: false, id: -1, lastX: 0, lastY: 0 };
@@ -471,7 +513,72 @@ export class ViceblockRuntime3D {
       this.weatherT = 0;
       this.weather = this.weather === "clear" ? "rain" : this.weather === "rain" ? "fog" : "clear";
     }
+    if (this.storm) this.weather = "rain";
     this.updateDayNight();
+
+    if (this.newsT > 0) this.newsT -= dt;
+    else this.news = "";
+
+    // Jail: time stands still for the player; wait it out or post bail.
+    if (this.jailLeft > 0) {
+      this.jailLeft -= dt;
+      if (this.jailLeft <= 0) {
+        this.jailLeft = 0;
+        this.flash("RELEASED  ·  keep your head down for a minute");
+      }
+      this.updateCamera(dt);
+      this.onHud?.(this.hud());
+      return;
+    }
+
+    // Lockpicking pauses movement; E (or the mobile action button) attempts the pick.
+    if (this.lockpick && this.lockpickCar) {
+      this.lockpick = tickLockpick(this.lockpick, dt);
+      if (this.input.consumeInteract() || this.input.firing()) {
+        this.input.fire = false;
+        this.lockpick = attemptPick(this.lockpick, true);
+        this.audio.uiClick();
+      }
+      if (this.lockpick.done) {
+        const car = this.lockpickCar;
+        if (this.lockpick.success) {
+          this.unlocked.add(car.rt.id);
+          this.flash("LOCK POPPED  ·  she's yours");
+          this.enterCar(car);
+        } else if (this.lockpick.alarmed) {
+          car.rt.alarmed = true;
+          this.audio.alarm();
+          this.reportCrime("lockpick-alarm", 1);
+          this.flash("ALARM  ·  pick snapped, whole block heard it");
+        }
+        this.lockpick = null;
+        this.lockpickCar = null;
+      }
+      this.updateCamera(dt);
+      this.onHud?.(this.hud());
+      return;
+    }
+
+    // Delayed 911 calls from witnesses.
+    this.pendingReports = this.pendingReports.filter((r) => {
+      r.t -= dt;
+      if (r.t <= 0) {
+        this.raiseHeat(r.heatAdd);
+        this.flash("911 CALL  ·  units dispatched to your last position");
+        return false;
+      }
+      return true;
+    });
+
+    // World director keeps the city unpredictable.
+    const tick = tickDirector(this.director, dt);
+    this.director = tick.state;
+    if (tick.fired) this.applyWorldEvent(tick.fired);
+    if (!this.director.active) {
+      this.blackout = false;
+      this.crackdown = false;
+      this.storm = false;
+    }
 
     if (this.input.radioQueued) {
       this.input.radioQueued = false;
@@ -529,9 +636,11 @@ export class ViceblockRuntime3D {
     const t = this.time;
     const day = t > 6.5 && t < 19;
     const dusk = (t > 5 && t <= 6.5) || (t >= 19 && t < 21);
-    this.hemi.intensity = day ? 0.85 : dusk ? 0.5 : 0.28;
-    this.sun.intensity = day ? 0.6 : dusk ? 0.3 : 0.05;
-    const sky = day ? new Color4(0.42, 0.55, 0.62, 1) : dusk ? new Color4(0.62, 0.38, 0.28, 1) : new Color4(0.07, 0.06, 0.1, 1);
+    this.hemi.intensity = this.blackout ? 0.12 : day ? 0.85 : dusk ? 0.5 : 0.28;
+    this.sun.intensity = this.blackout ? 0.02 : day ? 0.6 : dusk ? 0.3 : 0.05;
+    const sky = this.blackout
+      ? new Color4(0.03, 0.03, 0.05, 1)
+      : day ? new Color4(0.42, 0.55, 0.62, 1) : dusk ? new Color4(0.62, 0.38, 0.28, 1) : new Color4(0.07, 0.06, 0.1, 1);
     this.scene.clearColor = sky;
     const fog = this.weather === "fog" ? 0.004 : this.weather === "rain" ? 0.0016 : 0.0007;
     this.scene.fogMode = Scene.FOGMODE_EXP2;
@@ -566,7 +675,9 @@ export class ViceblockRuntime3D {
       this.lastFoot += dt;
       if (this.lastFoot > (axis.sprint ? 0.22 : 0.32)) {
         this.lastFoot = 0;
-        this.audio.foot(axis.sprint);
+        const cell = cellAt(this.world, this.player.x, this.player.z);
+        const surface = cell === Cell.Sand ? "sand" : cell === Cell.Grass ? "grass" : cell === Cell.Dock ? "metal" : "concrete";
+        this.audio.foot(axis.sprint, surface);
       }
     }
     // Jump
@@ -636,15 +747,28 @@ export class ViceblockRuntime3D {
         const steer = axis.x;
         const spd = Math.hypot(v.vx, v.vy);
         const hand = this.input.keys.has("Space");
-        v.heading += steer * def.handling * (hand ? 2.1 : 1.25) * dt * (0.35 + Math.min(1, spd / 80));
-        const acc = throttle * def.acceleration * dt;
+        // Component damage + ground surface both shape the handling model.
+        const perf = performanceMultipliers(v);
+        const cell = cellAt(this.world, v.x, v.y);
+        const ground = cell === Cell.Grass ? surfaceGrip("grass") : cell === Cell.Sand ? surfaceGrip("sand") : cell === Cell.Dirt ? surfaceGrip("gravel") : this.weather === "rain" ? surfaceGrip("wet-asphalt") : surfaceGrip("asphalt");
+        const grip = ground * perf.grip;
+        v.heading += steer * def.handling * grip * (hand ? 2.1 : 1.25) * dt * (0.35 + Math.min(1, spd / 80));
+        const acc = throttle * def.acceleration * perf.accel * dt;
         v.vx += Math.cos(v.heading) * acc;
         v.vy += Math.sin(v.heading) * acc;
-        const brake = hand ? def.braking : 28;
+        const brake = hand ? def.braking * grip : 28;
         v.vx -= v.vx * Math.min(1, brake * 0.004 * dt * 60);
         v.vy -= v.vy * Math.min(1, brake * 0.004 * dt * 60);
-        const damagePenalty = v.health / def.durability < VEHICLE_CONFIG.smokeBelow ? 0.7 : 1;
-        const max = def.topSpeed * 0.55 * wet * damagePenalty;
+        const max = def.topSpeed * 0.55 * wet * perf.top * (0.6 + grip * 0.4);
+        // A lockpicked GPS car keeps snitching until it's repainted at the garage.
+        if (def.security === "gps" && v.stolen && !v.registered) {
+          this.gpsT += dt;
+          if (this.gpsT > 12) {
+            this.gpsT = 0;
+            this.raiseHeat(1);
+            this.flash("GPS TRACKER  ·  this car is snitching  ·  Maya can wipe it");
+          }
+        }
         const s = Math.hypot(v.vx, v.vy);
         if (s > max) {
           v.vx *= max / s;
@@ -685,6 +809,9 @@ export class ViceblockRuntime3D {
       car.rt = v;
       car.mesh.position.set(v.x, 5, v.y);
       car.mesh.rotation.y = -v.heading;
+      // Visible damage stages: a battered car starts to list.
+      const stage = damageStage(v);
+      car.mesh.rotation.z = stage === 1 ? 0.03 : stage === 2 ? 0.08 : 0;
       const hpRatio = v.health / def.durability;
       if (hpRatio < VEHICLE_CONFIG.smokeBelow) {
         car.smoke += dt;
@@ -723,20 +850,46 @@ export class ViceblockRuntime3D {
   }
 
   private updateCops(dt: number): void {
+    // Suspect description: cops recognize the ride they last saw. Switching
+    // cars cuts their ID range hard until they re-spot you up close.
+    const sight = recognitionRange(this.heat, this.player.vehicleId ? vehicleById(this.currentDefId()).id : "", POLICE_CONFIG.sightRange);
     const seen = this.cops.some(
-      (c) => Math.hypot(c.x - this.player.x, c.z - this.player.z) < POLICE_CONFIG.sightRange && this.lineOpen(c.x, c.z, this.player.x, this.player.z),
+      (c) => Math.hypot(c.x - this.player.x, c.z - this.player.z) < sight && this.lineOpen(c.x, c.z, this.player.x, this.player.z),
     );
-    this.heat = tickHeat(this.heat, dt, seen, this.player.x, this.player.z, 0);
-    const want = copCountForHeat(this.heat.level);
+    this.heat = tickHeat(this.heat, dt, seen, this.player.x, this.player.z, 0, this.player.vehicleId ? this.currentDefId() : "");
+    let want = copCountForHeat(this.heat.level);
+    if (this.crackdown && this.heat.level > 0) want = Math.min(5, want + 1);
     while (this.cops.length < want) this.cops.push(this.makeCop());
     while (this.cops.length > want) {
       const c = this.cops.pop();
       c?.mesh.dispose();
     }
     const speed = PLAYER_CONFIG.sprintSpeed * POLICE_CONFIG.footSpeedRatio * (0.9 + this.heat.level * 0.05);
+    let nearest = Infinity;
     for (const c of this.cops) {
-      const tx = this.heat.hasLastKnown ? this.heat.lastKnownX : this.player.x;
-      const tz = this.heat.hasLastKnown ? this.heat.lastKnownY : this.player.z;
+      let tx: number;
+      let tz: number;
+      if (seen) {
+        tx = this.player.x;
+        tz = this.player.z;
+        c.searchT = 0;
+      } else if (this.heat.hasLastKnown) {
+        // Search zone: sweep around the last known position instead of
+        // beelining to the player's true location.
+        c.searchT = (c.searchT ?? 0) - dt;
+        if (c.searchT <= 0 || c.searchX === undefined) {
+          c.searchT = 2.2 + Math.random() * 2;
+          const ang = Math.random() * Math.PI * 2;
+          const r = Math.random() * this.heat.searchRadius;
+          c.searchX = this.heat.lastKnownX + Math.cos(ang) * r;
+          c.searchZ = this.heat.lastKnownY + Math.sin(ang) * r;
+        }
+        tx = c.searchX;
+        tz = c.searchZ ?? this.heat.lastKnownY;
+      } else {
+        tx = this.player.x;
+        tz = this.player.z;
+      }
       const ang = Math.atan2(tz - c.z, tx - c.x);
       c.heading = ang;
       const nx = c.x + Math.cos(ang) * speed * dt;
@@ -748,11 +901,27 @@ export class ViceblockRuntime3D {
       c.mesh.position.set(c.x, 7, c.z);
       c.mesh.rotation.y = Math.PI / 2 - ang;
       const d = Math.hypot(c.x - this.player.x, c.z - this.player.z);
-      if (this.heat.level >= POLICE_CONFIG.copShootMinHeat && d < 190 && Math.random() < POLICE_CONFIG.copShootChancePerTick) {
+      nearest = Math.min(nearest, d);
+      if (seen && this.heat.level >= POLICE_CONFIG.copShootMinHeat && d < 190 && Math.random() < POLICE_CONFIG.copShootChancePerTick) {
         this.spawnTracer(c.x, 10, c.z, this.player.x, 8, this.player.z);
         if (Math.random() < 0.4) this.hurt(9);
       }
     }
+    this.audio.setSirenDistance(Number.isFinite(nearest) ? nearest : 900);
+
+    // Arrest window: cornered on foot with cops in your face.
+    const cornered = this.heat.level >= 1 && !this.player.vehicleId && nearest < 34;
+    if (this.input.surrenderQueued) {
+      this.input.surrenderQueued = false;
+      if (cornered) this.arrest("HANDS UP  ·  smart move");
+    }
+    if (cornered && nearest < 15) {
+      this.surrenderT += dt;
+      if (this.surrenderT > 2.4) this.arrest("TACKLED  ·  should have kept running");
+    } else {
+      this.surrenderT = 0;
+    }
+
     this.cops = this.cops.filter((c) => {
       if (c.hp <= 0) {
         c.mesh.dispose();
@@ -760,6 +929,39 @@ export class ViceblockRuntime3D {
       }
       return true;
     });
+  }
+
+  private currentDefId(): string {
+    const car = this.cars.find((c) => c.rt.id === this.player.vehicleId);
+    return car ? car.rt.defId : "";
+  }
+
+  private arrest(msg: string): void {
+    this.jailLeft = 40;
+    this.surrenderT = 0;
+    this.heat = createHeatState();
+    // Contraband is confiscated but you keep your cash minus processing.
+    this.loot = [];
+    this.player.vehicleId = null;
+    this.player.cash = Math.max(0, this.player.cash - 60);
+    const precinct = this.world.landmarks.find((l) => l.id === "police");
+    if (precinct) {
+      this.player.x = (precinct.doorX + 0.5) * TILE;
+      this.player.z = (precinct.doorY + 1.5) * TILE;
+    }
+    this.flash(msg);
+    this.audio.wanted();
+    this.onPersist?.(this.snapshot());
+  }
+
+  /** Bail out of the holding cell early. Called from the jail overlay. */
+  payBail(): boolean {
+    if (this.jailLeft <= 0 || this.player.cash < 120) return false;
+    this.player.cash -= 120;
+    this.jailLeft = 0;
+    this.flash("BAIL POSTED  ·  walk out clean");
+    this.audio.cash();
+    return true;
   }
 
   private makeCop(): Actor {
@@ -795,7 +997,7 @@ export class ViceblockRuntime3D {
   private tryFire(dt: number): void {
     void dt;
     const stickFiring = this.input.aimStick.active && Math.hypot(this.input.aimStick.dx, this.input.aimStick.dy) > 0.35;
-    const firing = this.input.fire || stickFiring;
+    const firing = this.input.firing() || stickFiring;
     if (!firing || this.player.weapon !== "pistol") return;
     if (this.lastShot < 0.18) return;
     if (this.player.ammo <= 0) {
@@ -835,7 +1037,7 @@ export class ViceblockRuntime3D {
     this.spawnTracer(this.player.x, 9, this.player.z, tx, 9, tz);
     this.audio.gun();
     this.shake = this.settings.shake ? 3 : 0;
-    this.raiseHeat(1);
+    this.reportCrime("gunfire");
     this.panicNear();
 
     // Hit test along the ray against cops and cars.
@@ -849,6 +1051,10 @@ export class ViceblockRuntime3D {
     for (const car of this.cars) {
       if (!car.rt.exploded && pointNearSegment(car.rt.x, car.rt.y, this.player.x, this.player.z, tx, tz, 16)) {
         car.rt = applyVehicleDamage(car.rt, 22, false);
+        if (Math.random() < 0.3) {
+          car.rt = shootTire(car.rt);
+          this.flash("TIRE  ·  shredded, she'll wander now");
+        }
         if (car.rt.health <= 0) this.flash("CAR  ·  fuel tank's punching out");
         break;
       }
@@ -875,10 +1081,17 @@ export class ViceblockRuntime3D {
     if (!this.player.vehicleId) {
       const car = this.nearestCar(34);
       if (car && !car.rt.exploded) {
-        this.player.vehicleId = car.rt.id;
-        car.rt.stolen = true;
-        this.flash(`WHEELS  ·  ${vehicleById(car.rt.defId).name}`);
-        this.audio.uiClick();
+        const def = vehicleById(car.rt.defId);
+        // Security tiers: cheap cars open right up; nicer rides need a pick.
+        if (def.security !== "none" && !this.unlocked.has(car.rt.id) && !car.rt.stolen) {
+          this.lockpick = createLockpick(def.security);
+          this.lockpickCar = car;
+          const label = def.security === "lock" ? "door lock" : def.security === "immobilizer" ? "immobilizer" : "immobilizer + GPS";
+          this.flash(`LOCKED  ·  ${def.name} has ${label}  ·  E when the pin hits the zone`);
+          this.audio.uiClick();
+          return;
+        }
+        this.enterCar(car);
         return;
       }
     }
@@ -913,7 +1126,56 @@ export class ViceblockRuntime3D {
       return;
     }
     if (mark.id === "maya-garage") {
-      this.flash("GARAGE  ·  not yours until she papers it");
+      const car = this.cars.find((c) => c.rt.id === this.player.vehicleId);
+      // Rare event car: Maya buys it outright.
+      if (car && this.eventCarIds.has(car.rt.id)) {
+        this.eventCarIds.delete(car.rt.id);
+        this.player.vehicleId = null;
+        car.rt.exploded = true;
+        car.mesh.setEnabled(false);
+        this.player.cash += 520;
+        this.player.streetRep += 8;
+        this.audio.cash();
+        this.flash("MAYA  ·  $520 for the rare Mirage  ·  don't ask where it goes");
+        this.pushNews("Unknown driver delivers a ghost-plate Mirage to a Southside garage.");
+        return;
+      }
+      if (car) {
+        const def = vehicleById(car.rt.defId);
+        const cost = 40;
+        if (this.player.cash >= cost) {
+          this.player.cash -= cost;
+          car.rt.health = def.durability;
+          car.rt.engine = 1;
+          car.rt.tires = 1;
+          car.rt.burning = false;
+          if (car.rt.stolen) {
+            car.rt.registered = true;
+            this.flash(`MAYA  ·  fixed, papered, GPS wiped  ·  $${cost}`);
+          } else {
+            this.flash(`MAYA  ·  full workup  ·  $${cost}`);
+          }
+        } else {
+          this.flash("MAYA  ·  no cash, no wrench");
+        }
+        return;
+      }
+      this.flash("GARAGE  ·  roll something in and she'll paper it");
+      return;
+    }
+    if (mark.id === "secret-bunker") {
+      // The Painted Door is the district fence.
+      if (this.loot.length > 0) {
+        const paid = fenceValue(this.loot, this.fenceRep);
+        const what = this.loot.map((l) => lootLabel(l.origin)).join(", ");
+        this.loot = [];
+        this.fenceRep += 1;
+        this.player.cash += paid;
+        this.audio.cash();
+        this.flash(`FENCE  ·  ${what}  ·  $${paid} cash, no questions`);
+        return;
+      }
+      this.flash("PAINTED DOOR  ·  bring something hot and knock twice");
       return;
     }
     if (mark.id === "gas") {
@@ -941,23 +1203,25 @@ export class ViceblockRuntime3D {
       this.raiseHeat(1);
       return;
     }
-    this.player.cash += ECONOMY_CONFIG.martRobbery;
+    // Robbery yields loot with an origin — fence it at the Painted Door.
+    this.loot.push({ origin: "store-robbery", value: ECONOMY_CONFIG.martRobbery });
     this.player.weapon = "pistol";
     this.player.ammo = Math.max(this.player.ammo, 24);
-    this.raiseHeat(2);
+    // The clerk always counts as one witness.
+    this.reportCrime("robbery", 1);
     this.audio.cash();
     this.audio.wanted();
     this.shake = 6;
-    this.flash("CORAL MART  ·  till's open  ·  cops incoming, they're slow");
+    this.flash("CORAL MART  ·  cash bag grabbed  ·  fence it at the Painted Door");
     this.mission.step = Math.max(this.mission.step, 1);
     this.panicNear();
   }
 
   private robJewelry(): void {
-    this.player.cash += ECONOMY_CONFIG.jewelryRobbery;
-    this.raiseHeat(2);
+    this.loot.push({ origin: "jewelry", value: ECONOMY_CONFIG.jewelryRobbery });
+    this.reportCrime("robbery", 1);
     this.audio.cash();
-    this.flash("SUNSET CASES  ·  glass gone  ·  move");
+    this.flash("SUNSET CASES  ·  glass gone  ·  that ice needs a fence");
     if (this.mission.id === "sunset-jewelry") this.mission.step = Math.max(this.mission.step, 3);
     this.panicNear();
   }
@@ -969,6 +1233,44 @@ export class ViceblockRuntime3D {
         a.panic = 4;
         a.heading = Math.atan2(a.z - this.player.z, a.x - this.player.x);
       }
+    }
+  }
+
+  private enterCar(car: CarEntity): void {
+    this.player.vehicleId = car.rt.id;
+    if (!car.rt.stolen) {
+      car.rt.stolen = true;
+      this.reportCrime("car-theft");
+    }
+    this.gpsT = 0;
+    this.flash(`WHEELS  ·  ${vehicleById(car.rt.defId).name}`);
+    this.audio.uiClick();
+  }
+
+  /**
+   * Crimes only matter if someone sees them. Civilian callers take a few
+   * seconds to dial, cops react instantly, and an empty alley stays silent.
+   */
+  private reportCrime(kind: CrimeKind, minWitnesses = 0): void {
+    const witnesses = Math.max(
+      minWitnesses,
+      this.actors.filter(
+        (a) => Math.hypot(a.x - this.player.x, a.z - this.player.z) < 150 && this.lineOpen(a.x, a.z, this.player.x, this.player.z),
+      ).length,
+    );
+    const copSaw = this.cops.some(
+      (c) => Math.hypot(c.x - this.player.x, c.z - this.player.z) < POLICE_CONFIG.sightRange && this.lineOpen(c.x, c.z, this.player.x, this.player.z),
+    );
+    const report = witnessReport(kind, witnesses, copSaw);
+    if (!report.reported) {
+      if (kind === "car-theft" || kind === "robbery") this.flash("NO WITNESSES  ·  nobody saw a thing");
+      return;
+    }
+    if (report.delay <= 0) {
+      this.raiseHeat(report.heatAdd);
+    } else if (this.pendingReports.length < 2) {
+      this.pendingReports.push({ t: report.delay, heatAdd: report.heatAdd });
+      this.flash("WITNESS  ·  someone's dialing 911  ·  move");
     }
   }
 
@@ -1006,7 +1308,67 @@ export class ViceblockRuntime3D {
     return best;
   }
 
+  private applyWorldEvent(event: WorldEventDef): void {
+    this.pushNews(event.headline);
+    switch (event.id) {
+      case "armored-truck": {
+        const rt = createVehicleRuntime("ironback", 40 * TILE, 23.5 * TILE, 0, "#22303e");
+        rt.id = `event-truck-${Math.random().toString(36).slice(2, 6)}`;
+        rt.health = 420;
+        this.eventCarIds.add(rt.id);
+        this.cars.push({ rt, mesh: this.makeCarMesh(rt.id, "#22303e", false), smoke: 0 });
+        break;
+      }
+      case "rare-car": {
+        const rt = createVehicleRuntime("mirage", 68 * TILE, 11.5 * TILE, 0, "#c8a028");
+        rt.id = `event-rare-${Math.random().toString(36).slice(2, 6)}`;
+        this.eventCarIds.add(rt.id);
+        this.cars.push({ rt, mesh: this.makeCarMesh(rt.id, "#c8a028", false), smoke: 0 });
+        this.flash("RUMOR  ·  gold Mirage left near Ansem's mural  ·  Maya pays cash");
+        break;
+      }
+      case "blackout":
+        this.blackout = true;
+        this.flash("BLACKOUT  ·  Southside just went dark");
+        break;
+      case "storm":
+        this.storm = true;
+        this.flash("STORM  ·  roads are slick, grip is gone");
+        break;
+      case "police-crackdown":
+        this.crackdown = true;
+        this.flash("CRACKDOWN  ·  extra patrols on every block");
+        break;
+      case "street-race": {
+        const rt = createVehicleRuntime("needle", 50 * TILE, 63 * TILE, 0, "#b03a28");
+        rt.id = `event-race-${Math.random().toString(36).slice(2, 6)}`;
+        this.cars.push({ rt, mesh: this.makeCarMesh(rt.id, "#b03a28", false), smoke: 0 });
+        this.flash("RACE NIGHT  ·  a Needle is waiting at the Midnight Line");
+        break;
+      }
+      default: {
+        const _never: never = event.id;
+        void _never;
+      }
+    }
+  }
+
+  private pushNews(text: string): void {
+    this.news = sanitizeText(text, 90);
+    this.newsT = 9;
+  }
+
   private boom(car: CarEntity): void {
+    // Armored trucks spill their case when they finally give out.
+    if (this.eventCarIds.has(car.rt.id)) {
+      this.eventCarIds.delete(car.rt.id);
+      if (Math.hypot(this.player.x - car.rt.x, this.player.z - car.rt.y) < 160) {
+        this.loot.push({ origin: "armored-truck", value: 400 });
+        this.raiseHeat(2);
+        this.flash("ARMORED CASE  ·  grabbed  ·  fence it before they fence you");
+        this.pushNews("Armored truck hit in Southside. NCPD promises arrests.");
+      }
+    }
     this.audio.explosion();
     this.shake = this.settings.reduceFlashes ? 4 : 10;
     for (let i = 0; i < 22; i++) {
@@ -1026,7 +1388,7 @@ export class ViceblockRuntime3D {
 
   private raiseHeat(n: number): void {
     const before = this.heat.level;
-    this.heat = tickHeat(this.heat, 0, true, this.player.x, this.player.z, n);
+    this.heat = tickHeat(this.heat, 0, true, this.player.x, this.player.z, n, this.player.vehicleId ? this.currentDefId() : "");
     if (this.heat.level > before) this.audio.wanted();
   }
 
@@ -1053,7 +1415,41 @@ export class ViceblockRuntime3D {
     this.onPersist?.(this.snapshot());
   }
 
+  /** Called by the shell after the server issues a contract. */
+  startContract(def: ContractDef): void {
+    this.contract = { def, stage: "pickup" };
+    this.say("Burner phone", `${def.title}: ${def.brief}`);
+    this.flash(`CONTRACT  ·  ${def.title}  ·  $${def.reward}`);
+  }
+
+  private updateContract(): void {
+    if (!this.contract) return;
+    const { def, stage } = this.contract;
+    const targetId = stage === "pickup" ? def.pickupLandmark : def.dropLandmark;
+    const mark = this.world.landmarks.find((l) => l.id === targetId);
+    if (!mark) return;
+    const d = Math.hypot(this.player.x - (mark.doorX + 0.5) * TILE, this.player.z - (mark.doorY + 0.5) * TILE);
+    if (d > 50) return;
+    if (stage === "pickup") {
+      this.contract = { def, stage: "drop" };
+      this.audio.uiClick();
+      this.flash(`PICKED UP  ·  now get it to the drop`);
+    } else {
+      this.contract = null;
+      // Local feedback now; the server validates and settles the real reward.
+      this.player.cash += def.reward;
+      this.player.xp += def.xp;
+      this.player.streetRep += def.rep;
+      this.audio.cash();
+      this.flash(`CONTRACT DONE  ·  ${def.title}  ·  $${def.reward}`);
+      this.pushNews(`Quiet job finished clean somewhere in Southside. Nobody's talking.`);
+      this.onContractComplete?.(def.id);
+      this.onPersist?.(this.snapshot());
+    }
+  }
+
   private updateMissions(): void {
+    this.updateContract();
     const m = nextMission(this.completed);
     if (m && m.id !== this.mission.id && this.completed.includes(this.mission.id)) {
       this.mission = { id: m.id, step: 0, raceHits: 0 };
@@ -1179,12 +1575,22 @@ export class ViceblockRuntime3D {
 
   private hud(): HudSnapshot {
     const def = [...MISSIONS, HEIST_SUNSET].find((mm) => mm.id === this.mission.id);
-    const obj = def?.objectives[Math.min(this.mission.step, def.objectives.length - 1)]?.label ?? "Explore Southside";
+    let obj = def?.objectives[Math.min(this.mission.step, def.objectives.length - 1)]?.label ?? "Explore Southside";
+    if (this.contract) {
+      obj = this.contract.stage === "pickup" ? `CONTRACT  ·  pickup: ${this.contract.def.brief}` : "CONTRACT  ·  make the drop";
+    }
     const mark = landmarkAt(this.world, this.player.x, this.player.z);
     const car = this.nearestCar(34);
     let prompt = "";
-    if (!this.player.vehicleId && car) prompt = `E  ·  DRIVE ${vehicleById(car.rt.defId).name}`;
-    else if (this.player.vehicleId) prompt = "E  ·  EXIT";
+    const nearestCop = this.cops.reduce((min, c) => Math.min(min, Math.hypot(c.x - this.player.x, c.z - this.player.z)), Infinity);
+    if (this.jailLeft > 0) prompt = "";
+    else if (this.lockpick) prompt = "E  ·  PICK when the pin is in the zone";
+    else if (this.heat.level >= 1 && !this.player.vehicleId && nearestCop < 34) prompt = "G  ·  SURRENDER (jail beats the morgue)";
+    else if (!this.player.vehicleId && car) {
+      const carDef = vehicleById(car.rt.defId);
+      const locked = carDef.security !== "none" && !this.unlocked.has(car.rt.id) && !car.rt.stolen;
+      prompt = locked ? `E  ·  LOCKPICK ${carDef.name}` : `E  ·  DRIVE ${carDef.name}`;
+    } else if (this.player.vehicleId) prompt = "E  ·  EXIT";
     else if (mark) prompt = `E  ·  ${mark.name}`;
     const drive = this.cars.find((c) => c.rt.id === this.player.vehicleId);
     return {
@@ -1212,6 +1618,15 @@ export class ViceblockRuntime3D {
       interior: null,
       username: this.username,
       others: this.remoteMeshes.size,
+      lockpick: this.lockpick
+        ? { pos: this.lockpick.pos, zoneStart: this.lockpick.zoneStart, zoneEnd: this.lockpick.zoneEnd, picksLeft: this.lockpick.picksLeft }
+        : null,
+      jailLeft: Math.ceil(this.jailLeft),
+      news: this.news,
+      lootValue: this.loot.reduce((s, l) => s + l.value, 0),
+      searchZone: this.heat.level > 0 && this.heat.hiddenTimer > 0.5,
+      gamepad: this.input.gamepadOn,
+      contractLine: this.contract ? `${this.contract.def.title}  ·  ${this.contract.stage === "pickup" ? "PICKUP" : "DROP"}` : "",
     };
   }
 
@@ -1233,6 +1648,12 @@ export class ViceblockRuntime3D {
     }
     ctx.fillStyle = "#6aa0d4";
     for (const cop of this.cops) ctx.fillRect(cop.x * scale - 1.5, cop.z * scale - 1.5, 3, 3);
+    if (this.heat.level > 0 && this.heat.hasLastKnown) {
+      ctx.strokeStyle = "rgba(106, 160, 212, 0.65)";
+      ctx.beginPath();
+      ctx.arc(this.heat.lastKnownX * scale, this.heat.lastKnownY * scale, Math.max(4, this.heat.searchRadius * scale), 0, Math.PI * 2);
+      ctx.stroke();
+    }
     ctx.fillStyle = "#e6c39a";
     for (const r of this.remoteMeshes.values()) ctx.fillRect(r.x * scale - 1.5, r.z * scale - 1.5, 3, 3);
     ctx.fillStyle = "#c45a32";

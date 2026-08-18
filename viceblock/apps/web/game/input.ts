@@ -19,10 +19,14 @@ export class GameInput {
   phoneQueued = false;
   radioQueued = false;
   assistQueued = false;
+  surrenderQueued = false;
   pointerLocked = false;
   stick: StickState = idleStick();
   aimStick: StickState = idleStick();
   mobile = false;
+  gamepadOn = false;
+  private padFire = false;
+  private padButtons = new Set<number>();
 
   attach(canvas: HTMLCanvasElement): () => void {
     this.mobile = matchMedia("(pointer: coarse)").matches || window.innerWidth < 820;
@@ -36,6 +40,7 @@ export class GameInput {
       }
       if (e.code === "KeyR") this.radioQueued = true;
       if (e.code === "KeyH") this.assistQueued = true;
+      if (e.code === "KeyG") this.surrenderQueued = true;
       if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"].includes(e.code)) e.preventDefault();
     };
     const up = (e: KeyboardEvent): void => {
@@ -93,6 +98,43 @@ export class GameInput {
     this.aimStick = releaseStick(this.aimStick);
   }
 
+  /**
+   * Polls the first connected gamepad (Xbox / PlayStation layouts share this
+   * standard mapping): left stick moves, RT/R2 fires, A/Cross interacts,
+   * Y/Triangle toggles the phone, RB/R1 cycles the radio.
+   */
+  pollGamepad(): { x: number; y: number; sprint: boolean } | null {
+    const pads = typeof navigator !== "undefined" && navigator.getGamepads ? navigator.getGamepads() : [];
+    const pad = pads.find?.((p) => p && p.connected) ?? null;
+    if (!pad) {
+      if (this.gamepadOn) {
+        this.gamepadOn = false;
+        this.padFire = false;
+      }
+      return null;
+    }
+    this.gamepadOn = true;
+    const dead = (v: number): number => (Math.abs(v) < 0.14 ? 0 : v);
+    const x = dead(pad.axes[0] ?? 0);
+    const y = dead(pad.axes[1] ?? 0);
+    this.padFire = (pad.buttons[7]?.value ?? 0) > 0.5;
+    const edge = (idx: number): boolean => {
+      const pressed = Boolean(pad.buttons[idx]?.pressed);
+      const was = this.padButtons.has(idx);
+      if (pressed && !was) {
+        this.padButtons.add(idx);
+        return true;
+      }
+      if (!pressed) this.padButtons.delete(idx);
+      return false;
+    };
+    if (edge(0)) this.interactQueued = true;
+    if (edge(3)) this.phoneQueued = true;
+    if (edge(5)) this.radioQueued = true;
+    if (Math.hypot(x, y) < 0.02) return null;
+    return { x, y, sprint: Math.hypot(x, y) > 0.85 };
+  }
+
   axis(): { x: number; y: number; sprint: boolean } {
     if (this.stick.active) {
       return {
@@ -101,6 +143,8 @@ export class GameInput {
         sprint: Math.hypot(this.stick.dx, this.stick.dy) > 0.72 || this.keys.has("ShiftLeft"),
       };
     }
+    const pad = this.pollGamepad();
+    if (pad) return pad;
     let x = 0;
     let y = 0;
     if (this.keys.has("KeyA") || this.keys.has("ArrowLeft")) x -= 1;
@@ -113,6 +157,10 @@ export class GameInput {
       y /= mag;
     }
     return { x, y, sprint: this.keys.has("ShiftLeft") || this.keys.has("ShiftRight") };
+  }
+
+  firing(): boolean {
+    return this.fire || this.padFire;
   }
 
   consumeInteract(): boolean {

@@ -910,6 +910,13 @@ export class ViceblockRuntime {
       interior: this.interior ? sanitizeText(this.interior.name, 28) : null,
       username: this.username,
       others: this.remotes.length,
+      lockpick: null,
+      jailLeft: 0,
+      news: "",
+      lootValue: 0,
+      searchZone: false,
+      gamepad: false,
+      contractLine: "",
     };
   }
 

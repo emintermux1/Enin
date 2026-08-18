@@ -34,6 +34,13 @@ const EMPTY: HudSnapshot = {
   interior: null,
   username: "rookie",
   others: 0,
+  lockpick: null,
+  jailLeft: 0,
+  news: "",
+  lootValue: 0,
+  searchZone: false,
+  gamepad: false,
+  contractLine: "",
 };
 
 export function GameShell() {
@@ -93,7 +100,16 @@ export function GameShell() {
         method: "POST",
         headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
         body: JSON.stringify({ missionId }),
-      });
+      }).catch(() => undefined);
+    };
+    game.onContractComplete = (contractId) => {
+      const token = sessionRef.current;
+      if (!token) return;
+      void fetch("/api/contract/complete", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify({ contractId }),
+      }).catch(() => undefined);
     };
     return () => {
       game.detach();
@@ -149,6 +165,22 @@ export function GameShell() {
       setStarted(true);
     } catch (e) {
       setBootError(e instanceof Error ? e.message : "boot failed");
+    }
+  }
+
+  async function pullContract(): Promise<void> {
+    const token = sessionRef.current;
+    const g = gameRef.current;
+    if (!token || !g || g.contract) return;
+    try {
+      const res = await fetch("/api/contract/start", {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}` },
+      });
+      const data = (await res.json()) as { contract?: Parameters<typeof g.startContract>[0] };
+      if (res.ok && data.contract) g.startContract(data.contract);
+    } catch {
+      /* offline: contracts simply unavailable */
     }
   }
 
@@ -238,7 +270,8 @@ export function GameShell() {
               {hud.musicOn ? "ON AIR" : "TAP FOR MUSIC"} · {hud.station}
             </button>
             <div className="meta">
-              {hud.dayLabel} · {hud.weather} · {hud.others} nearby
+              {hud.dayLabel} · {hud.weather} · {hud.others} nearby{hud.gamepad ? " · PAD" : ""}
+              {hud.searchZone ? " · SEARCH ZONE" : ""}
             </div>
           </div>
           <div className="hud-br">
@@ -252,6 +285,44 @@ export function GameShell() {
           {!hud.inVehicle && <div className="crosshair" />}
           {hud.prompt ? <div className="prompt">{hud.prompt}</div> : null}
           {hud.toast ? <div className="toast">{hud.toast}</div> : null}
+          {hud.news ? <div className="news">NOVA NEWS · {hud.news}</div> : null}
+          {hud.lootValue > 0 ? <div className="loot">HOT GOODS ${hud.lootValue} · fence at Painted Door</div> : null}
+
+          {hud.lockpick && (
+            <div
+              className="lockpick"
+              onPointerDown={() => {
+                const g = gameRef.current;
+                if (g) g.input.interactQueued = true;
+              }}
+            >
+              <p>LOCKPICK · picks left {hud.lockpick.picksLeft} · tap / E in the zone</p>
+              <div className="track">
+                <i
+                  className="zone"
+                  style={{ left: `${hud.lockpick.zoneStart * 100}%`, width: `${(hud.lockpick.zoneEnd - hud.lockpick.zoneStart) * 100}%` }}
+                />
+                <i className="pin" style={{ left: `${hud.lockpick.pos * 100}%` }} />
+              </div>
+            </div>
+          )}
+
+          {hud.jailLeft > 0 && (
+            <div className="jail">
+              <h2>SOUTHSIDE HOLDING</h2>
+              <p>Processing takes {hud.jailLeft}s. Contraband confiscated, record updated.</p>
+              <button
+                type="button"
+                onClick={() => {
+                  const g = gameRef.current;
+                  if (g && !g.payBail()) g.audio.uiClick();
+                }}
+              >
+                PAY BAIL · $120
+              </button>
+              <p className="fine">Or sit tight. Jail beats the $100 hospital bill.</p>
+            </div>
+          )}
           {hud.dialogue ? (
             <div className="talk">
               <b>{hud.dialogue.who}</b>
@@ -385,11 +456,20 @@ export function GameShell() {
               </nav>
               <section>
                 {phoneTab === "jobs" && (
-                  <p>
-                    Active: {hud.objective}
-                    <br />
-                    Street Rep {hud.streetRep} · LV {hud.level}
-                  </p>
+                  <div>
+                    <p>
+                      Active: {hud.objective}
+                      <br />
+                      Street Rep {hud.streetRep} · LV {hud.level}
+                    </p>
+                    {hud.contractLine ? (
+                      <p>Contract: {hud.contractLine}</p>
+                    ) : (
+                      <button type="button" className="pull" onClick={() => void pullContract()}>
+                        PULL A CONTRACT
+                      </button>
+                    )}
+                  </div>
                 )}
                 {phoneTab === "map" && <p>Southside grid. Yellow jobs. Blue cops. Hide in alleys and Maya&apos;s.</p>}
                 {phoneTab === "crew" && <p>Crews unlock after Port Authority. Cupsey already thinks you&apos;re late.</p>}
@@ -402,7 +482,8 @@ export function GameShell() {
                 )}
                 {phoneTab === "profile" && (
                   <p>
-                    {hud.username}
+                    {hud.username} ·{" "}
+                    {hud.streetRep >= 40 ? "STREET KING" : hud.streetRep >= 15 ? "GETAWAY DRIVER" : hud.level >= 3 ? "UP-AND-COMER" : "FRESH OFF THE BUS"}
                     <br />
                     Guest until you connect. NFTs never drop on death.
                   </p>
@@ -597,6 +678,112 @@ export function GameShell() {
         .toast {
           top: 22%;
           color: #e6c39a;
+        }
+        .news {
+          position: absolute;
+          top: 58px;
+          left: 50%;
+          transform: translateX(-50%);
+          max-width: 80vw;
+          background: rgba(196, 90, 50, 0.14);
+          border: 1px solid rgba(196, 90, 50, 0.5);
+          color: #e6c39a;
+          padding: 6px 12px;
+          font-size: 12px;
+          letter-spacing: 0.06em;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .loot {
+          position: absolute;
+          right: 18px;
+          bottom: 96px;
+          font-size: 11px;
+          color: #e0a030;
+          background: rgba(18, 12, 10, 0.72);
+          padding: 5px 8px;
+          letter-spacing: 0.06em;
+        }
+        .lockpick {
+          position: absolute;
+          left: 50%;
+          top: 42%;
+          transform: translate(-50%, -50%);
+          width: min(420px, 84vw);
+          background: rgba(14, 9, 7, 0.92);
+          border: 1px solid #6a4a38;
+          padding: 14px;
+          touch-action: none;
+        }
+        .lockpick p {
+          margin: 0 0 10px;
+          font-size: 12px;
+          letter-spacing: 0.08em;
+          color: #d8c4ae;
+        }
+        .lockpick .track {
+          position: relative;
+          height: 22px;
+          background: #2a2018;
+        }
+        .lockpick .zone {
+          position: absolute;
+          top: 0;
+          bottom: 0;
+          background: rgba(122, 168, 116, 0.55);
+        }
+        .lockpick .pin {
+          position: absolute;
+          top: -3px;
+          bottom: -3px;
+          width: 4px;
+          margin-left: -2px;
+          background: #f3e6d2;
+        }
+        .jail {
+          position: absolute;
+          left: 50%;
+          top: 50%;
+          transform: translate(-50%, -50%);
+          width: min(380px, 86vw);
+          background: rgba(10, 8, 12, 0.94);
+          border: 1px solid #8aa0b4;
+          padding: 20px;
+          text-align: center;
+          z-index: 8;
+        }
+        .jail h2 {
+          font-family: var(--font-display), sans-serif;
+          margin: 0 0 8px;
+          letter-spacing: 0.1em;
+        }
+        .jail p {
+          color: #d8c4ae;
+          font-size: 13px;
+        }
+        .jail .fine {
+          color: #8a7564;
+          font-size: 11px;
+        }
+        .jail button {
+          background: #c45a32;
+          color: #1a1410;
+          border: 0;
+          padding: 10px 16px;
+          font-weight: 800;
+          letter-spacing: 0.08em;
+          cursor: pointer;
+          margin: 8px 0;
+        }
+        .pull {
+          background: #c45a32;
+          color: #1a1410;
+          border: 0;
+          padding: 8px 12px;
+          font-weight: 700;
+          letter-spacing: 0.08em;
+          cursor: pointer;
         }
         .talk {
           position: absolute;
