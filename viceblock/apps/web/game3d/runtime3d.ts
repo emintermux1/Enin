@@ -211,6 +211,9 @@ export class ViceblockRuntime3D {
   walletNfts = 0;
   private chainCarSpawned = false;
   private pickFireHeld = false;
+  private clock = 0;
+  /** Car id → clock time until which its alarm blocks another pick attempt. */
+  private alarmLockout = new Map<string, number>();
 
   onHud?: (h: HudSnapshot) => void;
   onPersist?: (s: PlayerSave) => void;
@@ -650,6 +653,7 @@ export class ViceblockRuntime3D {
   // ---------------------------------------------------------------- update
 
   private update(dt: number): void {
+    this.clock += dt;
     this.time = (this.time + dt * WORLD_CONFIG.hoursPerRealSecond * 3600) % 24;
     this.weatherT += dt;
     if (this.weatherT > WORLD_CONFIG.weatherCycleSeconds) {
@@ -693,6 +697,8 @@ export class ViceblockRuntime3D {
           this.enterCar(car);
         } else if (this.lockpick.alarmed) {
           car.rt.alarmed = true;
+          // A blaring alarm keeps the car too hot to touch for a while.
+          this.alarmLockout.set(car.rt.id, this.clock + 45);
           this.audio.alarm();
           this.reportCrime("lockpick-alarm", 1);
           this.flash("ALARM  ·  pick snapped, whole block heard it");
@@ -1115,11 +1121,18 @@ export class ViceblockRuntime3D {
     // Contraband is confiscated but you keep your cash minus processing.
     this.loot = [];
     this.player.vehicleId = null;
+    this.interiorMode = null;
+    this.lockpick = null;
+    this.lockpickCar = null;
     this.player.cash = Math.max(0, this.player.cash - 60);
     const precinct = this.world.landmarks.find((l) => l.id === "police");
     if (precinct) {
+      // Release onto the open road south of the precinct, facing away from
+      // the building, so the camera has clear space and the exit is obvious.
       this.player.x = (precinct.doorX + 0.5) * TILE;
-      this.player.z = (precinct.doorY + 1.5) * TILE;
+      this.player.z = (precinct.doorY + 3.5) * TILE;
+      this.player.heading = Math.PI / 2;
+      this.player.camYaw = 0;
     }
     this.flash(msg);
     this.audio.wanted();
@@ -1288,6 +1301,11 @@ export class ViceblockRuntime3D {
         const def = vehicleById(car.rt.defId);
         // Security tiers: cheap cars open right up; nicer rides need a pick.
         if (def.security !== "none" && !this.unlocked.has(car.rt.id) && !car.rt.stolen) {
+          const lockedOut = (this.alarmLockout.get(car.rt.id) ?? 0) > this.clock;
+          if (lockedOut) {
+            this.flash("ALARM RINGING  ·  too hot right now, come back in a minute");
+            return;
+          }
           this.lockpick = createLockpick(def.security);
           this.lockpickCar = car;
           this.pickFireHeld = this.input.firing();
@@ -1316,6 +1334,10 @@ export class ViceblockRuntime3D {
   }
 
   private useLandmark(mark: Landmark): void {
+    if (mark.id === "police") {
+      this.flash(this.heat.level > 0 ? "NCPD  ·  bold of you to knock" : "NCPD  ·  nothing for you here, keep moving");
+      return;
+    }
     if (mark.id === "coral-mart") return this.enterMart();
     if (mark.id === "jewelry") return this.robJewelry();
     if (mark.id === "race-start") return this.startRace();
@@ -1911,10 +1933,15 @@ export class ViceblockRuntime3D {
     this.player.z = z;
   }
 
+  private debugSpawnToggle = false;
   debugSpawnCar(): void {
-    const rt = createVehicleRuntime("mirage", this.player.x + 40, this.player.z, 0, "#2f6f78");
+    // Alternate an open beater and a locked Mirage so both paths are testable.
+    this.debugSpawnToggle = !this.debugSpawnToggle;
+    const defId = this.debugSpawnToggle ? "sparrow" : "mirage";
+    const color = this.debugSpawnToggle ? "#a05a2c" : "#2f6f78";
+    const rt = createVehicleRuntime(defId, this.player.x + 40, this.player.z, 0, color);
     rt.id = `debug-${Math.random().toString(36).slice(2, 6)}`;
-    this.cars.push({ rt, mesh: this.makeCarMesh(rt.id, "#2f6f78", false), smoke: 0 });
+    this.cars.push({ rt, mesh: this.makeCarMesh(rt.id, color, false), smoke: 0 });
   }
 
   debugSetHeat(level: number): void {
@@ -1952,7 +1979,8 @@ export class ViceblockRuntime3D {
     else if (!this.player.vehicleId && car) {
       const carDef = vehicleById(car.rt.defId);
       const locked = carDef.security !== "none" && !this.unlocked.has(car.rt.id) && !car.rt.stolen;
-      prompt = locked ? `E  ·  LOCKPICK ${carDef.name}` : `E  ·  DRIVE ${carDef.name}`;
+      const lockedOut = (this.alarmLockout.get(car.rt.id) ?? 0) > this.clock;
+      prompt = locked ? (lockedOut ? `${carDef.name}  ·  ALARM RINGING` : `E  ·  LOCKPICK ${carDef.name}`) : `E  ·  DRIVE ${carDef.name}`;
     } else if (this.player.vehicleId) prompt = "E  ·  EXIT";
     else if (mark) prompt = `E  ·  ${mark.name}`;
     const drive = this.cars.find((c) => c.rt.id === this.player.vehicleId);
