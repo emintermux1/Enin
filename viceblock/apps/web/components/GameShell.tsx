@@ -46,9 +46,18 @@ const EMPTY: HudSnapshot = {
   raceBestMs: 0,
 };
 
+function xpPct(xp: number, level: number): number {
+  // Mirrors the runtime's level curve: level = floor(1 + sqrt(xp / 180)).
+  const base = 180 * (level - 1) ** 2;
+  const next = 180 * level ** 2;
+  if (next <= base) return 0;
+  return Math.max(0, Math.min(100, ((xp - base) / (next - base)) * 100));
+}
+
 export function GameShell() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const minimapRef = useRef<HTMLCanvasElement>(null);
+  const bigMapRef = useRef<HTMLCanvasElement>(null);
   const gameRef = useRef<ViceblockRuntime3D | null>(null);
   const sessionRef = useRef("");
   const [hud, setHud] = useState<HudSnapshot>(EMPTY);
@@ -146,6 +155,17 @@ export function GameShell() {
     }, 800);
     return () => window.clearInterval(t);
   }, [started, session]);
+
+  useEffect(() => {
+    if (!hud.phoneOpen || phoneTab !== "map") return;
+    const draw = (): void => {
+      const c = bigMapRef.current;
+      if (c) gameRef.current?.drawMapCanvas(c);
+    };
+    draw();
+    const t = window.setInterval(draw, 500);
+    return () => window.clearInterval(t);
+  }, [hud.phoneOpen, phoneTab]);
 
   async function enterCity(): Promise<void> {
     setBootError("");
@@ -256,7 +276,7 @@ export function GameShell() {
             ENTER SOUTHSIDE
           </button>
           <p className="hint">
-            WASD walk · Shift sprint · Space jump/handbrake · E interact · click shoot · right-drag camera · R radio · F phone · H assist
+            WASD walk · Shift sprint · Space jump/handbrake · E interact · G surrender · click shoot · right-drag camera · R radio · F phone · H assist
           </p>
           {bootError ? <p className="err">{sanitizeText(bootError, 80)}</p> : null}
         </div>
@@ -270,7 +290,7 @@ export function GameShell() {
           </div>
           <div className="hud-tr">
             <div className="cash">${hud.cash}</div>
-            <div className={`heat h${hud.heat}`}>
+            <div className={`heat h${hud.heat}${hud.wantedFlash ? " hot" : ""}`}>
               {Array.from({ length: 5 }, (_, i) => (
                 <span key={i} className={i < hud.heat ? "on" : ""} />
               ))}
@@ -298,10 +318,14 @@ export function GameShell() {
               <i className="hp" style={{ width: `${hud.health}%` }} />
               <i className="ar" style={{ width: `${hud.armor}%` }} />
             </div>
+            <div className="xpbar">
+              <i style={{ width: `${xpPct(hud.xp, hud.level)}%` }} />
+            </div>
             <div className="gun">
-              {hud.inVehicle ? `RIDE ${hud.vehicleHp}%` : `${hud.weapon}${hud.ammo > 0 ? ` · ${hud.ammo}` : ""}`}
+              LV {hud.level} · {hud.inVehicle ? `RIDE ${hud.vehicleHp}%` : `${hud.weapon}${hud.ammo > 0 ? ` · ${hud.ammo}` : ""}`}
             </div>
           </div>
+          {hud.health < 35 && hud.jailLeft <= 0 ? <div className="vignette" /> : null}
           <canvas ref={minimapRef} width={132} height={132} className="minimap" />
           {!hud.inVehicle && <div className="crosshair" />}
           {hud.prompt ? <div className="prompt">{hud.prompt}</div> : null}
@@ -492,7 +516,12 @@ export function GameShell() {
                     )}
                   </div>
                 )}
-                {phoneTab === "map" && <p>Southside grid. Yellow jobs. Blue cops. Hide in alleys and Maya&apos;s.</p>}
+                {phoneTab === "map" && (
+                  <div>
+                    <canvas ref={bigMapRef} width={256} height={256} className="bigmap" />
+                    <p className="legend">gold = jobs · ring = objective · blue = cops · red = you</p>
+                  </div>
+                )}
                 {phoneTab === "crew" && <p>Crews unlock after Port Authority. Cupsey already thinks you&apos;re late.</p>}
                 {phoneTab === "bank" && (
                   <div>
@@ -662,6 +691,40 @@ export function GameShell() {
         .heat.h4 span.on,
         .heat.h5 span.on {
           background: #c45a32;
+        }
+        .heat.hot span.on {
+          animation: pulse 0.6s ease-in-out infinite;
+          box-shadow: 0 0 8px rgba(224, 80, 48, 0.9);
+        }
+        .vignette {
+          position: absolute;
+          inset: 0;
+          pointer-events: none;
+          background: radial-gradient(ellipse at center, transparent 52%, rgba(160, 24, 16, 0.42) 100%);
+          animation: pulse 1.4s ease-in-out infinite;
+          z-index: 2;
+        }
+        .xpbar {
+          height: 3px;
+          margin-top: 4px;
+          background: #2a2018;
+        }
+        .xpbar i {
+          display: block;
+          height: 100%;
+          background: #e0a030;
+          transition: width 0.4s ease;
+        }
+        .bigmap {
+          display: block;
+          width: 100%;
+          border: 1px solid #6a4a38;
+          image-rendering: pixelated;
+        }
+        .legend {
+          font-size: 10px;
+          color: #8a7564;
+          margin: 6px 0 0;
         }
         .radio {
           border: 1px solid #c45a32;

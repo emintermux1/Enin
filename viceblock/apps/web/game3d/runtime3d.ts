@@ -214,6 +214,7 @@ export class ViceblockRuntime3D {
   private clock = 0;
   /** Car id → clock time until which its alarm blocks another pick attempt. */
   private alarmLockout = new Map<string, number>();
+  private beaconMesh: Mesh | null = null;
 
   onHud?: (h: HudSnapshot) => void;
   onPersist?: (s: PlayerSave) => void;
@@ -629,6 +630,20 @@ export class ViceblockRuntime3D {
       }
       return;
     }
+    if (near(cx + 50, cz + 24, 40)) {
+      // The only legit armor source in the district.
+      if (this.player.armor >= 95) {
+        this.flash("CLERK  ·  you're already wearing one");
+      } else if (this.player.cash >= 150) {
+        this.player.cash -= 150;
+        this.player.armor = Math.min(100, this.player.armor + 60);
+        this.audio.cash();
+        this.flash("KEVLAR VEST  ·  +60 armor  ·  $150");
+      } else {
+        this.flash("CLERK  ·  vest is $150, no layaway");
+      }
+      return;
+    }
     if (near(cx, cz + half - 24, 40)) {
       this.exitInterior();
       return;
@@ -642,6 +657,7 @@ export class ViceblockRuntime3D {
       [cx + 34, cz - half + 34, 34, "E  ·  ROB THE TILL"],
       [cx, cz - half + 34, 40, "E  ·  BUY MEAL $15 (+35 hp)"],
       [cx - 50, cz + 24, 40, "E  ·  COFFEE $8 (sprint boost)"],
+      [cx + 50, cz + 24, 40, "E  ·  VEST $150 (+60 armor)"],
       [cx, cz + half - 24, 40, "E  ·  LEAVE"],
     ];
     for (const [x, z, r, label] of spots) {
@@ -754,6 +770,7 @@ export class ViceblockRuntime3D {
       this.flash(assistHint(this.heat.level, this.heat.hiddenTimer, hideSpotNear(this.world, this.player.x, this.player.z)) || "AI ASSIST  ·  follow the trimmed buildings — bright trims are jobs");
     }
 
+    this.updateBeacon();
     this.updatePlayer(dt);
     this.updateCars(dt);
     this.updateActors(dt);
@@ -1119,6 +1136,59 @@ export class ViceblockRuntime3D {
     return car ? car.rt.defId : "";
   }
 
+  /**
+   * Where should the player be heading right now? Contracts win, then the
+   * active mission objective (npc/pickup targets alias to their buildings).
+   * Races render their own checkpoints, so they yield no waypoint here.
+   */
+  private waypointPos(): { x: number; z: number } | null {
+    if (this.race) return null;
+    if (this.contract) {
+      const id = this.contract.stage === "pickup" ? this.contract.def.pickupLandmark : this.contract.def.dropLandmark;
+      return this.landmarkDoor(id);
+    }
+    const def = [...MISSIONS, HEIST_SUNSET].find((m) => m.id === this.mission.id);
+    if (!def) return null;
+    const target = def.objectives[Math.min(this.mission.step, def.objectives.length - 1)]?.targetId ?? "";
+    const alias: Record<string, string> = {
+      rico: "rico-hideout",
+      phone: "rico-hideout",
+      maya: "maya-garage",
+      cargo: "warehouse",
+      race: "race-start",
+    };
+    const id = alias[target] ?? target;
+    return id ? this.landmarkDoor(id) : null;
+  }
+
+  private landmarkDoor(id: string): { x: number; z: number } | null {
+    const lm = this.world.landmarks.find((l) => l.id === id);
+    return lm ? { x: (lm.doorX + 0.5) * TILE, z: (lm.doorY + 0.5) * TILE } : null;
+  }
+
+  /** A soft light pillar over the current objective so it reads at street level. */
+  private updateBeacon(): void {
+    const wp = this.interiorMode ? null : this.waypointPos();
+    if (!wp) {
+      this.beaconMesh?.setEnabled(false);
+      return;
+    }
+    if (!this.beaconMesh) {
+      const m = MeshBuilder.CreateCylinder("waypoint-beacon", { diameter: 24, height: 260, tessellation: 10 }, this.scene);
+      const mat = new StandardMaterial("waypoint-beacon-mat", this.scene);
+      mat.emissiveColor = Color3.FromHexString("#e0a030");
+      mat.diffuseColor = Color3.Black();
+      mat.disableLighting = true;
+      mat.alpha = 0.14;
+      m.material = mat;
+      m.isPickable = false;
+      this.beaconMesh = m;
+    }
+    this.beaconMesh.setEnabled(true);
+    this.beaconMesh.position.set(wp.x, 120, wp.z);
+    (this.beaconMesh.material as StandardMaterial).alpha = 0.1 + 0.06 * Math.sin(this.clock * 3);
+  }
+
   private arrest(msg: string): void {
     this.jailLeft = 40;
     this.surrenderT = 0;
@@ -1434,11 +1504,16 @@ export class ViceblockRuntime3D {
         car.rt.burning = false;
         this.player.cash = Math.max(0, this.player.cash - ECONOMY_CONFIG.gasRepairCost);
         this.flash(`PUMP  ·  topped off, $${ECONOMY_CONFIG.gasRepairCost}`);
-      } else if (this.player.weapon === "pistol") {
+      } else if (this.player.weapon !== "fists") {
+        // Any gun can restock here — SMG boxes are just bigger.
+        const rounds = this.player.weapon === "smg" ? 30 : 12;
         if (this.player.cash >= 25) {
           this.player.cash -= 25;
-          this.player.ammo += 12;
-          this.flash("AMMO  ·  +12, $25");
+          this.player.ammo += rounds;
+          this.audio.cash();
+          this.flash(`AMMO  ·  +${rounds}, $25`);
+        } else {
+          this.flash("PUMP  ·  ammo box is $25, friend");
         }
       }
       return;
@@ -1973,6 +2048,11 @@ export class ViceblockRuntime3D {
       obj = this.contract.stage === "pickup" ? `CONTRACT  ·  pickup: ${this.contract.def.brief}` : "CONTRACT  ·  make the drop";
     }
     if (this.race) obj = `RACE  ·  ${this.race.checkpoint}/${RACE_CPS.length}  ·  ${this.race.t.toFixed(1)}s`;
+    const wp = this.waypointPos();
+    if (wp && !this.race) {
+      const meters = Math.round(Math.hypot(this.player.x - wp.x, this.player.z - wp.z) * 0.31);
+      if (meters > 12) obj += `  ·  ${meters}m`;
+    }
     const mark = landmarkAt(this.world, this.player.x, this.player.z);
     const car = this.nearestCar(34);
     let prompt = "";
@@ -2053,6 +2133,16 @@ export class ViceblockRuntime3D {
       ctx.arc(this.heat.lastKnownX * scale, this.heat.lastKnownY * scale, Math.max(4, this.heat.searchRadius * scale), 0, Math.PI * 2);
       ctx.stroke();
     }
+    const wp = this.waypointPos();
+    if (wp) {
+      const pulse = 4 + Math.sin(this.clock * 4) * 1.5;
+      ctx.strokeStyle = "#e0a030";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(wp.x * scale, wp.z * scale, pulse, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.lineWidth = 1;
+    }
     ctx.fillStyle = "#e6c39a";
     for (const r of this.remoteMeshes.values()) ctx.fillRect(r.x * scale - 1.5, r.z * scale - 1.5, 3, 3);
     ctx.fillStyle = "#c45a32";
@@ -2066,6 +2156,43 @@ export class ViceblockRuntime3D {
     ctx.moveTo(this.player.x * scale, this.player.z * scale);
     ctx.lineTo(this.player.x * scale + yawX * 7, this.player.z * scale + yawZ * 7);
     ctx.stroke();
+  }
+
+  /** Full district map with labels for the phone's map app. */
+  drawMapCanvas(c: HTMLCanvasElement): void {
+    const ctx = c.getContext("2d");
+    if (!ctx) return;
+    const s = c.width;
+    const scale = s / (MAP_W * TILE);
+    ctx.fillStyle = "#1c1512";
+    ctx.fillRect(0, 0, s, s);
+    ctx.fillStyle = "#38322c";
+    for (const yTile of [10, 22, 36, 50, 64]) ctx.fillRect(0, yTile * TILE * scale, s, 3 * TILE * scale);
+    for (const xTile of [8, 22, 36, 50, 64, 80]) ctx.fillRect(xTile * TILE * scale, 0, 3 * TILE * scale, s);
+    ctx.font = "8px monospace";
+    for (const lm of this.world.landmarks) {
+      const x = lm.x * TILE * scale;
+      const y = lm.y * TILE * scale;
+      ctx.fillStyle = "#e0a030";
+      ctx.fillRect(x, y, Math.max(3, lm.w * TILE * scale * 0.6), Math.max(3, lm.h * TILE * scale * 0.6));
+      ctx.fillStyle = "#d8c4ae";
+      ctx.fillText(lm.name.slice(0, 14), Math.min(x, s - 60), Math.max(8, y - 2));
+    }
+    const wp = this.waypointPos();
+    if (wp) {
+      ctx.strokeStyle = "#e0a030";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(wp.x * scale, wp.z * scale, 7, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.lineWidth = 1;
+    }
+    ctx.fillStyle = "#6aa0d4";
+    for (const cop of this.cops) ctx.fillRect(cop.x * scale - 2, cop.z * scale - 2, 4, 4);
+    ctx.fillStyle = "#c45a32";
+    ctx.beginPath();
+    ctx.arc(this.player.x * scale, this.player.z * scale, 4, 0, Math.PI * 2);
+    ctx.fill();
   }
 }
 
