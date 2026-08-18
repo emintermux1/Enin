@@ -1174,19 +1174,21 @@ export class ViceblockRuntime3D {
       return;
     }
     if (!this.beaconMesh) {
-      const m = MeshBuilder.CreateCylinder("waypoint-beacon", { diameter: 24, height: 260, tessellation: 10 }, this.scene);
+      const m = MeshBuilder.CreateCylinder("waypoint-beacon", { diameter: 36, height: 320, tessellation: 10 }, this.scene);
       const mat = new StandardMaterial("waypoint-beacon-mat", this.scene);
-      mat.emissiveColor = Color3.FromHexString("#e0a030");
+      mat.emissiveColor = Color3.FromHexString("#f0b040");
       mat.diffuseColor = Color3.Black();
       mat.disableLighting = true;
-      mat.alpha = 0.14;
+      mat.alpha = 0.3;
       m.material = mat;
       m.isPickable = false;
+      // Fog and night lighting must never swallow the objective marker.
+      m.applyFog = false;
       this.beaconMesh = m;
     }
     this.beaconMesh.setEnabled(true);
-    this.beaconMesh.position.set(wp.x, 120, wp.z);
-    (this.beaconMesh.material as StandardMaterial).alpha = 0.1 + 0.06 * Math.sin(this.clock * 3);
+    this.beaconMesh.position.set(wp.x, 150, wp.z);
+    (this.beaconMesh.material as StandardMaterial).alpha = 0.26 + 0.1 * Math.sin(this.clock * 3);
   }
 
   private arrest(msg: string): void {
@@ -2135,12 +2137,14 @@ export class ViceblockRuntime3D {
     }
     const wp = this.waypointPos();
     if (wp) {
-      const pulse = 4 + Math.sin(this.clock * 4) * 1.5;
-      ctx.strokeStyle = "#e0a030";
-      ctx.lineWidth = 1.5;
+      const pulse = 5 + Math.sin(this.clock * 4) * 2;
+      ctx.strokeStyle = "#f0b040";
+      ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.arc(wp.x * scale, wp.z * scale, pulse, 0, Math.PI * 2);
       ctx.stroke();
+      ctx.fillStyle = "#f0b040";
+      ctx.fillRect(wp.x * scale - 1.5, wp.z * scale - 1.5, 3, 3);
       ctx.lineWidth = 1;
     }
     ctx.fillStyle = "#e6c39a";
