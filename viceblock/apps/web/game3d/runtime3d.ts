@@ -25,12 +25,14 @@ import {
   HEIST_SUNSET,
   lootLabel,
   MISSIONS,
+  missionRating,
   nextMission,
   normalizeAngle,
   damageStage,
   performanceMultipliers,
   PLAYER_CONFIG,
   POLICE_CONFIG,
+  raceResult,
   recognitionRange,
   shootTire,
   surfaceGrip,
@@ -40,6 +42,7 @@ import {
   tickVehicleExplosion,
   vehicleById,
   VEHICLE_CONFIG,
+  weaponById,
   witnessReport,
   WORLD_CONFIG,
   type ContractDef,
@@ -49,6 +52,7 @@ import {
   type LockpickState,
   type LootItem,
   type VehicleRuntime,
+  type WeaponId,
   type WorldEventDef,
 } from "@viceblock/game-core";
 import {
@@ -82,6 +86,8 @@ interface Actor {
   searchT?: number;
   searchX?: number;
   searchZ?: number;
+  /** Seconds left filming the player instead of fleeing. */
+  recording?: number;
 }
 
 interface CarEntity {
@@ -107,6 +113,9 @@ const RACE_CPS = [
   { x: 36 * TILE, z: 24 * TILE },
   { x: 50 * TILE, z: 65 * TILE },
 ];
+
+/** Interiors are separate rooms built high above the city grid. */
+const INTERIOR_Y = 400;
 
 export class ViceblockRuntime3D {
   canvas: HTMLCanvasElement;
@@ -137,11 +146,13 @@ export class ViceblockRuntime3D {
     xp: 0,
     streetRep: 0,
     vehicleId: null as string | null,
-    weapon: "fists" as "fists" | "pistol",
+    weapon: "fists" as WeaponId,
     ammo: 36,
     phone: false,
     crate: false,
     grounded: true,
+    sprintBoost: 0,
+    raceBestMs: 0,
   };
 
   cars: CarEntity[] = [];
@@ -189,6 +200,14 @@ export class ViceblockRuntime3D {
   contract: { def: ContractDef; stage: "pickup" | "drop" } | null = null;
   private surrenderT = 0;
   private gpsT = 0;
+  /** Walkable interior state: rooms are built high above the city. */
+  private interiorMode: { id: string; returnX: number; returnZ: number } | null = null;
+  private martRoom: { cx: number; cz: number; half: number } | null = null;
+  private tow: { mesh: Mesh; targetId: string } | null = null;
+  private towCooldown = 20;
+  private race: { checkpoint: number; t: number; marker: Mesh } | null = null;
+  private missionStat = { t: 0, dmg: 0, maxHeat: 0 };
+  private fenceOfferT = 0;
 
   onHud?: (h: HudSnapshot) => void;
   onPersist?: (s: PlayerSave) => void;
@@ -313,6 +332,9 @@ export class ViceblockRuntime3D {
     this.completed = save.missionsCompleted;
     this.mission.id = save.activeMissionId ?? nextMission(save.missionsCompleted)?.id ?? "fresh-off-the-bus";
     this.settings = { ...DEFAULT_SETTINGS, ...save.settings };
+    this.player.raceBestMs = save.raceBestMs ?? 0;
+    if (save.inventory.some((i) => i.id === "smg")) this.player.weapon = "smg";
+    else if (save.inventory.some((i) => i.id === "pistol")) this.player.weapon = "pistol";
     this.audio.setLevels(this.settings);
   }
 
@@ -355,7 +377,10 @@ export class ViceblockRuntime3D {
       x: this.player.x,
       y: this.player.z,
       heading: this.player.heading,
-      inventory: this.player.weapon === "pistol" ? [{ id: "pistol", kind: "weapon", name: "Street Pistol", qty: 1, rarity: "common" }] : [],
+      inventory:
+        this.player.weapon === "fists"
+          ? []
+          : [{ id: this.player.weapon, kind: "weapon", name: weaponById(this.player.weapon).name, qty: 1, rarity: this.player.weapon === "smg" ? "rare" : "common" }],
       ownedVehicleIds: [],
       apartmentId: "apartment",
       missionsCompleted: this.completed,
@@ -363,6 +388,7 @@ export class ViceblockRuntime3D {
       collectibles: [],
       achievements: [],
       settings: this.settings,
+      raceBestMs: this.player.raceBestMs,
       updatedAt: Date.now(),
     };
   }
@@ -484,6 +510,8 @@ export class ViceblockRuntime3D {
         talk,
       });
     }
+    this.buildMartInterior();
+
     const colors = ["#c4a07a", "#8a6a54", "#d8c8b0", "#6a4a3a", "#b08870"];
     const count = 36;
     for (let i = 0; i < count; i++) {
@@ -502,6 +530,113 @@ export class ViceblockRuntime3D {
         mesh: this.makeHumanoid(`c${i}`, colors[i % colors.length] ?? "#c4a07a", "#d8b890"),
       });
     }
+  }
+
+  /** A walkable Coral Mart room: shelves, a clerk behind the counter, a till. */
+  private buildMartInterior(): void {
+    const cx = 43 * TILE;
+    const cz = 45 * TILE;
+    const half = 96;
+    this.martRoom = { cx, cz, half };
+    const floor = MeshBuilder.CreateBox("mart-floor", { width: half * 2, depth: half * 2, height: 2 }, this.scene);
+    floor.material = this.material("#c8bca4");
+    floor.position = new Vector3(cx, INTERIOR_Y - 1, cz);
+    const wallMat = this.material("#7a4a38");
+    const walls: Array<[number, number, number, number]> = [
+      [cx, cz - half, half * 2, 6],
+      [cx, cz + half, half * 2, 6],
+      [cx - half, cz, 6, half * 2],
+      [cx + half, cz, 6, half * 2],
+    ];
+    walls.forEach(([x, z, w, d], i) => {
+      const wall = MeshBuilder.CreateBox(`mart-wall-${i}`, { width: w, depth: d, height: 40 }, this.scene);
+      wall.material = wallMat;
+      wall.position = new Vector3(x, INTERIOR_Y + 20, z);
+    });
+    const counter = MeshBuilder.CreateBox("mart-counter", { width: 90, depth: 18, height: 14 }, this.scene);
+    counter.material = this.material("#4a5a68");
+    counter.position = new Vector3(cx, INTERIOR_Y + 7, cz - half + 34);
+    for (let i = 0; i < 3; i++) {
+      const shelf = MeshBuilder.CreateBox(`mart-shelf-${i}`, { width: 16, depth: 90, height: 22 }, this.scene);
+      shelf.material = this.material(i % 2 ? "#8a6a4a" : "#6a8a5a");
+      shelf.position = new Vector3(cx - 50 + i * 50, INTERIOR_Y + 11, cz + 24);
+    }
+    const clerk = this.makeHumanoid("mart-clerk", "#3a6a4a", "#e6c39a");
+    clerk.position = new Vector3(cx, INTERIOR_Y + 7, cz - half + 16);
+    const till = MeshBuilder.CreateBox("mart-till", { width: 14, depth: 10, height: 8 }, this.scene);
+    till.material = this.material("#2a2c30", 0.2);
+    till.position = new Vector3(cx + 34, INTERIOR_Y + 18, cz - half + 34);
+  }
+
+  private enterMart(): void {
+    if (!this.martRoom) return;
+    this.interiorMode = { id: "coral-mart", returnX: this.player.x, returnZ: this.player.z };
+    this.player.x = this.martRoom.cx;
+    this.player.z = this.martRoom.cz + this.martRoom.half - 24;
+    this.player.vehicleId = null;
+    this.flash("CORAL MART  ·  counter buys food  ·  the till is a choice");
+    this.audio.uiClick();
+  }
+
+  private exitInterior(): void {
+    if (!this.interiorMode) return;
+    this.player.x = this.interiorMode.returnX;
+    this.player.z = this.interiorMode.returnZ;
+    this.interiorMode = null;
+    this.audio.uiClick();
+  }
+
+  /** Interior interactions resolve by proximity to furniture spots. */
+  private interactInterior(): void {
+    if (!this.interiorMode || !this.martRoom) return;
+    const { cx, cz, half } = this.martRoom;
+    const near = (x: number, z: number, r: number): boolean => Math.hypot(this.player.x - x, this.player.z - z) < r;
+    if (near(cx + 34, cz - half + 34, 34)) {
+      this.robStore();
+      this.exitInterior();
+      return;
+    }
+    if (near(cx, cz - half + 34, 40)) {
+      if (this.player.cash >= 15) {
+        this.player.cash -= 15;
+        this.player.health = Math.min(100, this.player.health + 35);
+        this.audio.cash();
+        this.flash("HOT MEAL  ·  +35 health  ·  $15");
+      } else {
+        this.flash("CLERK  ·  fifteen bucks, friend");
+      }
+      return;
+    }
+    if (near(cx - 50, cz + 24, 40)) {
+      if (this.player.cash >= 8) {
+        this.player.cash -= 8;
+        this.player.sprintBoost = 30;
+        this.audio.cash();
+        this.flash("COFFEE  ·  sprint boost 30s  ·  $8");
+      } else {
+        this.flash("MACHINE  ·  $8, exact change only");
+      }
+      return;
+    }
+    if (near(cx, cz + half - 24, 40)) {
+      this.exitInterior();
+      return;
+    }
+  }
+
+  private interiorPrompt(): string {
+    if (!this.interiorMode || !this.martRoom) return "";
+    const { cx, cz, half } = this.martRoom;
+    const spots: Array<[number, number, number, string]> = [
+      [cx + 34, cz - half + 34, 34, "E  ·  ROB THE TILL"],
+      [cx, cz - half + 34, 40, "E  ·  BUY MEAL $15 (+35 hp)"],
+      [cx - 50, cz + 24, 40, "E  ·  COFFEE $8 (sprint boost)"],
+      [cx, cz + half - 24, 40, "E  ·  LEAVE"],
+    ];
+    for (const [x, z, r, label] of spots) {
+      if (Math.hypot(this.player.x - x, this.player.z - z) < r) return label;
+    }
+    return "";
   }
 
   // ---------------------------------------------------------------- update
@@ -580,6 +715,12 @@ export class ViceblockRuntime3D {
       this.storm = false;
     }
 
+    if (this.fenceOfferT > 0) this.fenceOfferT -= dt;
+    this.missionStat.t += dt;
+    this.missionStat.maxHeat = Math.max(this.missionStat.maxHeat, this.heat.level);
+    this.updateTow(dt);
+    this.updateRace(dt);
+
     if (this.input.radioQueued) {
       this.input.radioQueued = false;
       this.audio.cycleStation();
@@ -656,7 +797,9 @@ export class ViceblockRuntime3D {
     }
     this.playerMesh.setEnabled(true);
     const axis = this.input.axis();
-    const speed = (axis.sprint ? PLAYER_CONFIG.sprintSpeed : PLAYER_CONFIG.walkSpeed) * (this.weather === "rain" ? 0.94 : 1);
+    if (this.player.sprintBoost > 0) this.player.sprintBoost -= dt;
+    const boost = this.player.sprintBoost > 0 && axis.sprint ? 1.18 : 1;
+    const speed = (axis.sprint ? PLAYER_CONFIG.sprintSpeed : PLAYER_CONFIG.walkSpeed) * boost * (this.weather === "rain" ? 0.94 : 1);
     // Camera-relative movement.
     const yaw = this.player.camYaw;
     const fx = Math.sin(yaw);
@@ -669,8 +812,15 @@ export class ViceblockRuntime3D {
     if (mag > 0.05) {
       const nx = this.player.x + (mx / mag) * Math.min(1, mag) * speed * dt;
       const nz = this.player.z + (mz / mag) * Math.min(1, mag) * speed * dt;
-      if (!blocked(this.world, nx, this.player.z, PLAYER_CONFIG.radius)) this.player.x = nx;
-      if (!blocked(this.world, this.player.x, nz, PLAYER_CONFIG.radius)) this.player.z = nz;
+      if (this.interiorMode && this.martRoom) {
+        // Interior collision is the room's walls, not the city grid.
+        const { cx, cz, half } = this.martRoom;
+        this.player.x = Math.max(cx - half + 12, Math.min(cx + half - 12, nx));
+        this.player.z = Math.max(cz - half + 12, Math.min(cz + half - 12, nz));
+      } else {
+        if (!blocked(this.world, nx, this.player.z, PLAYER_CONFIG.radius)) this.player.x = nx;
+        if (!blocked(this.world, this.player.x, nz, PLAYER_CONFIG.radius)) this.player.z = nz;
+      }
       this.player.heading = Math.atan2(mz, mx);
       this.lastFoot += dt;
       if (this.lastFoot > (axis.sprint ? 0.22 : 0.32)) {
@@ -694,9 +844,13 @@ export class ViceblockRuntime3D {
         this.player.grounded = true;
       }
     }
-    if (this.input.consumeInteract()) this.tryInteract();
-    this.tryFire(dt);
-    this.playerMesh.position.set(this.player.x, 7 + this.player.y, this.player.z);
+    if (this.input.consumeInteract()) {
+      if (this.interiorMode) this.interactInterior();
+      else this.tryInteract();
+    }
+    if (!this.interiorMode) this.tryFire(dt);
+    const elev = this.interiorMode ? INTERIOR_Y : 0;
+    this.playerMesh.position.set(this.player.x, elev + 7 + this.player.y, this.player.z);
     this.playerMesh.rotation.y = Math.PI / 2 - this.player.heading;
     if (this.player.health <= 0) this.die();
   }
@@ -711,11 +865,12 @@ export class ViceblockRuntime3D {
       const desired = Math.atan2(car.rt.vx, car.rt.vy);
       this.player.camYaw += normalizeAngle(desired - this.player.camYaw) * Math.min(1, dt * 3);
     }
+    const elev = this.interiorMode ? INTERIOR_Y : 0;
     const bx = this.player.x - Math.sin(this.player.camYaw) * dist * Math.cos(pitch);
     const bz = this.player.z - Math.cos(this.player.camYaw) * dist * Math.cos(pitch);
-    let camY = 20 + Math.sin(pitch) * dist;
+    let camY = elev + 20 + Math.sin(pitch) * dist;
     if (this.shake > 0 && this.settings.shake) camY += (Math.random() - 0.5) * this.shake;
-    const target = new Vector3(this.player.x, 12 + this.player.y, this.player.z);
+    const target = new Vector3(this.player.x, elev + 12 + this.player.y, this.player.z);
     this.camera.position = new Vector3(
       bx + (this.shake > 0 && this.settings.shake ? (Math.random() - 0.5) * this.shake : 0),
       camY,
@@ -830,7 +985,11 @@ export class ViceblockRuntime3D {
         a.mesh.position.set(a.x, 7, a.z);
         continue;
       }
-      if (a.panic > 0) {
+      if (a.recording && a.recording > 0) {
+        // Filming: stand still, face the player, phone up.
+        a.recording -= dt;
+        a.heading = Math.atan2(this.player.z - a.z, this.player.x - a.x);
+      } else if (a.panic > 0) {
         a.panic -= dt;
         a.x += Math.cos(a.heading) * 90 * dt;
         a.z += Math.sin(a.heading) * 90 * dt;
@@ -853,9 +1012,11 @@ export class ViceblockRuntime3D {
     // Suspect description: cops recognize the ride they last saw. Switching
     // cars cuts their ID range hard until they re-spot you up close.
     const sight = recognitionRange(this.heat, this.player.vehicleId ? vehicleById(this.currentDefId()).id : "", POLICE_CONFIG.sightRange);
-    const seen = this.cops.some(
-      (c) => Math.hypot(c.x - this.player.x, c.z - this.player.z) < sight && this.lineOpen(c.x, c.z, this.player.x, this.player.z),
-    );
+    const seen =
+      !this.interiorMode &&
+      this.cops.some(
+        (c) => Math.hypot(c.x - this.player.x, c.z - this.player.z) < sight && this.lineOpen(c.x, c.z, this.player.x, this.player.z),
+      );
     this.heat = tickHeat(this.heat, dt, seen, this.player.x, this.player.z, 0, this.player.vehicleId ? this.currentDefId() : "");
     let want = copCountForHeat(this.heat.level);
     if (this.crackdown && this.heat.level > 0) want = Math.min(5, want + 1);
@@ -910,7 +1071,7 @@ export class ViceblockRuntime3D {
     this.audio.setSirenDistance(Number.isFinite(nearest) ? nearest : 900);
 
     // Arrest window: cornered on foot with cops in your face.
-    const cornered = this.heat.level >= 1 && !this.player.vehicleId && nearest < 34;
+    const cornered = this.heat.level >= 1 && !this.player.vehicleId && !this.interiorMode && nearest < 34;
     if (this.input.surrenderQueued) {
       this.input.surrenderQueued = false;
       if (cornered) this.arrest("HANDS UP  ·  smart move");
@@ -998,8 +1159,34 @@ export class ViceblockRuntime3D {
     void dt;
     const stickFiring = this.input.aimStick.active && Math.hypot(this.input.aimStick.dx, this.input.aimStick.dy) > 0.35;
     const firing = this.input.firing() || stickFiring;
-    if (!firing || this.player.weapon !== "pistol") return;
-    if (this.lastShot < 0.18) return;
+    if (!firing) return;
+    const weapon = weaponById(this.player.weapon);
+    if (this.lastShot < weapon.fireInterval) return;
+
+    // Fists: a silent close-range swing.
+    if (weapon.id === "fists") {
+      this.lastShot = 0;
+      this.shake = this.settings.shake ? 2 : 0;
+      this.audio.foot(true, "metal");
+      const cop = this.cops.find((c) => Math.hypot(c.x - this.player.x, c.z - this.player.z) < weapon.range);
+      if (cop) {
+        cop.hp -= weapon.damage;
+        this.reportCrime("assault");
+        this.flash("HOOK  ·  connected");
+        return;
+      }
+      const civ = this.actors.find(
+        (a) => a.kind === "civilian" && Math.hypot(a.x - this.player.x, a.z - this.player.z) < weapon.range,
+      );
+      if (civ) {
+        civ.panic = 5;
+        civ.heading = Math.atan2(civ.z - this.player.z, civ.x - this.player.x);
+        this.reportCrime("assault");
+        this.flash("SHOVE  ·  they want no part of you");
+      }
+      return;
+    }
+
     if (this.player.ammo <= 0) {
       this.flash("CLICK  ·  empty  ·  ammo at Red Pump");
       this.lastShot = 0.05;
@@ -1031,26 +1218,32 @@ export class ViceblockRuntime3D {
       heading = assisted.heading;
     }
 
-    const range = 260;
+    // Weapon spread gives each gun a personality: pistol snaps, SMG sprays.
+    heading += (Math.random() - 0.5) * 2 * weapon.spread;
+    const range = weapon.range;
     const tx = this.player.x + Math.cos(heading) * range;
     const tz = this.player.z + Math.sin(heading) * range;
     this.spawnTracer(this.player.x, 9, this.player.z, tx, 9, tz);
+    // Muzzle flash right off the barrel.
+    this.spawnPuff(this.player.x + Math.cos(heading) * 10, 9, this.player.z + Math.sin(heading) * 10, "#f8e080");
     this.audio.gun();
-    this.shake = this.settings.shake ? 3 : 0;
+    this.shake = this.settings.shake ? (weapon.id === "smg" ? 1.6 : 3) : 0;
     this.reportCrime("gunfire");
     this.panicNear();
 
     // Hit test along the ray against cops and cars.
     for (const c of this.cops) {
       if (pointNearSegment(c.x, c.z, this.player.x, this.player.z, tx, tz, 12)) {
-        c.hp -= 34;
+        c.hp -= weapon.damage;
+        this.spawnPuff(c.x, 10, c.z, "#c43020");
         this.flash("HIT");
         break;
       }
     }
     for (const car of this.cars) {
       if (!car.rt.exploded && pointNearSegment(car.rt.x, car.rt.y, this.player.x, this.player.z, tx, tz, 16)) {
-        car.rt = applyVehicleDamage(car.rt, 22, false);
+        car.rt = applyVehicleDamage(car.rt, Math.round(weapon.damage * 0.65), false);
+        this.spawnPuff(car.rt.x, 8, car.rt.y, "#e8d8a0");
         if (Math.random() < 0.3) {
           car.rt = shootTire(car.rt);
           this.flash("TIRE  ·  shredded, she'll wander now");
@@ -1111,8 +1304,9 @@ export class ViceblockRuntime3D {
   }
 
   private useLandmark(mark: Landmark): void {
-    if (mark.id === "coral-mart") return this.robStore();
+    if (mark.id === "coral-mart") return this.enterMart();
     if (mark.id === "jewelry") return this.robJewelry();
+    if (mark.id === "race-start") return this.startRace();
     if (mark.id === "warehouse") {
       this.player.crate = true;
       this.flash("CARGO  ·  crate lifted");
@@ -1175,6 +1369,22 @@ export class ViceblockRuntime3D {
         this.flash(`FENCE  ·  ${what}  ·  $${paid} cash, no questions`);
         return;
       }
+      // No loot? The fence sells hardware. Double-knock to confirm.
+      const smg = weaponById("smg");
+      if (this.player.weapon !== "smg" && this.player.cash >= smg.price) {
+        if (this.fenceOfferT > 0) {
+          this.player.cash -= smg.price;
+          this.player.weapon = "smg";
+          this.player.ammo = Math.max(this.player.ammo, 90);
+          this.fenceOfferT = 0;
+          this.audio.cash();
+          this.flash(`FENCE  ·  ${smg.name} + 90 rounds  ·  it never happened`);
+        } else {
+          this.fenceOfferT = 5;
+          this.flash(`FENCE  ·  ${smg.name}, $${smg.price}  ·  knock again to take it`);
+        }
+        return;
+      }
       this.flash("PAINTED DOOR  ·  bring something hot and knock twice");
       return;
     }
@@ -1227,13 +1437,23 @@ export class ViceblockRuntime3D {
   }
 
   private panicNear(): void {
+    let filming = false;
     for (const a of this.actors) {
       if (a.kind === "named") continue;
       if (Math.hypot(a.x - this.player.x, a.z - this.player.z) < 180) {
-        a.panic = 4;
-        a.heading = Math.atan2(a.z - this.player.z, a.x - this.player.x);
+        // Some locals film the chaos instead of running.
+        if (Math.random() < 0.25) {
+          a.recording = 5;
+          a.panic = 0;
+          filming = true;
+        } else {
+          a.recording = 0;
+          a.panic = 4;
+          a.heading = Math.atan2(a.z - this.player.z, a.x - this.player.x);
+        }
       }
     }
+    if (filming && Math.random() < 0.5) this.flash("A LOCAL IS FILMING YOU  ·  that clip is going up tonight");
   }
 
   private enterCar(car: CarEntity): void {
@@ -1400,6 +1620,7 @@ export class ViceblockRuntime3D {
       left -= a;
     }
     this.player.health -= left;
+    this.missionStat.dmg += left;
     this.shake = 4;
   }
 
@@ -1499,10 +1720,102 @@ export class ViceblockRuntime3D {
     this.player.xp = r.xp;
     this.player.streetRep = r.streetRep;
     this.audio.cash();
-    this.flash(`JOB DONE  ·  ${def.title}  ·  $${def.cash}`);
+    const rank = missionRating(this.missionStat.t, 180, this.missionStat.dmg, this.missionStat.maxHeat);
+    this.flash(`JOB DONE  ·  ${def.title}  ·  RANK ${rank}  ·  $${def.cash}`);
+    if (rank === "S") this.pushNews(`Somebody just ran "${def.title}" flawless. Southside noticed.`);
+    this.missionStat = { t: 0, dmg: 0, maxHeat: 0 };
     this.onMissionComplete?.(id);
     const n = nextMission(this.completed);
     this.mission = { id: n?.id ?? id, step: 0, raceHits: 0 };
+    this.onPersist?.(this.snapshot());
+  }
+
+  /**
+   * City services: a tow truck eventually rolls out and hauls wrecks away,
+   * so destroyed cars do not litter the streets forever.
+   */
+  private updateTow(dt: number): void {
+    if (this.tow) {
+      const wreck = this.cars.find((c) => c.rt.id === this.tow?.targetId);
+      if (!wreck) {
+        this.tow.mesh.dispose();
+        this.tow = null;
+        return;
+      }
+      const t = this.tow.mesh.position;
+      const ang = Math.atan2(wreck.rt.y - t.z, wreck.rt.x - t.x);
+      t.x += Math.cos(ang) * 95 * dt;
+      t.z += Math.sin(ang) * 95 * dt;
+      this.tow.mesh.rotation.y = -ang;
+      if (Math.hypot(t.x - wreck.rt.x, t.z - wreck.rt.y) < 26) {
+        wreck.mesh.dispose();
+        this.cars = this.cars.filter((c) => c !== wreck);
+        this.tow.mesh.dispose();
+        this.tow = null;
+        if (Math.hypot(this.player.x - wreck.rt.x, this.player.z - wreck.rt.y) < 420) {
+          this.flash("CITY TOW  ·  wreck cleared");
+        }
+      }
+      return;
+    }
+    this.towCooldown -= dt;
+    if (this.towCooldown > 0) return;
+    this.towCooldown = 18;
+    const wreck = this.cars.find(
+      (c) => c.rt.exploded && Math.hypot(c.rt.x - this.player.x, c.rt.y - this.player.z) > 140 && !this.eventCarIds.has(c.rt.id),
+    );
+    if (!wreck) return;
+    const mesh = this.makeCarMesh(`tow-${Math.random().toString(36).slice(2, 6)}`, "#c8a028", false);
+    const ang = Math.random() * Math.PI * 2;
+    mesh.position = new Vector3(wreck.rt.x + Math.cos(ang) * 500, 5, wreck.rt.y + Math.sin(ang) * 500);
+    this.tow = { mesh, targetId: wreck.rt.id };
+  }
+
+  /** Repeatable Midnight Line street race, unlocked after the story race. */
+  private startRace(): void {
+    if (!this.completed.includes("midnight-run")) {
+      this.flash("MIDNIGHT LINE  ·  finish Maya's race first");
+      return;
+    }
+    if (this.race) return;
+    const marker = MeshBuilder.CreateBox("race-marker", { width: 10, depth: 10, height: 60 }, this.scene);
+    marker.material = this.material("#e0a030", 0.8);
+    this.race = { checkpoint: 0, t: 0, marker };
+    this.flash("RACE  ·  hit the pylons  ·  clock's running");
+    this.audio.wanted();
+  }
+
+  private updateRace(dt: number): void {
+    if (!this.race) return;
+    this.race.t += dt;
+    const cp = RACE_CPS[this.race.checkpoint];
+    if (!cp) {
+      this.finishRace();
+      return;
+    }
+    this.race.marker.position.set(cp.x, 30, cp.z);
+    this.race.marker.rotation.y += dt * 2;
+    if (Math.hypot(this.player.x - cp.x, this.player.z - cp.z) < 48) {
+      this.race.checkpoint += 1;
+      this.audio.uiClick();
+      if (this.race.checkpoint >= RACE_CPS.length) this.finishRace();
+      else this.flash(`CHECKPOINT  ${this.race.checkpoint}/${RACE_CPS.length}  ·  ${this.race.t.toFixed(1)}s`);
+    }
+  }
+
+  private finishRace(): void {
+    if (!this.race) return;
+    const seconds = this.race.t;
+    this.race.marker.dispose();
+    this.race = null;
+    const result = raceResult(seconds);
+    this.player.cash += result.cash;
+    const ms = Math.round(seconds * 1000);
+    const isRecord = this.player.raceBestMs === 0 || ms < this.player.raceBestMs;
+    if (isRecord) this.player.raceBestMs = ms;
+    this.audio.cash();
+    this.flash(`RACE  ·  ${seconds.toFixed(1)}s  ·  RANK ${result.rank}  ·  $${result.cash}${isRecord ? "  ·  NEW RECORD" : ""}`);
+    if (isRecord && result.rank === "S") this.pushNews("Unknown racer breaks the Midnight Line record.");
     this.onPersist?.(this.snapshot());
   }
 
@@ -1579,11 +1892,13 @@ export class ViceblockRuntime3D {
     if (this.contract) {
       obj = this.contract.stage === "pickup" ? `CONTRACT  ·  pickup: ${this.contract.def.brief}` : "CONTRACT  ·  make the drop";
     }
+    if (this.race) obj = `RACE  ·  ${this.race.checkpoint}/${RACE_CPS.length}  ·  ${this.race.t.toFixed(1)}s`;
     const mark = landmarkAt(this.world, this.player.x, this.player.z);
     const car = this.nearestCar(34);
     let prompt = "";
     const nearestCop = this.cops.reduce((min, c) => Math.min(min, Math.hypot(c.x - this.player.x, c.z - this.player.z)), Infinity);
     if (this.jailLeft > 0) prompt = "";
+    else if (this.interiorMode) prompt = this.interiorPrompt();
     else if (this.lockpick) prompt = "E  ·  PICK when the pin is in the zone";
     else if (this.heat.level >= 1 && !this.player.vehicleId && nearestCop < 34) prompt = "G  ·  SURRENDER (jail beats the morgue)";
     else if (!this.player.vehicleId && car) {
@@ -1615,7 +1930,7 @@ export class ViceblockRuntime3D {
       dialogue: this.dialogue ? { who: this.dialogue.who, line: this.dialogue.line } : null,
       toast: this.toast,
       phoneOpen: this.player.phone,
-      interior: null,
+      interior: this.interiorMode ? "Coral Mart" : null,
       username: this.username,
       others: this.remoteMeshes.size,
       lockpick: this.lockpick
@@ -1627,6 +1942,9 @@ export class ViceblockRuntime3D {
       searchZone: this.heat.level > 0 && this.heat.hiddenTimer > 0.5,
       gamepad: this.input.gamepadOn,
       contractLine: this.contract ? `${this.contract.def.title}  ·  ${this.contract.stage === "pickup" ? "PICKUP" : "DROP"}` : "",
+      weapon: weaponById(this.player.weapon).name,
+      ammo: this.player.weapon === "fists" ? 0 : this.player.ammo,
+      raceBestMs: this.player.raceBestMs,
     };
   }
 

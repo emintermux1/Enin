@@ -95,6 +95,8 @@ export interface PlayerSave {
   collectibles: string[];
   achievements: string[];
   settings: PlayerSettings;
+  /** Best Midnight Line race time in milliseconds; 0 = no finish yet. */
+  raceBestMs?: number;
   updatedAt: number;
 }
 

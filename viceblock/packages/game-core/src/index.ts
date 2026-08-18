@@ -8,4 +8,6 @@ export * from "./security";
 export * from "./crime";
 export * from "./contracts";
 export * from "./director";
+export * from "./weapons";
+export * from "./rating";
 export { sanitizeText, looksLikeMarkup } from "@viceblock/shared";

@@ -30,4 +30,7 @@ export interface HudSnapshot {
   searchZone: boolean;
   gamepad: boolean;
   contractLine: string;
+  weapon: string;
+  ammo: number;
+  raceBestMs: number;
 }

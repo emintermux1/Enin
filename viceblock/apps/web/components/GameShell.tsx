@@ -41,6 +41,9 @@ const EMPTY: HudSnapshot = {
   searchZone: false,
   gamepad: false,
   contractLine: "",
+  weapon: "Fists",
+  ammo: 0,
+  raceBestMs: 0,
 };
 
 export function GameShell() {
@@ -272,6 +275,7 @@ export function GameShell() {
             <div className="meta">
               {hud.dayLabel} · {hud.weather} · {hud.others} nearby{hud.gamepad ? " · PAD" : ""}
               {hud.searchZone ? " · SEARCH ZONE" : ""}
+              {hud.interior ? ` · INSIDE ${hud.interior.toUpperCase()}` : ""}
             </div>
           </div>
           <div className="hud-br">
@@ -279,7 +283,9 @@ export function GameShell() {
               <i className="hp" style={{ width: `${hud.health}%` }} />
               <i className="ar" style={{ width: `${hud.armor}%` }} />
             </div>
-            <div className="gun">{hud.inVehicle ? `RIDE ${hud.vehicleHp}%` : "PISTOL / FISTS"}</div>
+            <div className="gun">
+              {hud.inVehicle ? `RIDE ${hud.vehicleHp}%` : `${hud.weapon}${hud.ammo > 0 ? ` · ${hud.ammo}` : ""}`}
+            </div>
           </div>
           <canvas ref={minimapRef} width={132} height={132} className="minimap" />
           {!hud.inVehicle && <div className="crosshair" />}
@@ -484,6 +490,8 @@ export function GameShell() {
                   <p>
                     {hud.username} ·{" "}
                     {hud.streetRep >= 40 ? "STREET KING" : hud.streetRep >= 15 ? "GETAWAY DRIVER" : hud.level >= 3 ? "UP-AND-COMER" : "FRESH OFF THE BUS"}
+                    <br />
+                    {hud.raceBestMs > 0 ? `Midnight Line best: ${(hud.raceBestMs / 1000).toFixed(1)}s` : "No race record yet."}
                     <br />
                     Guest until you connect. NFTs never drop on death.
                   </p>
