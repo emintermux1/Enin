@@ -23,7 +23,11 @@ Open [http://localhost:3000](http://localhost:3000), name yourself, hit **ENTER 
 7. Cornered on foot? Press **G to surrender**: 40 seconds in holding (bail $120) beats the $100 hospital bill, but contraband is confiscated.
 8. Pull a **contract** from the phone (jobs tab) — server-generated pickup/drop jobs with server-validated rewards.
 9. Watch the **NOVA NEWS** ticker: the world director fires armored trucks, rare gold Mirages, blackouts, storms, crackdowns, and race nights on a weighted no-repeat schedule.
-10. Talk to **Cupsey** on Chain Court and **Ansem** at the mural. They stay.
+10. **Walk into Coral Mart** — it's a real room now. Buy a meal (+35 hp) or sprint-boost coffee at the counter, or rob the till and bolt. Cops can't see you inside.
+11. The fence also sells a **Vector 9 SMG** ($450, double-knock to confirm) — higher DPS than the pistol but sprays wide and carries less range. Fists are silent.
+12. Missions grade **C/B/A/S** on time, damage, and peak heat. After Maya's story race, the **Midnight Line becomes a repeatable ranked race** with a persisted best time (check your phone profile).
+13. Wrecks don't litter forever — a **city tow truck** eventually hauls them off. And some bystanders **film your crimes** instead of running.
+14. Talk to **Cupsey** on Chain Court and **Ansem** at the mural. They stay.
 
 ### Controls
 
