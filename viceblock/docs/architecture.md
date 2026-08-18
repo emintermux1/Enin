@@ -3,7 +3,9 @@
 ## Why this stack
 
 - **Next.js App Router** for the public URL, guest session APIs, wallet nonce/verify, presence heartbeat, and admin gate.
-- **Custom Canvas 2D engine** instead of Phaser so the first session is one bundle, 60fps, and not blocked on an extra scene graph.
+- **Babylon.js 3D renderer** (`apps/web/game3d/`) — stylized box-city, third-person orbit camera, day/night lighting, fog weather, tracers, staged vehicle smoke/fire/explosions. Collision reuses the 2D district grid (x/z plane), which keeps physics deterministic and cheap. The original Canvas 2D renderer stays in `apps/web/game/` as a fallback reference.
+- **Gameplay config** in `packages/game-core/src/config.ts`: police speed ratios and spawn distances, aim-assist cone/magnetism (weaker vs players), vehicle damage stages, economy prices. No magic numbers in systems.
+- **Aim assist** is cone-based target selection with distance falloff, tested in `tests/aim-assist.test.ts`.
 - **`@viceblock/game-core`** holds heat, economy, missions, joystick math, and vehicle damage. Client and tests share it. The browser is not trusted for cash claims.
 - **JSON file store** (with the Postgres schema checked in) so the slice runs without Docker. `DATABASE_URL` is reserved.
 - **Optional WebSocket presence** (`apps/game-server`) plus HTTP `/api/presence` so two browsers can see each other without faking sockets.

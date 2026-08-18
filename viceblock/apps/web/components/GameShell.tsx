@@ -2,9 +2,12 @@
 
 import { sanitizeText } from "@viceblock/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ViceblockRuntime, type HudSnapshot } from "../game/runtime";
+import type { HudSnapshot } from "../game/hud";
+import { ViceblockRuntime3D } from "../game3d/runtime3d";
 import { blockRichPaste } from "../lib/sanitize-dom";
 import { WalletPanel } from "./WalletPanel";
+
+const IS_DEV = process.env.NODE_ENV === "development";
 
 const EMPTY: HudSnapshot = {
   cash: 500,
@@ -35,7 +38,8 @@ const EMPTY: HudSnapshot = {
 
 export function GameShell() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const gameRef = useRef<ViceblockRuntime | null>(null);
+  const minimapRef = useRef<HTMLCanvasElement>(null);
+  const gameRef = useRef<ViceblockRuntime3D | null>(null);
   const sessionRef = useRef("");
   const [hud, setHud] = useState<HudSnapshot>(EMPTY);
   const [started, setStarted] = useState(false);
@@ -43,16 +47,15 @@ export function GameShell() {
   const [name, setName] = useState("rookie");
   const [phoneTab, setPhoneTab] = useState<"map" | "jobs" | "crew" | "bank" | "profile">("jobs");
   const [walletOpen, setWalletOpen] = useState(false);
+  const [debugOpen, setDebugOpen] = useState(false);
   const [session, setSession] = useState<string>("");
 
   const resize = useCallback(() => {
     const c = canvasRef.current;
     if (!c) return;
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
-    c.width = Math.floor(window.innerWidth * dpr);
-    c.height = Math.floor(window.innerHeight * dpr);
     c.style.width = `${window.innerWidth}px`;
     c.style.height = `${window.innerHeight}px`;
+    gameRef.current?.engine.resize();
   }, []);
 
   useEffect(() => {
@@ -69,7 +72,8 @@ export function GameShell() {
   useEffect(() => {
     const c = canvasRef.current;
     if (!c) return;
-    const game = new ViceblockRuntime(c);
+    const game = new ViceblockRuntime3D(c);
+    game.minimap = minimapRef.current;
     gameRef.current = game;
     game.attach();
     game.onHud = (h) => setHud(h);
@@ -104,7 +108,7 @@ export function GameShell() {
       if (!g) return;
       const body = {
         x: g.player.x,
-        y: g.player.y,
+        y: g.player.z,
         heading: g.player.heading,
         inVehicle: Boolean(g.player.vehicleId),
         username: g.username,
@@ -201,7 +205,9 @@ export function GameShell() {
           <button type="button" className="enter" onClick={() => void enterCity()}>
             ENTER SOUTHSIDE
           </button>
-          <p className="hint">WASD walk · Shift sprint · E interact · click shoot · R radio · F phone · H assist</p>
+          <p className="hint">
+            WASD walk · Shift sprint · Space jump/handbrake · E interact · click shoot · right-drag camera · R radio · F phone · H assist
+          </p>
           {bootError ? <p className="err">{sanitizeText(bootError, 80)}</p> : null}
         </div>
       )}
@@ -242,6 +248,8 @@ export function GameShell() {
             </div>
             <div className="gun">{hud.inVehicle ? `RIDE ${hud.vehicleHp}%` : "PISTOL / FISTS"}</div>
           </div>
+          <canvas ref={minimapRef} width={132} height={132} className="minimap" />
+          {!hud.inVehicle && <div className="crosshair" />}
           {hud.prompt ? <div className="prompt">{hud.prompt}</div> : null}
           {hud.toast ? <div className="toast">{hud.toast}</div> : null}
           {hud.dialogue ? (
@@ -269,7 +277,66 @@ export function GameShell() {
             >
               RADIO
             </button>
+            <button
+              type="button"
+              onClick={() => {
+                const g = gameRef.current;
+                if (!g) return;
+                g.aimAssistOn = !g.aimAssistOn;
+                g.audio.uiClick();
+              }}
+            >
+              AIM ASSIST
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const g = gameRef.current;
+                if (!g) return;
+                const next = g.quality === "low" ? "medium" : g.quality === "medium" ? "high" : "low";
+                g.setQuality(next);
+                g.audio.uiClick();
+              }}
+            >
+              QUALITY
+            </button>
+            {IS_DEV && (
+              <button type="button" onClick={() => setDebugOpen((v) => !v)}>
+                DEBUG
+              </button>
+            )}
           </div>
+
+          {IS_DEV && debugOpen && (
+            <div className="debug">
+              <strong>DEV TOOLS</strong>
+              <div>
+                {(["rico", "mart", "garage", "port", "race"] as const).map((s) => (
+                  <button key={s} type="button" onClick={() => gameRef.current?.debugTeleport(s)}>
+                    tp {s}
+                  </button>
+                ))}
+              </div>
+              <div>
+                <button type="button" onClick={() => gameRef.current?.debugSpawnCar()}>
+                  spawn car
+                </button>
+                <button type="button" onClick={() => gameRef.current?.debugGiveWeapon()}>
+                  give gun
+                </button>
+                <button type="button" onClick={() => gameRef.current?.debugHeal()}>
+                  heal
+                </button>
+              </div>
+              <div>
+                {[0, 1, 2, 3, 4, 5].map((n) => (
+                  <button key={n} type="button" onClick={() => gameRef.current?.debugSetHeat(n)}>
+                    heat {n}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div
             className="stick move"
@@ -605,6 +672,44 @@ export function GameShell() {
           background: #c45a32;
           color: #1a1410;
           font-weight: 800;
+        }
+        .minimap {
+          position: absolute;
+          left: 16px;
+          bottom: 16px;
+          width: 132px;
+          height: 132px;
+          border: 1px solid rgba(243, 230, 210, 0.3);
+          background: #241c16;
+        }
+        .crosshair {
+          position: absolute;
+          left: 50%;
+          top: 50%;
+          width: 4px;
+          height: 4px;
+          margin: -2px 0 0 -2px;
+          background: #f3e6d2;
+          box-shadow: 0 0 0 1px rgba(26, 20, 16, 0.7);
+          pointer-events: none;
+        }
+        .debug {
+          position: absolute;
+          left: 16px;
+          top: 86px;
+          background: rgba(16, 10, 8, 0.92);
+          border: 1px dashed #8a7564;
+          padding: 8px;
+          font-size: 11px;
+          z-index: 6;
+        }
+        .debug button {
+          background: #2a2018;
+          color: #f3e6d2;
+          border: 1px solid #6a4a38;
+          margin: 2px;
+          padding: 3px 6px;
+          font-size: 10px;
         }
         .phone {
           position: absolute;

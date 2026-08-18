@@ -1,6 +1,6 @@
 # VICEBLOCK
 
-Playable Southside slice of a pixel crime MMO-lite. Guest first. Wallet optional. Music is generated in the browser — it is not a missing file.
+Playable 3D Southside slice of a browser crime sandbox (Babylon.js). Guest first. Wallet optional. Music is generated in the browser — it is not a missing file.
 
 ## Play
 
@@ -25,16 +25,19 @@ Open [http://localhost:3000](http://localhost:3000), name yourself, hit **ENTER 
 
 | Desktop | Action |
 | --- | --- |
-| WASD | Walk / steer |
+| WASD | Walk / steer (camera-relative) |
 | Shift | Sprint |
+| Space | Jump on foot / handbrake in car |
 | E | Interact / enter-exit car |
 | Click | Shoot (after the mart job hands you a pistol) |
-| Space | Handbrake |
+| Right-drag | Orbit camera |
 | R | Cycle radio |
 | F / Tab | Phone |
 | H | AI assist |
 
-Mobile: left stick move, right stick aim, E button. Sticks release on `pointerup`, `pointercancel`, blur, and tab hide so they cannot stick.
+Mobile: left stick move, right stick aim+fire (with cone aim assist), canvas drag orbits the camera, E button interacts. Sticks release on `pointerup`, `pointercancel`, blur, and tab hide so they cannot stick.
+
+Gameplay tuning (police speed/spawn distances, aim assist cone and magnetism, vehicle damage stages, economy prices) lives in `packages/game-core/src/config.ts`.
 
 Paste is forced to plain text. HUD strings are stripped of tags so HTML copy junk cannot render.
 
@@ -51,9 +54,9 @@ Paste is forced to plain text. HUD strings are stripped of tags so HTML copy jun
 
 ```
 viceblock/
-  apps/web            Next.js shell + canvas engine
+  apps/web            Next.js shell + Babylon.js 3D engine (game3d/) + legacy 2D renderer (game/)
   apps/game-server    WebSocket presence
-  packages/game-core  Shared sim (heat, economy, missions)
+  packages/game-core  Shared sim (heat, economy, missions, aim assist, config)
   packages/shared     Types
   packages/database   Postgres schema (not required to play)
   docs/
