@@ -1,0 +1,20 @@
+{
+  "name": "viceblock",
+  "version": "0.1.0",
+  "private": true,
+  "description": "VICEBLOCK — Nova City Southside playable vertical slice",
+  "scripts": {
+    "dev": "pnpm --parallel --filter @viceblock/web --filter @viceblock/game-server dev",
+    "dev:web": "pnpm --filter @viceblock/web dev",
+    "dev:server": "pnpm --filter @viceblock/game-server dev",
+    "build": "pnpm --filter @viceblock/shared build && pnpm --filter @viceblock/game-core build && pnpm --filter @viceblock/web build && pnpm --filter @viceblock/game-server build",
+    "start": "pnpm --parallel --filter @viceblock/web --filter @viceblock/game-server start",
+    "test": "pnpm --filter @viceblock/game-core test && pnpm --filter @viceblock/web test",
+    "lint": "pnpm --filter @viceblock/web lint",
+    "typecheck": "pnpm --filter @viceblock/shared typecheck && pnpm --filter @viceblock/game-core typecheck && pnpm --filter @viceblock/web typecheck"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@10.9.0"
+}

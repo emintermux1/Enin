@@ -1,0 +1,12 @@
+node_modules
+.next
+dist
+.turbo
+*.log
+.env
+.env.local
+.vercel
+coverage
+.DS_Store
+data/*.json
+!data/.gitkeep
