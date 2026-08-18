@@ -277,6 +277,8 @@ export function GameShell() {
           </button>
           <p className="hint">
             WASD walk · Shift sprint · Space jump/handbrake · E interact · G surrender · click shoot · right-drag camera · R radio · F phone · H assist
+            <br />
+            Touch: left stick walks (push far to sprint) · right stick aims &amp; fires · drag screen for camera · E/G button acts
           </p>
           {bootError ? <p className="err">{sanitizeText(bootError, 80)}</p> : null}
         </div>
@@ -380,7 +382,7 @@ export function GameShell() {
               PHONE
             </button>
             <button type="button" onClick={() => setWalletOpen((v) => !v)}>
-              CONNECT WALLET
+              WALLET
             </button>
             <button
               type="button"
@@ -481,10 +483,23 @@ export function GameShell() {
             className="act"
             onPointerDown={() => {
               const g = gameRef.current;
-              if (g) g.input.interactQueued = true;
+              if (!g) return;
+              // The action button is contextual: it surrenders when the
+              // prompt asks for G, otherwise it interacts like E.
+              if (hud.prompt.startsWith("G")) g.input.surrenderQueued = true;
+              else g.input.interactQueued = true;
             }}
           >
-            E
+            {hud.prompt.startsWith("G") ? "G" : "E"}
+          </button>
+          <button
+            type="button"
+            className="jump"
+            onPointerDown={() => gameRef.current?.input.keys.add("Space")}
+            onPointerUp={() => gameRef.current?.input.keys.delete("Space")}
+            onPointerCancel={() => gameRef.current?.input.keys.delete("Space")}
+          >
+            {hud.inVehicle ? "BRAKE" : "JUMP"}
           </button>
 
           {hud.phoneOpen && (
@@ -982,6 +997,22 @@ export function GameShell() {
           background: #c45a32;
           color: #1a1410;
           font-weight: 800;
+          touch-action: none;
+        }
+        .jump {
+          position: absolute;
+          right: 116px;
+          bottom: 30px;
+          width: 56px;
+          height: 56px;
+          border-radius: 50%;
+          border: 1px solid rgba(243, 230, 210, 0.4);
+          background: rgba(42, 32, 24, 0.85);
+          color: #f3e6d2;
+          font-size: 10px;
+          font-weight: 700;
+          letter-spacing: 0.06em;
+          touch-action: none;
         }
         .minimap {
           position: absolute;
@@ -1060,8 +1091,102 @@ export function GameShell() {
         }
         @media (min-width: 900px) {
           .stick,
-          .act {
+          .act,
+          .jump {
             display: none;
+          }
+        }
+        /* Compact mobile layout: sticks own the bottom corners, so the
+           minimap and status bars move up and everything respects notches. */
+        @media (max-width: 899px) {
+          .minimap {
+            left: max(10px, env(safe-area-inset-left));
+            bottom: auto;
+            top: 128px;
+            width: 88px;
+            height: 88px;
+          }
+          .hud-tl {
+            top: max(10px, env(safe-area-inset-top));
+            left: max(12px, env(safe-area-inset-left));
+            max-width: 52vw;
+          }
+          .obj {
+            font-size: 16px;
+          }
+          .assist {
+            font-size: 10px;
+          }
+          .hud-tr {
+            top: max(10px, env(safe-area-inset-top));
+            right: max(10px, env(safe-area-inset-right));
+          }
+          .cash {
+            font-size: 20px;
+          }
+          .hud-br {
+            right: max(10px, env(safe-area-inset-right));
+            top: 138px;
+            bottom: auto;
+            width: 128px;
+          }
+          .dock {
+            top: auto;
+            bottom: max(6px, env(safe-area-inset-bottom));
+            gap: 4px;
+            max-width: 96vw;
+          }
+          .dock button {
+            padding: 6px 6px;
+            font-size: 9px;
+            letter-spacing: 0.04em;
+          }
+          .stick.move {
+            left: max(16px, env(safe-area-inset-left));
+            bottom: 64px;
+          }
+          .stick.aim {
+            right: max(16px, env(safe-area-inset-right));
+            bottom: 176px;
+          }
+          .act {
+            right: max(30px, env(safe-area-inset-right));
+            bottom: 96px;
+          }
+          .jump {
+            right: max(110px, calc(env(safe-area-inset-right) + 104px));
+            bottom: 90px;
+          }
+          .phone {
+            left: 50%;
+            right: auto;
+            transform: translateX(-50%);
+            width: min(320px, 92vw);
+            max-height: calc(100vh - 130px);
+            overflow-y: auto;
+          }
+          .prompt {
+            bottom: 34%;
+            font-size: 12px;
+            max-width: 88vw;
+            text-align: center;
+          }
+          .news {
+            top: auto;
+            bottom: 58px;
+            font-size: 10px;
+          }
+          .loot {
+            bottom: auto;
+            top: 236px;
+            right: max(10px, env(safe-area-inset-right));
+          }
+          .talk {
+            bottom: 200px;
+            width: min(320px, 62vw);
+          }
+          .gate {
+            inset: auto 5vw 8vh 5vw;
           }
         }
       `}</style>
