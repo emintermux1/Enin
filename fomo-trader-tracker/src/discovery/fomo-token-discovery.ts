@@ -7,8 +7,10 @@ import { short } from './router-discovery';
 
 /**
  * Tokens launched through fomo carry a vanity mint suffix, so a mint ending in
- * `fomo` is direct on-chain evidence of the app. The wallets trading them are
- * fomo users, which gives a discovery path that needs no router address.
+ * `fomo` marks the token as fomo-launched. It does not mark its holders as fomo
+ * users: once a token graduates it trades on open DEXs, and sampling holders of
+ * such mints turned up wallets trading through Axiom and FlashX instead. Treat
+ * this as a broad lead on memecoin traders, not as app attribution.
  */
 export const FOMO_MINT_SUFFIX = 'fomo';
 

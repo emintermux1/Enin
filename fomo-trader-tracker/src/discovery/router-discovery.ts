@@ -3,7 +3,10 @@ import { isMajor, isCashLike } from '../chain/token-registry';
 import { ParsedTransaction, RouterCandidate } from '../types';
 import { isSharedInfra } from './known-programs';
 
-const SIGNATURES_PER_SEED = 40;
+function readSignaturesPerSeed(): number {
+  const raw = Number(process.env['SIGNATURES_PER_SEED']);
+  return Number.isFinite(raw) && raw > 0 ? raw : 40;
+}
 
 /**
  * fomo sponsors gas and takes a fee on every trade, so each fomo trade touches
@@ -25,11 +28,12 @@ export async function deriveRouterAccounts(
   const seedSet = new Set(seedWallets);
   const occurrences = new Map<string, number>();
   const seedHits = new Map<string, Set<string>>();
+  const signaturesPerSeed = readSignaturesPerSeed();
 
   for (const seed of seedWallets) {
     let transactions: Map<string, ParsedTransaction>;
     try {
-      const signatures = await rpc.getSignaturesPaged(seed, SIGNATURES_PER_SEED);
+      const signatures = await rpc.getSignaturesPaged(seed, signaturesPerSeed);
       const successful = signatures.filter((entry) => !entry.err).map((entry) => entry.signature);
       transactions = await rpc.getTransactions(successful);
     } catch (err) {

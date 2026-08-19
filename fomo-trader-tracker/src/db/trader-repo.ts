@@ -26,6 +26,7 @@ function toSource(raw: string): TraderSource {
     case 'seed':
     case 'manual':
     case 'fomo_token':
+    case 'sponsor':
       return raw;
     default:
       return 'router';

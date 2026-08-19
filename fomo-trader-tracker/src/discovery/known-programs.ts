@@ -25,6 +25,13 @@ export const SHARED_INFRA_ACCOUNTS = new Set<string>([
   'pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA',
   'Vote111111111111111111111111111111111111111',
   'BPFLoaderUpgradeab1e11111111111111111111111',
+  // Seen in the swaps of a known fomo wallet. fomo routes through these rather
+  // than a program of its own, so none of them identify fomo.
+  'DF1ow4tspfHX9JwWJsAb9epbkA8hmpSEAtxXy1V27QBH',
+  '9H6tua7jkLhdm3w8BvgpTn5LZNU7g4ZynDmCiNN3q6Rp',
+  'pfeeUxB6jkeY1Hxd7CsFCAjcbHA9rWtchMGdZ6VojVZ',
+  'BiSoNHVpsVZW2F7rx2eQ59yQwKxzU5NvBcmKshCSUypi',
+  'DeJBGdMFa1uynnnKiwrVioatTuHmNLpyFKnmB5kaFdzQ',
 ]);
 
 export function isSharedInfra(account: string): boolean {

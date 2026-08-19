@@ -12,6 +12,7 @@ import {
 import { countFomoMints, recordFomoMints } from '../db/fomo-mint-repo';
 import { expandFromFomoMints, extractFomoMints } from '../discovery/fomo-token-discovery';
 import { deriveRouterAccounts, short } from '../discovery/router-discovery';
+import { discoverTradersFromSponsors } from '../discovery/sponsor-discovery';
 import { discoverTraders } from '../discovery/trader-discovery';
 import { measureActivity } from '../enrich/activity';
 import { buildPortfolio } from '../enrich/portfolio';
@@ -47,8 +48,13 @@ export async function runDiscovery(): Promise<number> {
   let inserted = upsertCandidates([...manual, ...seeds]);
   recordFomoMints(config.discovery.seedMints);
 
-  // Holders of fomo-launched tokens are fomo users by definition, so this path
-  // grows the pool even with no router address configured.
+  // Gas sponsors are the primary path: one sponsored signer per transaction,
+  // every one of them an app trader who is active right now.
+  const fromSponsors = await discoverTradersFromSponsors(rpc, config.discovery.sponsorAccounts);
+  inserted += upsertCandidates(fromSponsors);
+
+  // Traders of fomo-launched tokens. A weaker signal than the sponsor path,
+  // since these tokens keep trading on open DEXs after they graduate.
   const fromFomoTokens = await expandFromFomoMints(rpc, config.discovery.fomoMintsPerCycle);
   inserted += upsertCandidates(fromFomoTokens);
 
@@ -60,10 +66,14 @@ export async function runDiscovery(): Promise<number> {
   }
 
   const mintCounts = countFomoMints();
-  if (routerAccounts.length === 0 && mintCounts.total === 0) {
+  if (
+    config.discovery.sponsorAccounts.length === 0 &&
+    routerAccounts.length === 0 &&
+    mintCounts.total === 0
+  ) {
     console.warn(
-      '[discovery] no router accounts and no fomo-launched tokens known yet; ' +
-        'only manual and seed wallets are tracked'
+      '[discovery] no sponsor accounts, no router accounts and no fomo-launched ' +
+        'tokens known yet; only manual and seed wallets are tracked'
     );
   }
   console.log(

@@ -18,11 +18,18 @@ export interface AppConfig {
     manualWallets: string[];
     /** fomo-launched token mints used to bootstrap holder discovery. */
     seedMints: string[];
+    /**
+     * Gas-sponsoring relayers that pay fees on behalf of app traders. Their
+     * co-signers are the trader population and are the most reliable source we
+     * have, since fomo itself runs no on-chain router. See README.
+     */
+    sponsorAccounts: string[];
     signaturesPerRouterScan: number;
     maxCandidatesPerCycle: number;
     /** fomo-launched mints expanded to their traders per discovery cycle. */
     fomoMintsPerCycle: number;
     signaturesPerFomoMint: number;
+    signaturesPerSponsorScan: number;
   };
   filter: {
     minPortfolioUsd: number;
@@ -102,7 +109,7 @@ export interface TraderCandidate {
   discoveredAt: number;
 }
 
-export type TraderSource = 'router' | 'seed' | 'manual' | 'fomo_token';
+export type TraderSource = 'router' | 'seed' | 'manual' | 'fomo_token' | 'sponsor';
 
 export interface QualifiedTrader {
   wallet: string;

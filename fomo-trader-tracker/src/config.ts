@@ -32,6 +32,14 @@ const chatId = readString('TELEGRAM_CHAT_ID');
 const DEFAULT_RPC_URLS = ['https://api.mainnet-beta.solana.com', 'https://solana-rpc.publicnode.com'];
 
 /**
+ * The DFlow gasless relayer, found by tracing a known fomo wallet's swaps. It
+ * pays the fee on hundreds of trades per minute for wallets that hold no SOL,
+ * which is the app-trader population fomo trades through. Not fomo-exclusive:
+ * other DFlow-integrated apps share it, so the filter stage still decides.
+ */
+const DEFAULT_SPONSOR_ACCOUNTS = ['AgmLJBMDCqWynYnQiPCuj9ewsNNsBJXyzoUhD9LJzN51'];
+
+/**
  * Free endpoints throttle in different ways — some answer 429, others simply
  * stop responding — so several are kept and rotated. A single paid endpoint in
  * SOLANA_RPC_URL is the better setup and takes precedence.
@@ -41,6 +49,14 @@ function resolveRpcUrls(): string[] {
   const single = readString('SOLANA_RPC_URL');
   const configured = [...new Set([...(single ? [single] : []), ...list])];
   return configured.length > 0 ? configured : DEFAULT_RPC_URLS;
+}
+
+function resolveSponsorAccounts(): string[] {
+  const configured = readList('FOMO_SPONSOR_ACCOUNTS');
+  if (configured.length === 1 && configured[0]?.toLowerCase() === 'none') {
+    return [];
+  }
+  return configured.length > 0 ? configured : DEFAULT_SPONSOR_ACCOUNTS;
 }
 
 export const config: AppConfig = {
@@ -56,10 +72,12 @@ export const config: AppConfig = {
     seedWallets: readList('FOMO_SEED_WALLETS'),
     manualWallets: readList('FOMO_MANUAL_WALLETS'),
     seedMints: readList('FOMO_SEED_MINTS'),
+    sponsorAccounts: resolveSponsorAccounts(),
     signaturesPerRouterScan: readNumber('SIGNATURES_PER_ROUTER_SCAN', 300),
     maxCandidatesPerCycle: readNumber('MAX_CANDIDATES_PER_CYCLE', 400),
     fomoMintsPerCycle: readNumber('FOMO_MINTS_PER_CYCLE', 15),
     signaturesPerFomoMint: readNumber('SIGNATURES_PER_FOMO_MINT', 100),
+    signaturesPerSponsorScan: readNumber('SIGNATURES_PER_SPONSOR_SCAN', 500),
   },
   filter: {
     minPortfolioUsd: readNumber('MIN_PORTFOLIO_USD', 3_000),
@@ -94,6 +112,7 @@ export function describeConfig(): string {
     `memecoins ${filter.minMemecoins}-${filter.maxMemecoins}`,
     `>= ${filter.minTradesInWindow} trades / ${filter.activityWindowDays}d`,
     `watchlist cap ${monitor.maxWatchlistSize}`,
+    `sponsor accounts ${discovery.sponsorAccounts.length}`,
     `router accounts ${discovery.routerAccounts.length}`,
     `seed wallets ${discovery.seedWallets.length}`,
     `rpc endpoints ${config.solana.rpcUrls.length}`,
