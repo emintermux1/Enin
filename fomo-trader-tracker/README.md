@@ -18,19 +18,40 @@ Everything here works on addresses, not identities. Mapping a wallet to a fomo u
 
 Solana only for now. fomo also trades on Base, BNB Chain and Monad, and bridges via [Relay](https://relay.link); those chains would need a separate adapter.
 
+## Does fomo have a router address?
+
+Short answer: **no, and this was verified on-chain rather than assumed.** Tracing the swaps of a wallet documented as a fomo wallet shows the trades are executed by shared third-party infrastructure:
+
+| Program | What it is |
+| --- | --- |
+| `DF1ow4tspfHX9JwWJsAb9epbkA8hmpSEAtxXy1V27QBH` | DFlow, swap aggregator |
+| `9H6tua7jkLhdm3w8BvgpTn5LZNU7g4ZynDmCiNN3q6Rp` | HumidiFi, private AMM |
+| `pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA` | PumpSwap |
+| `pfeeUxB6jkeY1Hxd7CsFCAjcbHA9rWtchMGdZ6VojVZ` | pump.fun fee program |
+| `DeJBGdMFa1uynnnKiwrVioatTuHmNLpyFKnmB5kaFdzQ` | Phantom's Assert Owner program |
+| `JUP6Lkb…`, `cpamdpZ…` | Jupiter, Meteora |
+
+Not one fomo-deployed program among them, which matches how fomo describes itself: a conduit to third-party infrastructure that does not process transactions itself. There is nothing labelled "fomo router" for an explorer to show, and no analytics platform publishes one. The widely shared guide to finding fomo traders uses GMGN to match a *wallet* against a fomo profile by comparing positions, which is wallet identification, not router discovery.
+
+What *does* exist is a gas sponsor, and that is the useful part.
+
 ## How discovery works
 
-Two independent paths, either is enough to start.
+Three paths, strongest first.
 
-**1. fomo-launched tokens (no configuration needed).** Tokens created through fomo carry a vanity mint suffix ending in `fomo`, for example `5rYd8uAReEfsoqe4kAxnXar9158CK2Ri6FzD1H7sfomo`. Holding one is direct on-chain evidence of the app. The tracker takes the largest holders of a known fomo mint, screens those wallets, learns the other fomo mints they hold, and repeats. One token address bootstraps the whole crawl.
+**1. The gasless relayer (default, no configuration needed).** fomo trades are gasless, so someone else pays the network fee while the trader signs as a second signer. Following the fee payer of a known fomo swap leads to `AgmLJBMDCqWynYnQiPCuj9ewsNNsBJXyzoUhD9LJzN51`: a plain system account holding ~1,100 SOL that pays fees at roughly **700 transactions per minute**, routing through DFlow, one distinct co-signer per transaction. Those co-signers hold almost no SOL and small USDC balances, the signature of app-managed wallets trading gaslessly.
 
-**2. fomo's own accounts.** Every fomo trade touches the same small set of fomo-controlled accounts, because fomo sponsors gas and takes a 0.5% fee. Enumerating the transaction history of those accounts yields the fomo trader population directly. Put them in `FOMO_ROUTER_ACCOUNTS` if you know them, or let the tracker derive them:
+Walking that account's history therefore yields active app traders at close to one per transaction, the highest yield of any path here. Caveat worth keeping in mind: the relayer belongs to the aggregator layer and is shared with other DFlow-integrated apps, so it is a superset of fomo's traffic rather than fomo alone. Community labels for it are contradictory and none are reliable. Since the filter stage judges wallets on portfolio and activity regardless of which app they use, a superset is an acceptable input; if you want to narrow or replace it, set `FOMO_SPONSOR_ACCOUNTS`, or `none` to disable the path.
+
+**2. fomo-launched tokens.** Tokens created through fomo carry a vanity mint suffix ending in `fomo`, for example `5rYd8uAReEfsoqe4kAxnXar9158CK2Ri6FzD1H7sfomo`. The suffix identifies the token reliably, but **not its holders**: after a token graduates it trades on open DEXs, and sampling holders of such mints turned up wallets trading through Axiom and FlashX. Treat this as a broad lead on memecoin traders rather than proof of app usage. The tracker still crawls it, learning further fomo mints from each wallet it screens.
+
+**3. Derived accounts from seed wallets.** If you have two or three wallets you know are fomo users, the tracker can intersect their transaction histories and rank the accounts common to all of them, after removing shared infrastructure:
 
 ```bash
 npm run discover-router -- <fomoWallet1> <fomoWallet2> <fomoWallet3>
 ```
 
-That inspects each wallet's recent transactions and ranks the accounts common to all of them, after removing shared Solana infrastructure (Jupiter, Meteora, Raydium, token programs, mints). Accounts hit by every seed are fomo's own. Two or more seed wallets give a far cleaner result than one.
+Given the finding above, expect this to surface sponsors and aggregators rather than a fomo program. Pick seeds carefully: inbound spam airdrops also show a third-party fee payer, so a wallet whose fees are paid by someone else is not automatically an app user.
 
 Screening then prices each candidate's holdings via Jupiter, counts significant memecoin positions, measures recent activity, and promotes matches to the watchlist.
 
@@ -42,15 +63,12 @@ npm install
 cp .env.example .env
 ```
 
-Set at least one starting point in `.env`:
+It runs with no configuration at all, because the relayer path is on by default. Optional extra starting points:
 
 ```bash
+FOMO_SPONSOR_ACCOUNTS=<gas sponsor>   # override the default relayer, or "none"
 FOMO_SEED_MINTS=<a mint address ending in "fomo">
-# or
 FOMO_SEED_WALLETS=<known fomo wallet>,<another>
-# or
-FOMO_ROUTER_ACCOUNTS=<fomo router/sponsor/fee accounts>
-# or
 FOMO_MANUAL_WALLETS=<wallets to always track>
 ```
 
@@ -127,6 +145,8 @@ Raise `MIN_POSITION_SHARE` to demand conviction positions, lower it to count the
 | `MIN_TRADE_ALERT_USD` | 500 | Minimum trade size to alert on |
 
 ## Operation notes
+
+**Screening is the bottleneck, not discovery.** The relayer supplies candidates far faster than they can be screened: a live run produced 60 distinct trader wallets from 60 transactions in 18 seconds, while screening costs roughly 14 seconds per wallet on public RPC. Most sponsored wallets are small retail accounts that fail the $3,000 test, so reaching a full watchlist means screening a lot of them. This is the concrete reason a paid RPC key matters here — raise `RPC_MAX_CONCURRENCY` and lower `RPC_MIN_SPACING_MS` and throughput scales with the endpoint.
 
 Wallets are never rejected on incomplete data. If the pricing cap leaves mints unresolved the wallet is deferred, not dropped, and the cached misses let the next pass finish the job. RPC failures likewise defer rather than reject, so a flaky endpoint cannot quietly discard qualifying traders.
 
