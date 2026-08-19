@@ -107,6 +107,12 @@ jobs:
 
   validate-docs-links:
     runs-on: ubuntu-latest
+    # The link checker reports results by creating a check run, which the
+    # default read-only GITHUB_TOKEN is not allowed to do.
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
