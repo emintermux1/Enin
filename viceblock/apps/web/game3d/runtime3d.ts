@@ -576,11 +576,13 @@ export class ViceblockRuntime3D {
     const clerk = this.makeHumanoid("mart-clerk", "#3a6a4a", "#e6c39a");
     clerk.position = new Vector3(cx, INTERIOR_Y + 7, cz - half + 16);
     // Glowing floor discs make every interactive spot legible at a glance.
+    // Placed on the open floor where the player stands, not inside the
+    // counter/shelf meshes (which would swallow them).
     const spots: Array<[number, number, string]> = [
-      [cx + 34, cz - half + 34, "#d84020"],
-      [cx, cz - half + 34, "#7aa874"],
-      [cx - 50, cz + 24, "#c49a6a"],
-      [cx + 50, cz + 24, "#6aa0d4"],
+      [cx + 34, cz - half + 56, "#d84020"],
+      [cx, cz - half + 56, "#7aa874"],
+      [cx - 74, cz + 24, "#c49a6a"],
+      [cx + 74, cz + 24, "#6aa0d4"],
       [cx, cz + half - 24, "#f3e6d2"],
     ];
     spots.forEach(([x, z, color], i) => {
