@@ -586,15 +586,15 @@ export class ViceblockRuntime3D {
       [cx, cz + half - 24, "#f3e6d2"],
     ];
     spots.forEach(([x, z, color], i) => {
-      const disc = MeshBuilder.CreateCylinder(`mart-spot-${i}`, { diameter: 30, height: 0.8, tessellation: 14 }, this.scene);
+      const disc = MeshBuilder.CreateCylinder(`mart-spot-${i}`, { diameter: 34, height: 1.6, tessellation: 14 }, this.scene);
       const mat = new StandardMaterial(`mart-spot-mat-${i}`, this.scene);
       mat.emissiveColor = Color3.FromHexString(color);
       mat.diffuseColor = Color3.Black();
       mat.disableLighting = true;
-      mat.alpha = 0.5;
+      mat.alpha = 0.85;
       disc.material = mat;
       disc.isPickable = false;
-      disc.position = new Vector3(x, INTERIOR_Y + 0.6, z);
+      disc.position = new Vector3(x, INTERIOR_Y + 1, z);
     });
     const till = MeshBuilder.CreateBox("mart-till", { width: 14, depth: 10, height: 8 }, this.scene);
     till.material = this.material("#2a2c30", 0.2);
