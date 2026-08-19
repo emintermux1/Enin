@@ -1,0 +1,1 @@
+self.__NEXT_FONT_MANIFEST="{\"pages\":{},\"app\":{\"/workspace/viceblock/apps/web/app/layout\":[\"static/media/de42cfb9a3b980ae-s.p.woff2\",\"static/media/0c526091e2cbdcaf-s.p.woff2\"]},\"appUsingSizeAdjust\":true,\"pagesUsingSizeAdjust\":false}"

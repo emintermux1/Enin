@@ -1,0 +1,248 @@
+{
+  "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Engines/Extensions/engine.prefilteredCubeTexture.pure.js -> ../../Misc/dds.js": {
+    "id": "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Engines/Extensions/engine.prefilteredCubeTexture.pure.js -> ../../Misc/dds.js",
+    "files": [
+      "static/chunks/_app-pages-browser_node_modules_pnpm_babylonjs_core_9_21_2_node_modules_babylonjs_core_Misc_dds_js.js"
+    ]
+  },
+  "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Materials/Textures/Loaders/textureLoaderManager.js -> ./basisTextureLoader.js": {
+    "id": "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Materials/Textures/Loaders/textureLoaderManager.js -> ./basisTextureLoader.js",
+    "files": [
+      "static/chunks/_app-pages-browser_node_modules_pnpm_babylonjs_core_9_21_2_node_modules_babylonjs_core_Materi-aeec0d.js"
+    ]
+  },
+  "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Materials/Textures/Loaders/textureLoaderManager.js -> ./ddsTextureLoader.js": {
+    "id": "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Materials/Textures/Loaders/textureLoaderManager.js -> ./ddsTextureLoader.js",
+    "files": [
+      "static/chunks/_app-pages-browser_node_modules_pnpm_babylonjs_core_9_21_2_node_modules_babylonjs_core_Materi-38b045.js"
+    ]
+  },
+  "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Materials/Textures/Loaders/textureLoaderManager.js -> ./envTextureLoader.js": {
+    "id": "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Materials/Textures/Loaders/textureLoaderManager.js -> ./envTextureLoader.js",
+    "files": [
+      "static/chunks/_app-pages-browser_node_modules_pnpm_babylonjs_core_9_21_2_node_modules_babylonjs_core_Materi-b6b530.js"
+    ]
+  },
+  "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Materials/Textures/Loaders/textureLoaderManager.js -> ./exrTextureLoader.js": {
+    "id": "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Materials/Textures/Loaders/textureLoaderManager.js -> ./exrTextureLoader.js",
+    "files": [
+      "static/chunks/_app-pages-browser_node_modules_pnpm_babylonjs_core_9_21_2_node_modules_babylonjs_core_Materi-42f23d.js"
+    ]
+  },
+  "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Materials/Textures/Loaders/textureLoaderManager.js -> ./hdrTextureLoader.js": {
+    "id": "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Materials/Textures/Loaders/textureLoaderManager.js -> ./hdrTextureLoader.js",
+    "files": [
+      "static/chunks/_app-pages-browser_node_modules_pnpm_babylonjs_core_9_21_2_node_modules_babylonjs_core_Materi-78f342.js"
+    ]
+  },
+  "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Materials/Textures/Loaders/textureLoaderManager.js -> ./iesTextureLoader.js": {
+    "id": "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Materials/Textures/Loaders/textureLoaderManager.js -> ./iesTextureLoader.js",
+    "files": [
+      "static/chunks/_app-pages-browser_node_modules_pnpm_babylonjs_core_9_21_2_node_modules_babylonjs_core_Materi-b6058c.js"
+    ]
+  },
+  "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Materials/Textures/Loaders/textureLoaderManager.js -> ./ktxTextureLoader.js": {
+    "id": "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Materials/Textures/Loaders/textureLoaderManager.js -> ./ktxTextureLoader.js",
+    "files": [
+      "static/chunks/_app-pages-browser_node_modules_pnpm_babylonjs_core_9_21_2_node_modules_babylonjs_core_Materi-1000b5.js"
+    ]
+  },
+  "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Materials/Textures/Loaders/textureLoaderManager.js -> ./tgaTextureLoader.js": {
+    "id": "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Materials/Textures/Loaders/textureLoaderManager.js -> ./tgaTextureLoader.js",
+    "files": [
+      "static/chunks/_app-pages-browser_node_modules_pnpm_babylonjs_core_9_21_2_node_modules_babylonjs_core_Materi-bcb45b.js"
+    ]
+  },
+  "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Materials/Textures/renderTargetTexture.pure.js -> ../../Misc/dumpTools.js": {
+    "id": "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Materials/Textures/renderTargetTexture.pure.js -> ../../Misc/dumpTools.js",
+    "files": [
+      "static/chunks/_app-pages-browser_node_modules_pnpm_babylonjs_core_9_21_2_node_modules_babylonjs_core_Misc_d-cffe2d.js"
+    ]
+  },
+  "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Materials/effectRenderer.pure.js -> ../Shaders/postprocess.vertex.js": {
+    "id": "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Materials/effectRenderer.pure.js -> ../Shaders/postprocess.vertex.js",
+    "files": [
+      "static/chunks/_app-pages-browser_node_modules_pnpm_babylonjs_core_9_21_2_node_modules_babylonjs_core_Shader-32c279.js"
+    ]
+  },
+  "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Materials/effectRenderer.pure.js -> ../ShadersWGSL/postprocess.vertex.js": {
+    "id": "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Materials/effectRenderer.pure.js -> ../ShadersWGSL/postprocess.vertex.js",
+    "files": [
+      "static/chunks/_app-pages-browser_node_modules_pnpm_babylonjs_core_9_21_2_node_modules_babylonjs_core_Shader-b09f41.js"
+    ]
+  },
+  "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Materials/standardMaterial.pure.js -> ../Shaders/default.fragment.js": {
+    "id": "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Materials/standardMaterial.pure.js -> ../Shaders/default.fragment.js",
+    "files": [
+      "static/chunks/_app-pages-browser_node_modules_pnpm_babylonjs_core_9_21_2_node_modules_babylonjs_core_Shader-d06ce7.js"
+    ]
+  },
+  "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Materials/standardMaterial.pure.js -> ../Shaders/default.vertex.js": {
+    "id": "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Materials/standardMaterial.pure.js -> ../Shaders/default.vertex.js",
+    "files": [
+      "static/chunks/_app-pages-browser_node_modules_pnpm_babylonjs_core_9_21_2_node_modules_babylonjs_core_Shader-854355.js"
+    ]
+  },
+  "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Materials/standardMaterial.pure.js -> ../ShadersWGSL/default.fragment.js": {
+    "id": "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Materials/standardMaterial.pure.js -> ../ShadersWGSL/default.fragment.js",
+    "files": [
+      "static/chunks/_app-pages-browser_node_modules_pnpm_babylonjs_core_9_21_2_node_modules_babylonjs_core_Shader-78da43.js"
+    ]
+  },
+  "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Materials/standardMaterial.pure.js -> ../ShadersWGSL/default.vertex.js": {
+    "id": "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Materials/standardMaterial.pure.js -> ../ShadersWGSL/default.vertex.js",
+    "files": [
+      "static/chunks/_app-pages-browser_node_modules_pnpm_babylonjs_core_9_21_2_node_modules_babylonjs_core_Shader-1adccb.js"
+    ]
+  },
+  "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Meshes/abstractMesh.pure.js -> ./mesh.vertexData.functions.js": {
+    "id": "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Meshes/abstractMesh.pure.js -> ./mesh.vertexData.functions.js",
+    "files": [
+      "static/chunks/_app-pages-browser_node_modules_pnpm_babylonjs_core_9_21_2_node_modules_babylonjs_core_Meshes-f0194e.js"
+    ]
+  },
+  "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Meshes/linesMesh.pure.js -> ../Shaders/color.fragment.js": {
+    "id": "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Meshes/linesMesh.pure.js -> ../Shaders/color.fragment.js",
+    "files": [
+      "static/chunks/_app-pages-browser_node_modules_pnpm_babylonjs_core_9_21_2_node_modules_babylonjs_core_Shader-ab7a68.js"
+    ]
+  },
+  "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Meshes/linesMesh.pure.js -> ../Shaders/color.vertex.js": {
+    "id": "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Meshes/linesMesh.pure.js -> ../Shaders/color.vertex.js",
+    "files": [
+      "static/chunks/_app-pages-browser_node_modules_pnpm_babylonjs_core_9_21_2_node_modules_babylonjs_core_Shader-6abab4.js"
+    ]
+  },
+  "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Meshes/linesMesh.pure.js -> ../ShadersWGSL/color.fragment.js": {
+    "id": "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Meshes/linesMesh.pure.js -> ../ShadersWGSL/color.fragment.js",
+    "files": [
+      "static/chunks/_app-pages-browser_node_modules_pnpm_babylonjs_core_9_21_2_node_modules_babylonjs_core_Shader-0b0bc6.js"
+    ]
+  },
+  "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Meshes/linesMesh.pure.js -> ../ShadersWGSL/color.vertex.js": {
+    "id": "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Meshes/linesMesh.pure.js -> ../ShadersWGSL/color.vertex.js",
+    "files": [
+      "static/chunks/_app-pages-browser_node_modules_pnpm_babylonjs_core_9_21_2_node_modules_babylonjs_core_Shader-0ed73c.js"
+    ]
+  },
+  "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Misc/dumpTools.pure.js -> ../Engines/thinEngine.js": {
+    "id": "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Misc/dumpTools.pure.js -> ../Engines/thinEngine.js",
+    "files": [
+      "static/chunks/_app-pages-browser_node_modules_pnpm_babylonjs_core_9_21_2_node_modules_babylonjs_core_Engine-44ee2e.js"
+    ]
+  },
+  "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Misc/dumpTools.pure.js -> ../Shaders/pass.fragment.js": {
+    "id": "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Misc/dumpTools.pure.js -> ../Shaders/pass.fragment.js",
+    "files": [
+      "static/chunks/_app-pages-browser_node_modules_pnpm_babylonjs_core_9_21_2_node_modules_babylonjs_core_Shader-2e4d97.js"
+    ]
+  },
+  "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Misc/environmentTextureTools.pure.js -> ../Shaders/rgbdDecode.fragment.js": {
+    "id": "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Misc/environmentTextureTools.pure.js -> ../Shaders/rgbdDecode.fragment.js",
+    "files": [
+      "static/chunks/_app-pages-browser_node_modules_pnpm_babylonjs_core_9_21_2_node_modules_babylonjs_core_Shader-6c18f3.js"
+    ]
+  },
+  "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Misc/environmentTextureTools.pure.js -> ../ShadersWGSL/rgbdDecode.fragment.js": {
+    "id": "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Misc/environmentTextureTools.pure.js -> ../ShadersWGSL/rgbdDecode.fragment.js",
+    "files": [
+      "static/chunks/_app-pages-browser_node_modules_pnpm_babylonjs_core_9_21_2_node_modules_babylonjs_core_Shader-91f794.js"
+    ]
+  },
+  "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Misc/rgbdTextureTools.js -> ../Shaders/rgbdDecode.fragment.js": {
+    "id": "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Misc/rgbdTextureTools.js -> ../Shaders/rgbdDecode.fragment.js",
+    "files": [
+      "static/chunks/_app-pages-browser_node_modules_pnpm_babylonjs_core_9_21_2_node_modules_babylonjs_core_Shader-6c18f3.js"
+    ]
+  },
+  "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Misc/rgbdTextureTools.js -> ../Shaders/rgbdEncode.fragment.js": {
+    "id": "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Misc/rgbdTextureTools.js -> ../Shaders/rgbdEncode.fragment.js",
+    "files": [
+      "static/chunks/_app-pages-browser_node_modules_pnpm_babylonjs_core_9_21_2_node_modules_babylonjs_core_Shader-b83888.js"
+    ]
+  },
+  "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Misc/rgbdTextureTools.js -> ../ShadersWGSL/rgbdDecode.fragment.js": {
+    "id": "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Misc/rgbdTextureTools.js -> ../ShadersWGSL/rgbdDecode.fragment.js",
+    "files": [
+      "static/chunks/_app-pages-browser_node_modules_pnpm_babylonjs_core_9_21_2_node_modules_babylonjs_core_Shader-91f794.js"
+    ]
+  },
+  "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Misc/rgbdTextureTools.js -> ../ShadersWGSL/rgbdEncode.fragment.js": {
+    "id": "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Misc/rgbdTextureTools.js -> ../ShadersWGSL/rgbdEncode.fragment.js",
+    "files": [
+      "static/chunks/_app-pages-browser_node_modules_pnpm_babylonjs_core_9_21_2_node_modules_babylonjs_core_Shader-f95e46.js"
+    ]
+  },
+  "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Misc/textureTools.js -> ../Shaders/lod.fragment.js": {
+    "id": "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Misc/textureTools.js -> ../Shaders/lod.fragment.js",
+    "files": [
+      "static/chunks/_app-pages-browser_node_modules_pnpm_babylonjs_core_9_21_2_node_modules_babylonjs_core_Shader-da9511.js"
+    ]
+  },
+  "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Misc/textureTools.js -> ../Shaders/lod3D.fragment.js": {
+    "id": "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Misc/textureTools.js -> ../Shaders/lod3D.fragment.js",
+    "files": [
+      "static/chunks/_app-pages-browser_node_modules_pnpm_babylonjs_core_9_21_2_node_modules_babylonjs_core_Shader-d50ba0.js"
+    ]
+  },
+  "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Misc/textureTools.js -> ../Shaders/lodCube.fragment.js": {
+    "id": "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Misc/textureTools.js -> ../Shaders/lodCube.fragment.js",
+    "files": [
+      "static/chunks/_app-pages-browser_node_modules_pnpm_babylonjs_core_9_21_2_node_modules_babylonjs_core_Shader-750f0a.js"
+    ]
+  },
+  "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Misc/textureTools.js -> ../ShadersWGSL/lod.fragment.js": {
+    "id": "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Misc/textureTools.js -> ../ShadersWGSL/lod.fragment.js",
+    "files": [
+      "static/chunks/_app-pages-browser_node_modules_pnpm_babylonjs_core_9_21_2_node_modules_babylonjs_core_Shader-839035.js"
+    ]
+  },
+  "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Misc/textureTools.js -> ../ShadersWGSL/lod3D.fragment.js": {
+    "id": "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Misc/textureTools.js -> ../ShadersWGSL/lod3D.fragment.js",
+    "files": [
+      "static/chunks/_app-pages-browser_node_modules_pnpm_babylonjs_core_9_21_2_node_modules_babylonjs_core_Shader-66b2ad.js"
+    ]
+  },
+  "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Misc/textureTools.js -> ../ShadersWGSL/lodCube.fragment.js": {
+    "id": "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/Misc/textureTools.js -> ../ShadersWGSL/lodCube.fragment.js",
+    "files": [
+      "static/chunks/_app-pages-browser_node_modules_pnpm_babylonjs_core_9_21_2_node_modules_babylonjs_core_Shader-af79fb.js"
+    ]
+  },
+  "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/PostProcesses/postProcess.pure.js -> ../Shaders/postprocess.vertex.js": {
+    "id": "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/PostProcesses/postProcess.pure.js -> ../Shaders/postprocess.vertex.js",
+    "files": [
+      "static/chunks/_app-pages-browser_node_modules_pnpm_babylonjs_core_9_21_2_node_modules_babylonjs_core_Shader-32c279.js"
+    ]
+  },
+  "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/PostProcesses/postProcess.pure.js -> ../ShadersWGSL/postprocess.vertex.js": {
+    "id": "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/PostProcesses/postProcess.pure.js -> ../ShadersWGSL/postprocess.vertex.js",
+    "files": [
+      "static/chunks/_app-pages-browser_node_modules_pnpm_babylonjs_core_9_21_2_node_modules_babylonjs_core_Shader-b09f41.js"
+    ]
+  },
+  "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/PostProcesses/thinPassPostProcess.js -> ../Shaders/pass.fragment.js": {
+    "id": "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/PostProcesses/thinPassPostProcess.js -> ../Shaders/pass.fragment.js",
+    "files": [
+      "static/chunks/_app-pages-browser_node_modules_pnpm_babylonjs_core_9_21_2_node_modules_babylonjs_core_Shader-2e4d97.js"
+    ]
+  },
+  "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/PostProcesses/thinPassPostProcess.js -> ../Shaders/passCube.fragment.js": {
+    "id": "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/PostProcesses/thinPassPostProcess.js -> ../Shaders/passCube.fragment.js",
+    "files": [
+      "static/chunks/_app-pages-browser_node_modules_pnpm_babylonjs_core_9_21_2_node_modules_babylonjs_core_Shader-6050c3.js"
+    ]
+  },
+  "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/PostProcesses/thinPassPostProcess.js -> ../ShadersWGSL/pass.fragment.js": {
+    "id": "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/PostProcesses/thinPassPostProcess.js -> ../ShadersWGSL/pass.fragment.js",
+    "files": [
+      "static/chunks/_app-pages-browser_node_modules_pnpm_babylonjs_core_9_21_2_node_modules_babylonjs_core_Shader-fb5e07.js"
+    ]
+  },
+  "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/PostProcesses/thinPassPostProcess.js -> ../ShadersWGSL/passCube.fragment.js": {
+    "id": "../../node_modules/.pnpm/@babylonjs+core@9.21.2/node_modules/@babylonjs/core/PostProcesses/thinPassPostProcess.js -> ../ShadersWGSL/passCube.fragment.js",
+    "files": [
+      "static/chunks/_app-pages-browser_node_modules_pnpm_babylonjs_core_9_21_2_node_modules_babylonjs_core_Shader-561c34.js"
+    ]
+  }
+}

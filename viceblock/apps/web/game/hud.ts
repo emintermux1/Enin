@@ -33,4 +33,6 @@ export interface HudSnapshot {
   weapon: string;
   ammo: number;
   raceBestMs: number;
+  /** Bearing to the active waypoint relative to the camera (radians), or null. */
+  waypointBearing: number | null;
 }

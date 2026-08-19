@@ -575,6 +575,25 @@ export class ViceblockRuntime3D {
     }
     const clerk = this.makeHumanoid("mart-clerk", "#3a6a4a", "#e6c39a");
     clerk.position = new Vector3(cx, INTERIOR_Y + 7, cz - half + 16);
+    // Glowing floor discs make every interactive spot legible at a glance.
+    const spots: Array<[number, number, string]> = [
+      [cx + 34, cz - half + 34, "#d84020"],
+      [cx, cz - half + 34, "#7aa874"],
+      [cx - 50, cz + 24, "#c49a6a"],
+      [cx + 50, cz + 24, "#6aa0d4"],
+      [cx, cz + half - 24, "#f3e6d2"],
+    ];
+    spots.forEach(([x, z, color], i) => {
+      const disc = MeshBuilder.CreateCylinder(`mart-spot-${i}`, { diameter: 30, height: 0.8, tessellation: 14 }, this.scene);
+      const mat = new StandardMaterial(`mart-spot-mat-${i}`, this.scene);
+      mat.emissiveColor = Color3.FromHexString(color);
+      mat.diffuseColor = Color3.Black();
+      mat.disableLighting = true;
+      mat.alpha = 0.5;
+      disc.material = mat;
+      disc.isPickable = false;
+      disc.position = new Vector3(x, INTERIOR_Y + 0.6, z);
+    });
     const till = MeshBuilder.CreateBox("mart-till", { width: 14, depth: 10, height: 8 }, this.scene);
     till.material = this.material("#2a2c30", 0.2);
     till.position = new Vector3(cx + 34, INTERIOR_Y + 18, cz - half + 34);
@@ -2047,7 +2066,10 @@ export class ViceblockRuntime3D {
     const def = [...MISSIONS, HEIST_SUNSET].find((mm) => mm.id === this.mission.id);
     let obj = def?.objectives[Math.min(this.mission.step, def.objectives.length - 1)]?.label ?? "Explore Southside";
     if (this.contract) {
-      obj = this.contract.stage === "pickup" ? `CONTRACT  ·  pickup: ${this.contract.def.brief}` : "CONTRACT  ·  make the drop";
+      // Compact: the full brief lives in the dialogue; the HUD names the stop.
+      const targetId = this.contract.stage === "pickup" ? this.contract.def.pickupLandmark : this.contract.def.dropLandmark;
+      const name = this.world.landmarks.find((l) => l.id === targetId)?.name ?? targetId;
+      obj = `CONTRACT  ·  ${this.contract.stage === "pickup" ? "pickup" : "drop"}: ${name}`;
     }
     if (this.race) obj = `RACE  ·  ${this.race.checkpoint}/${RACE_CPS.length}  ·  ${this.race.t.toFixed(1)}s`;
     const wp = this.waypointPos();
@@ -2080,7 +2102,7 @@ export class ViceblockRuntime3D {
       xp: this.player.xp,
       level: Math.max(1, Math.floor(1 + Math.sqrt(this.player.xp / 180))),
       streetRep: this.player.streetRep,
-      objective: sanitizeText(obj, 64),
+      objective: sanitizeText(obj, 96),
       prompt: sanitizeText(prompt, 48),
       assist: assistHint(this.heat.level, this.heat.hiddenTimer, hideSpotNear(this.world, this.player.x, this.player.z)),
       station: this.audio.stationLabel(),
@@ -2108,6 +2130,9 @@ export class ViceblockRuntime3D {
       weapon: weaponById(this.player.weapon).name,
       ammo: this.player.weapon === "fists" ? 0 : this.player.ammo,
       raceBestMs: this.player.raceBestMs,
+      waypointBearing: wp
+        ? normalizeAngle(Math.atan2(wp.x - this.player.x, wp.z - this.player.z) - this.player.camYaw)
+        : null,
     };
   }
 

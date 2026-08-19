@@ -47,14 +47,15 @@ export class GameInput {
       this.keys.delete(e.code);
     };
     const md = (e: PointerEvent): void => {
-      // Touch on the canvas orbits the camera — only a mouse click fires.
-      if (e.pointerType === "mouse" && e.button === 0) this.fire = true;
+      // Touch on the canvas orbits the camera; anything else (mouse, pen,
+      // synthetic events with an empty pointerType) fires on button 0.
+      if (e.pointerType !== "touch" && e.button === 0) this.fire = true;
       this.pointerLocked = true;
     };
     const mu = (e: PointerEvent): void => {
       // Guarded by pointer type so lifting a touch (e.g. the move stick)
       // doesn't cancel fire held by the aim stick.
-      if (e.pointerType === "mouse" && e.button === 0) this.fire = false;
+      if (e.pointerType !== "touch" && e.button === 0) this.fire = false;
     };
     const move = (e: PointerEvent): void => {
       const rect = canvas.getBoundingClientRect();

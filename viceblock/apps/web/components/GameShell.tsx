@@ -44,6 +44,7 @@ const EMPTY: HudSnapshot = {
   weapon: "Fists",
   ammo: 0,
   raceBestMs: 0,
+  waypointBearing: null,
 };
 
 function xpPct(xp: number, level: number): number {
@@ -287,7 +288,14 @@ export function GameShell() {
       {started && (
         <>
           <div className="hud-tl">
-            <div className="obj">{hud.objective}</div>
+            <div className="obj">
+              {hud.waypointBearing !== null ? (
+                <span className="way" style={{ transform: `rotate(${hud.waypointBearing}rad)` }}>
+                  ▲
+                </span>
+              ) : null}
+              {hud.objective}
+            </div>
             {hud.assist ? <div className="assist">{hud.assist}</div> : null}
           </div>
           <div className="hud-tr">
@@ -669,6 +677,13 @@ export function GameShell() {
           font-family: var(--font-display), sans-serif;
           font-size: 22px;
           letter-spacing: 0.04em;
+        }
+        .way {
+          display: inline-block;
+          margin-right: 8px;
+          color: #f0b040;
+          font-size: 16px;
+          transition: transform 0.15s linear;
         }
         .assist {
           margin-top: 8px;

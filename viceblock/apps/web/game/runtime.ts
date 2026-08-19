@@ -920,6 +920,7 @@ export class ViceblockRuntime {
       weapon: this.player.weapon === "pistol" ? "Street Pistol" : "Fists",
       ammo: this.player.ammo,
       raceBestMs: 0,
+      waypointBearing: null,
     };
   }
 
