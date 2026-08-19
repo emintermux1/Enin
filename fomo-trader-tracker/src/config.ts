@@ -97,6 +97,7 @@ export const config: AppConfig = {
     activityPollIntervalMs: readNumber('ACTIVITY_POLL_INTERVAL_MS', 300_000),
     maxWatchlistSize: readNumber('MAX_WATCHLIST_SIZE', 1_000),
     minTradeAlertUsd: readNumber('MIN_TRADE_ALERT_USD', 500),
+    pollConcurrency: readNumber('MONITOR_CONCURRENCY', 8),
   },
   telegram: {
     botToken,

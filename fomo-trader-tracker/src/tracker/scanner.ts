@@ -18,6 +18,7 @@ import { measureActivity } from '../enrich/activity';
 import { buildPortfolio } from '../enrich/portfolio';
 import { describeReason, evaluateTrader } from '../filter/trader-filter';
 import { TraderCandidate } from '../types';
+import { runPool } from '../util/pool';
 
 export interface ScanSummary {
   checked: number;
@@ -123,45 +124,29 @@ export async function runScan(batchSize: number): Promise<ScanSummary> {
   let dropped = 0;
   let deferred = 0;
 
-  // Wallets are screened in parallel because a single wallet spends most of its
-  // time waiting on RPC and price responses. Pacing and concurrency caps live in
-  // the RPC client and the price client, so this only fills capacity that the
-  // sequential version left idle.
-  let next = 0;
-  const workerCount = Math.max(1, Math.min(config.scan.concurrency, candidates.length));
-
-  const worker = async (): Promise<void> => {
-    for (;;) {
-      const index = next;
-      next += 1;
-      const candidate = candidates[index];
-      if (!candidate) {
-        return;
-      }
-
-      const outcome = await screenCandidate(candidate);
-      switch (outcome) {
-        case 'qualified':
-          qualified += 1;
-          break;
-        case 'dropped':
-          dropped += 1;
-          break;
-        case 'deferred':
-          deferred += 1;
-          break;
-        case 'refreshed':
-        case 'failed':
-          break;
-        default: {
-          const exhaustive: never = outcome;
-          throw new Error(`Unhandled scan outcome: ${String(exhaustive)}`);
-        }
+  // Screening a wallet is mostly waiting on RPC and price responses, so wallets
+  // are screened in parallel to fill capacity the sequential version left idle.
+  await runPool(candidates, config.scan.concurrency, async (candidate) => {
+    const outcome = await screenCandidate(candidate);
+    switch (outcome) {
+      case 'qualified':
+        qualified += 1;
+        break;
+      case 'dropped':
+        dropped += 1;
+        break;
+      case 'deferred':
+        deferred += 1;
+        break;
+      case 'refreshed':
+      case 'failed':
+        break;
+      default: {
+        const exhaustive: never = outcome;
+        throw new Error(`Unhandled scan outcome: ${String(exhaustive)}`);
       }
     }
-  };
-
-  await Promise.all(Array.from({ length: workerCount }, worker));
+  });
 
   const counts = countTraders();
 

@@ -3,6 +3,7 @@ import { rpc } from '../chain/solana-rpc';
 import { config } from '../config';
 import { getWatchlist, markSignatureSeen, recordTrade } from '../db/trader-repo';
 import { short } from '../discovery/router-discovery';
+import { runPool } from '../util/pool';
 import { detectTrades } from './trade-detector';
 
 const SIGNATURES_PER_POLL = 10;
@@ -16,7 +17,11 @@ export async function pollWatchlistActivity(warmupWallets: Set<string>): Promise
   const watchlist = getWatchlist(config.monitor.maxWatchlistSize);
   let alerted = 0;
 
-  for (const trader of watchlist) {
+  // Wallets are polled in parallel so that a large watchlist still completes a
+  // full cycle inside ACTIVITY_POLL_INTERVAL_MS. Polled sequentially, a
+  // thousand-wallet watchlist takes longer than the interval itself and alerts
+  // fall progressively further behind the trades they describe.
+  await runPool(watchlist, config.monitor.pollConcurrency, async (trader) => {
     try {
       const signatures = await rpc.getSignaturesForAddress(trader.wallet, SIGNATURES_PER_POLL);
       const isWarmup = !warmupWallets.has(trader.wallet);
@@ -47,7 +52,7 @@ export async function pollWatchlistActivity(warmupWallets: Set<string>): Promise
         err instanceof Error ? err.message : String(err)
       );
     }
-  }
+  });
 
   return alerted;
 }

@@ -161,6 +161,10 @@ All four runs returned identical verdicts. Two things are worth reading off this
 
 Sustained throughput will be lower than the table: public endpoints answer `INTERNAL_ERROR` on wallets with very large token-account lists, and those wallets are retried on a later pass rather than dropped. Budget for it by screening more candidates than you need, since most sponsored wallets are small retail accounts that fail the $3,000 test anyway.
 
+**The second limit is monitoring, and it binds sooner than screening.** Every watchlist wallet is polled once per `ACTIVITY_POLL_INTERVAL_MS` (5 minutes by default), so the whole watchlist has to be polled inside that window or alerts fall progressively further behind the trades they describe. Polling is parallel (`MONITOR_CONCURRENCY`, default 8); a 17-wallet warm-up cycle took 8s sequentially against 5s parallel, both including process startup.
+
+That works out to roughly 0.1–0.3s per wallet depending on concurrency and endpoint, which puts the default 1,000-wallet cap comfortably inside a 5-minute cycle when parallel and uncomfortably close to it when sequential. Raising `MAX_WATCHLIST_SIZE` to 10,000 means sustaining about 33 polls per second, which a free public endpoint will not do; that is a paid-endpoint configuration, and the honest tradeoff is between watchlist breadth and alert latency. Widening `ACTIVITY_POLL_INTERVAL_MS` buys breadth at the cost of freshness.
+
 ## Operation notes
 
 Wallets are never rejected on incomplete data. If the pricing cap leaves mints unresolved the wallet is deferred, not dropped, and the cached misses let the next pass finish the job. RPC failures likewise defer rather than reject, so a flaky endpoint cannot quietly discard qualifying traders.

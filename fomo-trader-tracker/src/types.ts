@@ -52,6 +52,8 @@ export interface AppConfig {
     activityPollIntervalMs: number;
     maxWatchlistSize: number;
     minTradeAlertUsd: number;
+    /** Watchlist wallets polled in parallel per activity cycle. */
+    pollConcurrency: number;
   };
   telegram: {
     botToken: string;
