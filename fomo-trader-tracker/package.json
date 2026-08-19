@@ -7,6 +7,7 @@
     "dev": "tsx watch src/index.ts",
     "discover-router": "tsx src/cli/discover-router.ts",
     "scan": "tsx src/cli/scan.ts",
+    "monitor": "tsx src/cli/monitor.ts",
     "list": "tsx src/cli/list.ts",
     "typecheck": "tsc --noEmit"
   },

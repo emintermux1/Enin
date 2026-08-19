@@ -70,6 +70,8 @@ interface Endpoint {
   http: AxiosInstance;
   /** Timestamp before which this endpoint is considered throttled. */
   cooldownUntil: number;
+  /** Methods this endpoint refuses outright, so it is never retried for them. */
+  unsupportedMethods: Set<string>;
 }
 
 const COOLDOWN_MS = 60_000;
@@ -89,29 +91,32 @@ export class SolanaRpc {
         headers: { 'Content-Type': 'application/json' },
       }),
       cooldownUntil: 0,
+      unsupportedMethods: new Set<string>(),
     }));
     this.gate = new RequestGate(config.solana.minRequestSpacingMs, config.solana.maxConcurrency);
   }
 
   /**
-   * Prefers endpoints that are not cooling down, rotating so load is spread
-   * rather than hammering the first one.
+   * Prefers endpoints that support the method and are not cooling down,
+   * rotating so load is spread rather than hammering the first one.
    */
-  private pickEndpoint(): Endpoint {
+  private pickEndpoint(method: string): Endpoint | null {
+    const usable = this.endpoints.filter((entry) => !entry.unsupportedMethods.has(method));
+    if (usable.length === 0) {
+      return null;
+    }
+
     const now = Date.now();
-    for (let i = 0; i < this.endpoints.length; i += 1) {
-      const candidate = this.endpoints[(this.cursor + i) % this.endpoints.length];
+    for (let i = 0; i < usable.length; i += 1) {
+      const candidate = usable[(this.cursor + i) % usable.length];
       if (candidate && candidate.cooldownUntil <= now) {
-        this.cursor = (this.cursor + i + 1) % this.endpoints.length;
+        this.cursor = (this.cursor + i + 1) % usable.length;
         return candidate;
       }
     }
 
     // Everything is throttled: use the one that recovers soonest.
-    const soonest = this.endpoints.reduce((best, entry) =>
-      entry.cooldownUntil < best.cooldownUntil ? entry : best
-    );
-    return soonest;
+    return usable.reduce((best, entry) => (entry.cooldownUntil < best.cooldownUntil ? entry : best));
   }
 
   /**
@@ -126,7 +131,10 @@ export class SolanaRpc {
     const maxAttempts = Math.max(config.solana.retryCount + 1, this.endpoints.length);
 
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-      const endpoint = this.pickEndpoint();
+      const endpoint = this.pickEndpoint(method);
+      if (!endpoint) {
+        throw new Error(`${method} is not available on any configured RPC endpoint`);
+      }
 
       try {
         const response = await this.gate.run(() => endpoint.http.post<RpcResponse<T>>('', payload));
@@ -148,6 +156,13 @@ export class SolanaRpc {
         // A 429 or a stalled connection both mean this endpoint is throttling.
         if (isThrottleError(err)) {
           endpoint.cooldownUntil = Date.now() + COOLDOWN_MS;
+        }
+
+        // Free endpoints commonly disable heavier methods; remember that so
+        // rotation stops wasting attempts on them.
+        if (isMethodRefused(err)) {
+          endpoint.unsupportedMethods.add(method);
+          console.warn(`[rpc] ${endpoint.url} does not serve ${method}, excluding it for that call`);
         }
 
         if (attempt < maxAttempts - 1) {
@@ -327,6 +342,14 @@ function isThrottleError(err: unknown): boolean {
 
 function isThrottleMessage(error: RpcError): boolean {
   return error.code === 429 || /too many requests|rate limit/i.test(error.message);
+}
+
+function isMethodRefused(err: unknown): boolean {
+  if (!axios.isAxiosError(err)) {
+    return false;
+  }
+  const status = err.response?.status;
+  return status === 403 || status === 405 || status === 410;
 }
 
 export const rpc = new SolanaRpc();

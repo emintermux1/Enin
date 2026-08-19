@@ -59,6 +59,7 @@ export const config: AppConfig = {
     signaturesPerRouterScan: readNumber('SIGNATURES_PER_ROUTER_SCAN', 300),
     maxCandidatesPerCycle: readNumber('MAX_CANDIDATES_PER_CYCLE', 400),
     fomoMintsPerCycle: readNumber('FOMO_MINTS_PER_CYCLE', 15),
+    signaturesPerFomoMint: readNumber('SIGNATURES_PER_FOMO_MINT', 100),
   },
   filter: {
     minPortfolioUsd: readNumber('MIN_PORTFOLIO_USD', 3_000),

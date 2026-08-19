@@ -77,11 +77,15 @@ Telegram is optional. Without `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`, alert
 ```bash
 npm start                    # continuous: discovery, screening, trade alerts
 npm run scan [batchSize]     # one-shot discovery + screening pass
+npm run monitor              # one polling pass for trade alerts
+npm run monitor -- --warm    # record current history without alerting
 npm run list [limit]         # print the current watchlist
 npm run discover-router -- <wallet>...   # derive fomo's own accounts
 npx tsx src/cli/inspect.ts <wallet>      # explain one wallet's verdict
 npm run typecheck
 ```
+
+`npm start` runs everything on a loop. For cron-style operation use `scan` and `monitor` separately; run `monitor -- --warm` once first so existing history is not replayed as alerts.
 
 `inspect` is the tool to reach for when the filter behaves unexpectedly:
 

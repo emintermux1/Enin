@@ -3,6 +3,8 @@ import { SolanaRpc } from '../chain/solana-rpc';
 import { isCashLike, isMajor } from '../chain/token-registry';
 import { DetectedTrade, ParsedTransaction, TokenBalanceEntry } from '../types';
 
+const MIN_TRADE_VALUE_USD = 0.01;
+
 /**
  * Derives what a wallet bought or sold by diffing its token balances across a
  * transaction. Cash and majors are ignored so a swap reports the memecoin leg
@@ -45,13 +47,18 @@ export async function detectTrades(
     if (!price) {
       continue;
     }
+    const usdValue = Math.abs(delta) * price.usdPrice;
+    // Micro transfers (fee rebates, reward dust) are not trades.
+    if (usdValue < MIN_TRADE_VALUE_USD) {
+      continue;
+    }
     trades.push({
       wallet,
       signature,
       mint,
       side: delta > 0 ? 'buy' : 'sell',
       uiAmount: Math.abs(delta),
-      usdValue: Math.abs(delta) * price.usdPrice,
+      usdValue,
       blockTime,
     });
   }

@@ -20,8 +20,9 @@ export interface AppConfig {
     seedMints: string[];
     signaturesPerRouterScan: number;
     maxCandidatesPerCycle: number;
-    /** fomo-launched mints expanded to their holders per discovery cycle. */
+    /** fomo-launched mints expanded to their traders per discovery cycle. */
     fomoMintsPerCycle: number;
+    signaturesPerFomoMint: number;
   };
   filter: {
     minPortfolioUsd: number;
