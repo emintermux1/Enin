@@ -16,7 +16,7 @@ async function main(): Promise<void> {
 
   console.log('fomo trader tracker starting');
   console.log(`config: ${describeConfig()}`);
-  console.log(`rpc: ${config.solana.rpcUrl}`);
+  console.log(`rpc: ${config.solana.rpcUrls.join(', ')}`);
   console.log(`telegram: ${config.telegram.enabled ? 'enabled' : 'dry-run (logs only)'}`);
 
   const hasStartingPoint =

@@ -29,9 +29,23 @@ function readList(name: string): string[] {
 const botToken = readString('TELEGRAM_BOT_TOKEN');
 const chatId = readString('TELEGRAM_CHAT_ID');
 
+const DEFAULT_RPC_URLS = ['https://api.mainnet-beta.solana.com', 'https://solana-rpc.publicnode.com'];
+
+/**
+ * Free endpoints throttle in different ways — some answer 429, others simply
+ * stop responding — so several are kept and rotated. A single paid endpoint in
+ * SOLANA_RPC_URL is the better setup and takes precedence.
+ */
+function resolveRpcUrls(): string[] {
+  const list = readList('SOLANA_RPC_URLS');
+  const single = readString('SOLANA_RPC_URL');
+  const configured = [...new Set([...(single ? [single] : []), ...list])];
+  return configured.length > 0 ? configured : DEFAULT_RPC_URLS;
+}
+
 export const config: AppConfig = {
   solana: {
-    rpcUrl: readString('SOLANA_RPC_URL', 'https://api.mainnet-beta.solana.com'),
+    rpcUrls: resolveRpcUrls(),
     minRequestSpacingMs: readNumber('RPC_MIN_SPACING_MS', 120),
     maxConcurrency: readNumber('RPC_MAX_CONCURRENCY', 4),
     retryCount: readNumber('RPC_RETRY_COUNT', 3),
@@ -81,5 +95,6 @@ export function describeConfig(): string {
     `watchlist cap ${monitor.maxWatchlistSize}`,
     `router accounts ${discovery.routerAccounts.length}`,
     `seed wallets ${discovery.seedWallets.length}`,
+    `rpc endpoints ${config.solana.rpcUrls.length}`,
   ].join(' | ');
 }

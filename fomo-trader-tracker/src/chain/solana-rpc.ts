@@ -65,18 +65,53 @@ class RequestGate {
   }
 }
 
+interface Endpoint {
+  url: string;
+  http: AxiosInstance;
+  /** Timestamp before which this endpoint is considered throttled. */
+  cooldownUntil: number;
+}
+
+const COOLDOWN_MS = 60_000;
+
 export class SolanaRpc {
-  private readonly http: AxiosInstance;
+  private readonly endpoints: Endpoint[];
   private readonly gate: RequestGate;
   private nextId = 1;
+  private cursor = 0;
 
-  constructor(private readonly rpcUrl: string = config.solana.rpcUrl) {
-    this.http = axios.create({
-      baseURL: this.rpcUrl,
-      timeout: config.solana.timeoutMs,
-      headers: { 'Content-Type': 'application/json' },
-    });
+  constructor(rpcUrls: string[] = config.solana.rpcUrls) {
+    this.endpoints = rpcUrls.map((url) => ({
+      url,
+      http: axios.create({
+        baseURL: url,
+        timeout: config.solana.timeoutMs,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+      cooldownUntil: 0,
+    }));
     this.gate = new RequestGate(config.solana.minRequestSpacingMs, config.solana.maxConcurrency);
+  }
+
+  /**
+   * Prefers endpoints that are not cooling down, rotating so load is spread
+   * rather than hammering the first one.
+   */
+  private pickEndpoint(): Endpoint {
+    const now = Date.now();
+    for (let i = 0; i < this.endpoints.length; i += 1) {
+      const candidate = this.endpoints[(this.cursor + i) % this.endpoints.length];
+      if (candidate && candidate.cooldownUntil <= now) {
+        this.cursor = (this.cursor + i + 1) % this.endpoints.length;
+        return candidate;
+      }
+    }
+
+    // Everything is throttled: use the one that recovers soonest.
+    const soonest = this.endpoints.reduce((best, entry) =>
+      entry.cooldownUntil < best.cooldownUntil ? entry : best
+    );
+    return soonest;
   }
 
   /**
@@ -88,27 +123,40 @@ export class SolanaRpc {
     const payload = { jsonrpc: '2.0', id: this.nextId++, method, params };
     let lastError: unknown = null;
 
-    for (let attempt = 0; attempt <= config.solana.retryCount; attempt += 1) {
+    const maxAttempts = Math.max(config.solana.retryCount + 1, this.endpoints.length);
+
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      const endpoint = this.pickEndpoint();
+
       try {
-        const response = await this.gate.run(() => this.http.post<RpcResponse<T>>('', payload));
+        const response = await this.gate.run(() => endpoint.http.post<RpcResponse<T>>('', payload));
         const { result, error } = response.data;
         if (error) {
           // Missing/pruned data is a permanent answer, not a transient failure.
           if (error.code === -32004 || error.code === -32009) {
             return null;
           }
+          if (isThrottleMessage(error)) {
+            endpoint.cooldownUntil = Date.now() + COOLDOWN_MS;
+          }
           throw new Error(error.message);
         }
         return result ?? null;
       } catch (err) {
         lastError = err;
-        if (attempt < config.solana.retryCount) {
-          await sleep(500 * 2 ** attempt);
+
+        // A 429 or a stalled connection both mean this endpoint is throttling.
+        if (isThrottleError(err)) {
+          endpoint.cooldownUntil = Date.now() + COOLDOWN_MS;
+        }
+
+        if (attempt < maxAttempts - 1) {
+          await sleep(Math.min(500 * 2 ** attempt, 4_000));
         }
       }
     }
 
-    throw new Error(`${method} failed after ${config.solana.retryCount + 1} attempts: ${describeError(lastError)}`);
+    throw new Error(`${method} failed after ${maxAttempts} attempts: ${describeError(lastError)}`);
   }
 
   async getSignaturesForAddress(address: string, limit: number, before?: string): Promise<SignatureEntry[]> {
@@ -178,20 +226,42 @@ export class SolanaRpc {
     return (result?.value ?? []).map((entry) => entry.address);
   }
 
-  /** Resolves token-account addresses to their owning wallets. */
+  /**
+   * Resolves token-account addresses to their owning wallets. Some free
+   * endpoints disable `getMultipleAccounts`, so this falls back to one
+   * `getAccountInfo` per account, which is universally available.
+   */
   async getTokenAccountOwners(tokenAccounts: string[]): Promise<string[]> {
     if (tokenAccounts.length === 0) {
       return [];
     }
-    const result = await this.send<{
-      value: Array<{ data: { parsed: { info: { owner: string } } } } | null>;
-    }>('getMultipleAccounts', [tokenAccounts, { encoding: 'jsonParsed' }]);
+
+    try {
+      const result = await this.send<{
+        value: Array<{ data: { parsed: { info: { owner: string } } } } | null>;
+      }>('getMultipleAccounts', [tokenAccounts, { encoding: 'jsonParsed' }]);
+
+      const owners = collectOwners(result?.value ?? []);
+      if (owners.length > 0) {
+        return owners;
+      }
+    } catch {
+      // Fall through to the per-account path.
+    }
 
     const owners: string[] = [];
-    for (const entry of result?.value ?? []) {
-      const owner = entry?.data?.parsed?.info?.owner;
-      if (owner) {
-        owners.push(owner);
+    for (const account of tokenAccounts) {
+      try {
+        const result = await this.send<{
+          value: { data: { parsed: { info: { owner: string } } } } | null;
+        }>('getAccountInfo', [account, { encoding: 'jsonParsed' }]);
+
+        const owner = result?.value?.data?.parsed?.info?.owner;
+        if (owner) {
+          owners.push(owner);
+        }
+      } catch {
+        // A single unreadable account should not abort the batch.
       }
     }
     return owners;
@@ -230,6 +300,33 @@ function describeError(err: unknown): string {
     return `${err.response?.status ?? 'network'} ${err.message}`;
   }
   return err instanceof Error ? err.message : String(err);
+}
+
+function collectOwners(
+  entries: Array<{ data: { parsed: { info: { owner: string } } } } | null>
+): string[] {
+  const owners: string[] = [];
+  for (const entry of entries) {
+    const owner = entry?.data?.parsed?.info?.owner;
+    if (owner) {
+      owners.push(owner);
+    }
+  }
+  return owners;
+}
+
+function isThrottleError(err: unknown): boolean {
+  if (!axios.isAxiosError(err)) {
+    return false;
+  }
+  if (err.response?.status === 429) {
+    return true;
+  }
+  return err.code === 'ECONNABORTED' || err.code === 'ETIMEDOUT';
+}
+
+function isThrottleMessage(error: RpcError): boolean {
+  return error.code === 429 || /too many requests|rate limit/i.test(error.message);
 }
 
 export const rpc = new SolanaRpc();

@@ -1,6 +1,6 @@
 export interface AppConfig {
   solana: {
-    rpcUrl: string;
+    rpcUrls: string[];
     minRequestSpacingMs: number;
     maxConcurrency: number;
     retryCount: number;

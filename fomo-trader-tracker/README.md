@@ -54,13 +54,21 @@ FOMO_ROUTER_ACCOUNTS=<fomo router/sponsor/fee accounts>
 FOMO_MANUAL_WALLETS=<wallets to always track>
 ```
 
-**Use a real RPC endpoint.** The default public endpoint rate limits aggressively and returns `INTERNAL_ERROR` on wallets with thousands of token accounts, which are exactly the wallets you care about. A free Helius or QuickNode key removes both problems:
+**Use a real RPC endpoint.** This matters more than any other setting. Public endpoints throttle hard, disable methods (`getMultipleAccounts` returns 403 on some), and return `INTERNAL_ERROR` on wallets with thousands of token accounts — which are exactly the wallets you care about. A free Helius or QuickNode key removes all three problems:
 
 ```bash
 SOLANA_RPC_URL=https://mainnet.helius-rpc.com/?api-key=YOUR_KEY
 RPC_MIN_SPACING_MS=40
 RPC_MAX_CONCURRENCY=10
 ```
+
+Without a key, several endpoints can be rotated instead. Each is put on a 60-second cooldown when it answers 429 or stalls, and requests move to the next one:
+
+```bash
+SOLANA_RPC_URLS=https://api.mainnet-beta.solana.com,https://solana-rpc.publicnode.com
+```
+
+Expect this to be slow and to hit method-level limits regardless; it is a fallback, not a setup to run at scale.
 
 Telegram is optional. Without `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`, alerts print to stdout instead.
 
