@@ -66,7 +66,12 @@ export class GameInput {
     const vis = (): void => {
       if (document.hidden) this.resetAll();
     };
-    const cancel = (): void => this.resetAll();
+    const cancelPointer = (): void => {
+      // A lost capture (common on touch and automation) must not dump WASD.
+      this.fire = false;
+      this.stick = releaseStick(this.stick);
+      this.aimStick = releaseStick(this.aimStick);
+    };
     const paste = (e: ClipboardEvent): void => {
       e.preventDefault();
     };
@@ -75,8 +80,8 @@ export class GameInput {
     window.addEventListener("keyup", up);
     canvas.addEventListener("pointerdown", md);
     window.addEventListener("pointerup", mu);
-    window.addEventListener("pointercancel", cancel);
-    window.addEventListener("lostpointercapture", cancel);
+    window.addEventListener("pointercancel", cancelPointer);
+    window.addEventListener("lostpointercapture", cancelPointer);
     canvas.addEventListener("pointermove", move);
     window.addEventListener("blur", blur);
     document.addEventListener("visibilitychange", vis);
@@ -86,8 +91,8 @@ export class GameInput {
       window.removeEventListener("keyup", up);
       canvas.removeEventListener("pointerdown", md);
       window.removeEventListener("pointerup", mu);
-      window.removeEventListener("pointercancel", cancel);
-      window.removeEventListener("lostpointercapture", cancel);
+      window.removeEventListener("pointercancel", cancelPointer);
+      window.removeEventListener("lostpointercapture", cancelPointer);
       canvas.removeEventListener("pointermove", move);
       window.removeEventListener("blur", blur);
       document.removeEventListener("visibilitychange", vis);

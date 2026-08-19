@@ -259,7 +259,7 @@ export class ViceblockRuntime3D {
     const down = (e: PointerEvent): void => {
       // Mobile: any direct canvas touch orbits the camera (sticks are separate elements).
       // Desktop: right-drag orbits.
-      if (this.input.mobile || e.button === 2) {
+      if (this.input.mobile || e.button === 2 || e.button === 0) {
         this.dragYaw = { active: true, id: e.pointerId, lastX: e.clientX, lastY: e.clientY };
       }
     };
@@ -694,7 +694,7 @@ export class ViceblockRuntime3D {
       disc.material = dmat;
       disc.isPickable = false;
       disc.position = new Vector3(spot.x, INTERIOR_Y + 1, spot.z);
-      const label = MeshBuilder.CreatePlane(`mart-spot-lbl-${i}`, { width: 28, height: 7 }, this.scene);
+      const label = MeshBuilder.CreatePlane(`mart-spot-lbl-${i}`, { width: 40, height: 10 }, this.scene);
       const ltex = new DynamicTexture(`mart-spot-lt-${i}`, { width: 256, height: 64 }, this.scene, false);
       const lctx = ltex.getContext();
       lctx.fillStyle = "#120e0c";
@@ -712,8 +712,8 @@ export class ViceblockRuntime3D {
       lmat.emissiveColor = new Color3(0.8, 0.7, 0.5);
       lmat.specularColor = Color3.Black();
       label.material = lmat;
-      label.position = new Vector3(spot.x, INTERIOR_Y + 14, spot.z);
-      label.billboardMode = 2;
+      label.position = new Vector3(spot.x, INTERIOR_Y + 18, spot.z);
+      label.billboardMode = 7;
       label.isPickable = false;
     });
   }

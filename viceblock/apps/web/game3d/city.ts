@@ -237,9 +237,9 @@ export function buildCity(scene: Scene, world: WorldData): CityMeshes {
     signMat.emissiveTexture = signTex;
     signMat.emissiveColor = new Color3(0.55, 0.45, 0.3);
     signMat.specularColor = Color3.Black();
-    const sign = MeshBuilder.CreatePlane(`ls-${lm.id}`, { width: 46, height: 12 }, scene);
+    const sign = MeshBuilder.CreatePlane(`ls-${lm.id}`, { width: 56, height: 14 }, scene);
     sign.material = signMat;
-    sign.position = new Vector3(lm.doorX * TILE + TILE / 2, 30, lm.doorY * TILE + 8);
+    sign.position = new Vector3(lm.doorX * TILE + TILE / 2, 24, lm.doorY * TILE + 12);
     sign.rotation.y = 0;
     sign.freezeWorldMatrix();
     disposables.push(sign);

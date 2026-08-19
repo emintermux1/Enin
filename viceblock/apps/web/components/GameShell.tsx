@@ -83,9 +83,19 @@ export function GameShell() {
     window.addEventListener("resize", resize);
     const prevent = (e: Event): void => e.preventDefault();
     document.addEventListener("gesturestart", prevent as EventListener);
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.code !== "Escape") return;
+      setDebugOpen(false);
+      setMenuOpen(false);
+      setWalletOpen(false);
+      const g = gameRef.current;
+      if (g) g.player.phone = false;
+    };
+    window.addEventListener("keydown", onKey);
     return () => {
       window.removeEventListener("resize", resize);
       document.removeEventListener("gesturestart", prevent as EventListener);
+      window.removeEventListener("keydown", onKey);
     };
   }, [resize]);
 
@@ -436,6 +446,9 @@ export function GameShell() {
           {debugOpen && (
             <div className="debug">
               <strong>UNSTUCK / HELP</strong>
+              <button type="button" onClick={() => setDebugOpen(false)}>
+                close
+              </button>
               <div>
                 {(["rico", "mart", "garage", "port", "race"] as const).map((s) => (
                   <button key={s} type="button" onClick={() => gameRef.current?.debugTeleport(s)}>
