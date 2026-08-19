@@ -49,8 +49,7 @@ function splitEnvList(name: string): string[] {
 /**
  * `positionFloorUsd` separates a real memecoin position from the long tail of
  * airdrop spam and sell leftovers that active wallets accumulate. Without it a
- * wallet with 6 real positions and 200 dust entries never matches a "5-10
- * memecoins" filter.
+ * wallet with 6 real positions and 200 dust entries reads as holding 206.
  */
 export function classifyToken(
   mint: string,

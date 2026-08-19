@@ -5,7 +5,7 @@ Finds and monitors [fomo.family](https://fomo.family) traders that match a capit
 Default profile, all configurable:
 
 - portfolio worth **$3,000 or more**
-- **5–10 memecoin positions** above a scaled significance floor
+- **at least 5 memecoin positions** (up to 500) above a scaled significance floor
 - **active**: at least 5 successful transactions in the last 7 days
 
 Output is a ranked watchlist plus Telegram alerts when those wallets buy or sell. Follow whoever you want from that list inside the fomo app.
@@ -91,30 +91,34 @@ npm run typecheck
 
 ```
 wallet 5fkAwNVpT8A1UHEnY62VEFpqgagdoP8FYrv5ideiQp5c
-  total:          $3,128.16
-  memecoins:      $2,110.52 across 15 positions
-  position floor: $31.28
+  total:          $3,154.49
+  cash:           $1.43
+  sol:            $36.61
+  memecoins:      $2,104.85 across 14 positions
+  position floor: $31.54
   token accounts: 304 (pricing complete: true)
   trades/7d:      21
-  verdict:        more than 10 memecoins
+  verdict:        QUALIFIED
 ```
+
+It also lists the counted positions and the largest holdings that fell below the floor, which is what you need to decide whether the floor is set sensibly.
 
 ## Tuning the filter
 
-The counting rule matters more than it looks. Active memecoin wallets accumulate hundreds of near-worthless airdrops and sell leftovers; counting those makes a "5–10 memecoins" range impossible to satisfy. A position is therefore only counted when it is worth at least
+The counting rule matters more than it looks, because it decides what "5 memecoins" means. Active wallets accumulate hundreds of near-worthless airdrops and sell leftovers, and a wallet holding 300 dust entries is not a wallet with 300 positions. A position is therefore only counted when it is worth at least
 
 ```
 max(DUST_THRESHOLD_USD, portfolio_total * MIN_POSITION_SHARE)
 ```
 
-which is $25 or 1% of the portfolio by default. Raise `MIN_POSITION_SHARE` to count only conviction positions, lower it to count the tail.
+which is $25 or 1% of the portfolio by default. The wallet above illustrates it: 304 token accounts, but only 14 positions above a $31.54 floor.
 
-The real wallet above is a good illustration: $3.1K, 21 trades a week, clearly the target profile, yet it holds 15 significant positions and fails a hard 5–10 range. If matches are scarce, widen `MAX_MEMECOINS` before touching anything else.
+Raise `MIN_POSITION_SHARE` to demand conviction positions, lower it to count the tail. `MIN_MEMECOINS` is the setting that actually gates matches; `MAX_MEMECOINS` defaults to 500, high enough that it only excludes wallets that are really airdrop farms rather than traders.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `MIN_PORTFOLIO_USD` | 3000 | Minimum total portfolio value |
-| `MIN_MEMECOINS` / `MAX_MEMECOINS` | 5 / 10 | Significant memecoin position range |
+| `MIN_MEMECOINS` / `MAX_MEMECOINS` | 5 / 500 | Significant memecoin position range |
 | `MIN_TRADES_IN_WINDOW` | 5 | Successful transactions required |
 | `ACTIVITY_WINDOW_DAYS` | 7 | Activity window |
 | `DUST_THRESHOLD_USD` | 25 | Absolute significance floor |

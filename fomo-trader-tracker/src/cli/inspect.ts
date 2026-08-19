@@ -26,15 +26,21 @@ async function main(): Promise<void> {
   const activity = await measureActivity(rpc, wallet);
   const result = evaluateTrader(portfolio, activity, 'manual');
 
+  const label = (text: string): string => `  ${text.padEnd(16)}`;
+
   console.log(`\nwallet ${wallet}`);
-  console.log(`  total:          ${usd(portfolio.totalUsdValue)}`);
-  console.log(`  cash:           ${usd(portfolio.cashUsdValue)}`);
-  console.log(`  sol:            ${usd(portfolio.solUsdValue)}`);
-  console.log(`  memecoins:      ${usd(portfolio.memecoinUsdValue)} across ${portfolio.memecoinCount} positions`);
-  console.log(`  position floor: ${usd(portfolio.positionFloorUsd)}`);
-  console.log(`  token accounts: ${portfolio.mintCount} (pricing complete: ${portfolio.pricingComplete})`);
-  console.log(`  trades/${config.filter.activityWindowDays}d:     ${activity.tradeCount}`);
-  console.log(`  verdict:        ${result.qualified ? 'QUALIFIED' : describeReason(result.reason)}`);
+  console.log(`${label('total:')}${usd(portfolio.totalUsdValue)}`);
+  console.log(`${label('cash:')}${usd(portfolio.cashUsdValue)}`);
+  console.log(`${label('sol:')}${usd(portfolio.solUsdValue)}`);
+  console.log(
+    `${label('memecoins:')}${usd(portfolio.memecoinUsdValue)} across ${portfolio.memecoinCount} positions`
+  );
+  console.log(`${label('position floor:')}${usd(portfolio.positionFloorUsd)}`);
+  console.log(
+    `${label('token accounts:')}${portfolio.mintCount} (pricing complete: ${portfolio.pricingComplete})`
+  );
+  console.log(`${label(`trades/${config.filter.activityWindowDays}d:`)}${activity.tradeCount}`);
+  console.log(`${label('verdict:')}${result.qualified ? 'QUALIFIED' : describeReason(result.reason)}`);
 
   const counted = portfolio.holdings.filter((holding) => holding.tokenClass === 'memecoin');
   console.log(`\ncounted memecoin positions (${counted.length}):`);

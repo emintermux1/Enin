@@ -64,7 +64,7 @@ export const config: AppConfig = {
   filter: {
     minPortfolioUsd: readNumber('MIN_PORTFOLIO_USD', 3_000),
     minMemecoins: readNumber('MIN_MEMECOINS', 5),
-    maxMemecoins: readNumber('MAX_MEMECOINS', 10),
+    maxMemecoins: readNumber('MAX_MEMECOINS', 500),
     minTradesInWindow: readNumber('MIN_TRADES_IN_WINDOW', 5),
     activityWindowDays: readNumber('ACTIVITY_WINDOW_DAYS', 7),
     dustThresholdUsd: readNumber('DUST_THRESHOLD_USD', 25),
