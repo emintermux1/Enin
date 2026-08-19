@@ -7,6 +7,7 @@ import { FreeCamera } from "@babylonjs/core/Cameras/freeCamera";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import type { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
+import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
 import { Scene } from "@babylonjs/core/scene";
 import {
   AIM_ASSIST_CONFIG,
@@ -215,6 +216,8 @@ export class ViceblockRuntime3D {
   /** Car id → clock time until which its alarm blocks another pick attempt. */
   private alarmLockout = new Map<string, number>();
   private beaconMesh: Mesh | null = null;
+  private hudAcc = 0;
+  private lastHudKey = "";
 
   onHud?: (h: HudSnapshot) => void;
   onPersist?: (s: PlayerSave) => void;
@@ -234,9 +237,9 @@ export class ViceblockRuntime3D {
     this.city = buildCity(this.scene, this.world);
 
     this.hemi = new HemisphericLight("hemi", new Vector3(0.2, 1, 0.1), this.scene);
-    this.hemi.intensity = 0.85;
+    this.hemi.intensity = 0.95;
     this.sun = new DirectionalLight("sun", new Vector3(-0.4, -1, -0.3), this.scene);
-    this.sun.intensity = 0.6;
+    this.sun.intensity = 0.78;
 
     this.camera = new FreeCamera("cam", new Vector3(0, 40, -40), this.scene);
     this.camera.minZ = 1;
@@ -276,6 +279,8 @@ export class ViceblockRuntime3D {
     window.addEventListener("pointerup", up);
     window.addEventListener("pointercancel", up);
     this.canvas.addEventListener("contextmenu", ctx);
+    const onResize = (): void => this.engine.resize();
+    window.addEventListener("resize", onResize);
     const prevUnbind = this.unbind;
     this.unbind = () => {
       prevUnbind?.();
@@ -284,7 +289,30 @@ export class ViceblockRuntime3D {
       window.removeEventListener("pointerup", up);
       window.removeEventListener("pointercancel", up);
       this.canvas.removeEventListener("contextmenu", ctx);
+      window.removeEventListener("resize", onResize);
     };
+    let last = performance.now();
+    this.engine.runRenderLoop(() => {
+      const now = performance.now();
+      const dt = Math.min(0.033, (now - last) / 1000);
+      last = now;
+      if (this.running) {
+        this.update(dt);
+        this.scene.render();
+        this.drawMinimap();
+        return;
+      }
+      this.clock += dt;
+      this.time = 17.6;
+      this.updateDayNight();
+      this.updateCars(dt);
+      this.updateActors(dt);
+      const ox = this.world.spawnX + Math.sin(this.clock * 0.13) * 210;
+      const oz = this.world.spawnY + Math.cos(this.clock * 0.13) * 210;
+      this.camera.position.set(ox, 92, oz);
+      this.camera.setTarget(new Vector3(this.world.spawnX + 50, 16, this.world.spawnY - 10));
+      this.scene.render();
+    });
   }
 
   detach(): void {
@@ -301,20 +329,10 @@ export class ViceblockRuntime3D {
     this.audio.setLevels(this.settings);
     if (this.quality === "auto") this.quality = this.input.mobile ? "low" : "high";
     this.applyQuality();
+    this.player.camYaw = 0.35;
+    this.player.camPitch = 0.55;
     this.running = true;
-    let last = performance.now();
-    this.engine.runRenderLoop(() => {
-      const now = performance.now();
-      const dt = Math.min(0.033, (now - last) / 1000);
-      last = now;
-      if (this.running) {
-        this.update(dt);
-        this.scene.render();
-        this.drawMinimap();
-      }
-    });
-    window.addEventListener("resize", () => this.engine.resize());
-    this.say("Rico Vale", "You walk like you still got a ticket in your pocket. Come find me.");
+    this.say("Rico Vale", "You walk like you still got a ticket in your pocket. Follow the gold pillar — that's me.");
   }
 
   applyQuality(): void {
@@ -407,6 +425,31 @@ export class ViceblockRuntime3D {
 
   // ------------------------------------------------------------- world seed
 
+  private pinNameplate(parent: Mesh, title: string): void {
+    const tex = new DynamicTexture(`np-${parent.name}`, { width: 256, height: 64 }, this.scene, false);
+    const ctx = tex.getContext();
+    ctx.fillStyle = "#1a1410";
+    ctx.fillRect(0, 0, 256, 64);
+    ctx.fillStyle = "#f3e6d2";
+    ctx.font = "bold 28px Impact, sans-serif";
+    const t2 = ctx as unknown as CanvasRenderingContext2D;
+    t2.textAlign = "center";
+    t2.textBaseline = "middle";
+    ctx.fillText(title.slice(0, 16).toUpperCase(), 128, 32);
+    tex.update();
+    const mat = new StandardMaterial(`npmat-${parent.name}`, this.scene);
+    mat.diffuseTexture = tex;
+    mat.emissiveTexture = tex;
+    mat.emissiveColor = new Color3(0.7, 0.6, 0.45);
+    mat.specularColor = Color3.Black();
+    const plate = MeshBuilder.CreatePlane(`np-${parent.name}`, { width: 28, height: 7 }, this.scene);
+    plate.material = mat;
+    plate.position.y = 28;
+    plate.billboardMode = 2;
+    plate.parent = parent;
+    plate.isPickable = false;
+  }
+
   private material(hex: string, emissive = 0): StandardMaterial {
     const key = `${hex}-${emissive}`;
     let m = this.matCache.get(key);
@@ -420,40 +463,101 @@ export class ViceblockRuntime3D {
     return m;
   }
 
-  private makeHumanoid(name: string, shirtHex: string, skinHex: string): Mesh {
-    const body = MeshBuilder.CreateBox(`${name}-b`, { width: 8, depth: 5, height: 12 }, this.scene);
-    body.material = this.material(shirtHex);
-    const head = MeshBuilder.CreateBox(`${name}-h`, { width: 6, depth: 6, height: 6 }, this.scene);
+  private makeHumanoid(name: string, shirtHex: string, skinHex: string, pantsHex = "#2a2420"): Mesh {
+    const root = MeshBuilder.CreateBox(`${name}-root`, { width: 0.4, depth: 0.4, height: 0.4 }, this.scene);
+    root.isVisible = false;
+    const torso = MeshBuilder.CreateBox(`${name}-t`, { width: 8, depth: 5, height: 10 }, this.scene);
+    torso.material = this.material(shirtHex);
+    torso.position.y = 13;
+    torso.parent = root;
+    const head = MeshBuilder.CreateBox(`${name}-h`, { width: 5.4, depth: 5.4, height: 5.4 }, this.scene);
     head.material = this.material(skinHex);
-    head.position.y = 9.5;
-    head.parent = body;
-    body.position.y = 7;
-    return body;
+    head.position.y = 20.6;
+    head.parent = root;
+    const hair = MeshBuilder.CreateBox(`${name}-hair`, { width: 5.6, depth: 5.6, height: 1.6 }, this.scene);
+    hair.material = this.material("#1a1410");
+    hair.position.y = 23.6;
+    hair.parent = root;
+    const armL = MeshBuilder.CreateBox(`${name}-al`, { width: 2.2, depth: 2.4, height: 9 }, this.scene);
+    armL.material = this.material(shirtHex);
+    armL.position.set(0, 13.5, 4.1);
+    armL.parent = root;
+    const armR = MeshBuilder.CreateBox(`${name}-ar`, { width: 2.2, depth: 2.4, height: 9 }, this.scene);
+    armR.material = this.material(shirtHex);
+    armR.position.set(0, 13.5, -4.1);
+    armR.parent = root;
+    const legL = MeshBuilder.CreateBox(`${name}-ll`, { width: 3.2, depth: 2.6, height: 8 }, this.scene);
+    legL.material = this.material(pantsHex);
+    legL.position.set(0, 4, 1.5);
+    legL.parent = root;
+    const legR = MeshBuilder.CreateBox(`${name}-lr`, { width: 3.2, depth: 2.6, height: 8 }, this.scene);
+    legR.material = this.material(pantsHex);
+    legR.position.set(0, 4, -1.5);
+    legR.parent = root;
+    const shadow = MeshBuilder.CreateCylinder(`${name}-sh`, { diameter: 12, height: 0.4, tessellation: 10 }, this.scene);
+    shadow.material = this.material("#0c0a08", 0);
+    shadow.position.y = 0.2;
+    shadow.parent = root;
+    root.metadata = { armL, armR, legL, legR };
+    return root;
+  }
+
+  private poseWalk(mesh: Mesh, moving: boolean, sprint: boolean): void {
+    const meta = mesh.metadata as { armL?: Mesh; armR?: Mesh; legL?: Mesh; legR?: Mesh } | undefined;
+    if (!meta?.armL || !meta.armR || !meta.legL || !meta.legR) return;
+    const swing = moving ? Math.sin(this.clock * (sprint ? 14 : 9)) * 0.7 : 0;
+    meta.armL.rotation.x = swing;
+    meta.armR.rotation.x = -swing;
+    meta.legL.rotation.x = -swing * 0.65;
+    meta.legR.rotation.x = swing * 0.65;
   }
 
   private makeCarMesh(name: string, hex: string, isPolice: boolean): Mesh {
-    const body = MeshBuilder.CreateBox(`${name}-b`, { width: 30, depth: 16, height: 8 }, this.scene);
+    const root = MeshBuilder.CreateBox(`${name}-root`, { width: 0.4, depth: 0.4, height: 0.4 }, this.scene);
+    root.isVisible = false;
+    const body = MeshBuilder.CreateBox(`${name}-b`, { width: 30, depth: 15, height: 7 }, this.scene);
     body.material = this.material(hex);
-    const cabin = MeshBuilder.CreateBox(`${name}-c`, { width: 14, depth: 13, height: 6 }, this.scene);
-    cabin.material = this.material(isPolice ? "#d8e4f0" : "#1a1c20");
-    cabin.position = new Vector3(-2, 7, 0);
-    cabin.parent = body;
+    body.position.y = 6.2;
+    body.parent = root;
+    const cabin = MeshBuilder.CreateBox(`${name}-c`, { width: 13, depth: 13, height: 6 }, this.scene);
+    cabin.material = this.material(isPolice ? "#d8e4f0" : "#14181c");
+    cabin.position = new Vector3(-3, 12.2, 0);
+    cabin.parent = root;
     if (isPolice) {
       const bar = MeshBuilder.CreateBox(`${name}-l`, { width: 6, depth: 10, height: 2 }, this.scene);
       bar.material = this.material("#4a90d8", 0.9);
-      bar.position = new Vector3(-2, 11, 0);
-      bar.parent = body;
+      bar.position = new Vector3(-3, 16, 0);
+      bar.parent = root;
     }
-    const lightF = MeshBuilder.CreateBox(`${name}-hf`, { width: 1.5, depth: 12, height: 2 }, this.scene);
-    lightF.material = this.material("#f2e6c0", 0.7);
-    lightF.position = new Vector3(15, 1, 0);
-    lightF.parent = body;
-    const lightR = MeshBuilder.CreateBox(`${name}-hr`, { width: 1.5, depth: 12, height: 2 }, this.scene);
-    lightR.material = this.material("#c43020", 0.7);
-    lightR.position = new Vector3(-15, 1, 0);
-    lightR.parent = body;
-    body.position.y = 5;
-    return body;
+    const lightF = MeshBuilder.CreateBox(`${name}-hf`, { width: 1.4, depth: 12, height: 2 }, this.scene);
+    lightF.material = this.material("#f2e6c0", 0.75);
+    lightF.position = new Vector3(15, 5.4, 0);
+    lightF.parent = root;
+    const lightR = MeshBuilder.CreateBox(`${name}-hr`, { width: 1.4, depth: 12, height: 2 }, this.scene);
+    lightR.material = this.material("#c43020", 0.75);
+    lightR.position = new Vector3(-15, 5.4, 0);
+    lightR.parent = root;
+    const wheelMat = this.material("#1a1614");
+    const wheels: Mesh[] = [];
+    for (const [wx, wz] of [
+      [10, 7.2],
+      [10, -7.2],
+      [-10, 7.2],
+      [-10, -7.2],
+    ] as const) {
+      const wheel = MeshBuilder.CreateCylinder(`${name}-w${wheels.length}`, { height: 3.2, diameter: 5.2, tessellation: 8 }, this.scene);
+      wheel.rotation.z = Math.PI / 2;
+      wheel.position.set(wx, 2.6, wz);
+      wheel.material = wheelMat;
+      wheel.parent = root;
+      wheels.push(wheel);
+    }
+    const shadow = MeshBuilder.CreateCylinder(`${name}-sh`, { diameter: 28, height: 0.35, tessellation: 10 }, this.scene);
+    shadow.material = this.material("#0c0a08");
+    shadow.position.y = 0.18;
+    shadow.parent = root;
+    root.metadata = { wheels };
+    return root;
   }
 
   private seedWorld(): void {
@@ -487,28 +591,30 @@ export class ViceblockRuntime3D {
     });
 
     const named: Array<[string, string, number, number, string, string[]]> = [
-      ["rico", "Rico Vale", 29 * TILE, 47 * TILE, "#c45a32", [
+      ["rico", "Rico Vale", 29.5 * TILE, 49.2 * TILE, "#c45a32", [
         "You drive?",
         "Depends. Is it yours?",
         "Not anymore. Boost the Sparrow by Coral Mart. Maya wants it clean.",
       ]],
-      ["maya", "Maya Reyes", 57 * TILE, 61 * TILE, "#e6c39a", [
+      ["maya", "Maya Reyes", 57.5 * TILE, 63.2 * TILE, "#e6c39a", [
         "If it still rolls, I can make it mean.",
         "Midnight line is south. Don't be cute with the handbrake.",
       ]],
-      ["cupsey", "Cupsey", 27 * TILE, 29 * TILE, "#f0a030", [
+      ["cupsey", "Cupsey", 27.5 * TILE, 30.2 * TILE, "#f0a030", [
         "Charts said Southside goes vertical. I took that personally.",
         "We're so back. Or we never left. Same thing.",
       ]],
-      ["ansem", "Ansem", 72 * TILE, 20 * TILE, "#d8d2c4", [
+      ["ansem", "Ansem", 72.5 * TILE, 21.2 * TILE, "#d8d2c4", [
         "Liquidity is just another word for heat.",
         "The mural remembers wallets the news forgets.",
       ]],
-      ["marcus", "Marcus Vane", 82 * TILE, 61 * TILE, "#5a6a48", [
+      ["marcus", "Marcus Vane", 82.5 * TILE, 63.2 * TILE, "#5a6a48", [
         "Crate's in the yard. Fence is theater. Cops ain't.",
       ]],
     ];
     for (const [id, name, x, z, shirt, talk] of named) {
+      const mesh = this.makeHumanoid(id, shirt, "#e6c39a");
+      this.pinNameplate(mesh, name);
       this.actors.push({
         id,
         kind: "named",
@@ -518,7 +624,7 @@ export class ViceblockRuntime3D {
         heading: 0,
         hp: 100,
         panic: 0,
-        mesh: this.makeHumanoid(id, shirt, "#e6c39a"),
+        mesh,
         talk,
       });
     }
@@ -574,31 +680,56 @@ export class ViceblockRuntime3D {
       shelf.position = new Vector3(cx - 50 + i * 50, INTERIOR_Y + 11, cz + 24);
     }
     const clerk = this.makeHumanoid("mart-clerk", "#3a6a4a", "#e6c39a");
-    clerk.position = new Vector3(cx, INTERIOR_Y + 7, cz - half + 16);
-    // Glowing floor discs make every interactive spot legible at a glance.
-    // Placed on the open floor where the player stands, not inside the
-    // counter/shelf meshes (which would swallow them).
-    const spots: Array<[number, number, string]> = [
-      [cx + 34, cz - half + 56, "#d84020"],
-      [cx, cz - half + 56, "#7aa874"],
-      [cx - 74, cz + 24, "#c49a6a"],
-      [cx + 74, cz + 24, "#6aa0d4"],
-      [cx, cz + half - 24, "#f3e6d2"],
-    ];
-    spots.forEach(([x, z, color], i) => {
-      const disc = MeshBuilder.CreateCylinder(`mart-spot-${i}`, { diameter: 34, height: 1.6, tessellation: 14 }, this.scene);
-      const mat = new StandardMaterial(`mart-spot-mat-${i}`, this.scene);
-      mat.emissiveColor = Color3.FromHexString(color);
-      mat.diffuseColor = Color3.Black();
-      mat.disableLighting = true;
-      mat.alpha = 0.85;
-      disc.material = mat;
-      disc.isPickable = false;
-      disc.position = new Vector3(x, INTERIOR_Y + 1, z);
-    });
+    clerk.position = new Vector3(cx, INTERIOR_Y, cz - half + 16);
     const till = MeshBuilder.CreateBox("mart-till", { width: 14, depth: 10, height: 8 }, this.scene);
     till.material = this.material("#2a2c30", 0.2);
     till.position = new Vector3(cx + 34, INTERIOR_Y + 18, cz - half + 34);
+    this.martSpots().forEach((spot, i) => {
+      const disc = MeshBuilder.CreateCylinder(`mart-spot-${i}`, { diameter: 34, height: 1.6, tessellation: 14 }, this.scene);
+      const dmat = new StandardMaterial(`mart-spot-mat-${i}`, this.scene);
+      dmat.emissiveColor = Color3.FromHexString(spot.color);
+      dmat.diffuseColor = Color3.Black();
+      dmat.disableLighting = true;
+      dmat.alpha = 0.85;
+      disc.material = dmat;
+      disc.isPickable = false;
+      disc.position = new Vector3(spot.x, INTERIOR_Y + 1, spot.z);
+      const label = MeshBuilder.CreatePlane(`mart-spot-lbl-${i}`, { width: 28, height: 7 }, this.scene);
+      const ltex = new DynamicTexture(`mart-spot-lt-${i}`, { width: 256, height: 64 }, this.scene, false);
+      const lctx = ltex.getContext();
+      lctx.fillStyle = "#120e0c";
+      lctx.fillRect(0, 0, 256, 64);
+      lctx.fillStyle = spot.color;
+      lctx.font = "bold 30px Impact, sans-serif";
+      const lt = lctx as unknown as CanvasRenderingContext2D;
+      lt.textAlign = "center";
+      lt.textBaseline = "middle";
+      lctx.fillText(spot.tag, 128, 32);
+      ltex.update();
+      const lmat = new StandardMaterial(`mart-spot-lm-${i}`, this.scene);
+      lmat.diffuseTexture = ltex;
+      lmat.emissiveTexture = ltex;
+      lmat.emissiveColor = new Color3(0.8, 0.7, 0.5);
+      lmat.specularColor = Color3.Black();
+      label.material = lmat;
+      label.position = new Vector3(spot.x, INTERIOR_Y + 14, spot.z);
+      label.billboardMode = 2;
+      label.isPickable = false;
+    });
+  }
+
+  /** Shared interior spots — discs, prompts, and E-actions must agree. */
+  private martSpots(): Array<{ x: number; z: number; r: number; color: string; tag: string; prompt: string; kind: "rob" | "meal" | "coffee" | "vest" | "leave" }> {
+    const room = this.martRoom;
+    if (!room) return [];
+    const { cx, cz, half } = room;
+    return [
+      { x: cx + 34, z: cz - half + 56, r: 36, color: "#d84020", tag: "ROB", prompt: "E  ·  ROB THE TILL", kind: "rob" },
+      { x: cx, z: cz - half + 56, r: 36, color: "#7aa874", tag: "MEAL", prompt: "E  ·  BUY MEAL $15 (+35 hp)", kind: "meal" },
+      { x: cx - 74, z: cz + 24, r: 36, color: "#c49a6a", tag: "COFFEE", prompt: "E  ·  COFFEE $8 (sprint boost)", kind: "coffee" },
+      { x: cx + 74, z: cz + 24, r: 36, color: "#6aa0d4", tag: "VEST", prompt: "E  ·  VEST $150 (+60 armor)", kind: "vest" },
+      { x: cx, z: cz + half - 24, r: 40, color: "#f3e6d2", tag: "EXIT", prompt: "E  ·  LEAVE", kind: "leave" },
+    ];
   }
 
   private enterMart(): void {
@@ -619,72 +750,64 @@ export class ViceblockRuntime3D {
     this.audio.uiClick();
   }
 
-  /** Interior interactions resolve by proximity to furniture spots. */
+  /** Interior interactions resolve by proximity to the same spots the discs use. */
   private interactInterior(): void {
     if (!this.interiorMode || !this.martRoom) return;
-    const { cx, cz, half } = this.martRoom;
-    const near = (x: number, z: number, r: number): boolean => Math.hypot(this.player.x - x, this.player.z - z) < r;
-    if (near(cx + 34, cz - half + 34, 34)) {
-      this.robStore();
-      this.exitInterior();
-      return;
-    }
-    if (near(cx, cz - half + 34, 40)) {
-      if (this.player.cash >= 15) {
-        this.player.cash -= 15;
-        this.player.health = Math.min(100, this.player.health + 35);
-        this.audio.cash();
-        this.flash("HOT MEAL  ·  +35 health  ·  $15");
-      } else {
-        this.flash("CLERK  ·  fifteen bucks, friend");
+    const spot = this.martSpots().find((s) => Math.hypot(this.player.x - s.x, this.player.z - s.z) < s.r);
+    if (!spot) return;
+    switch (spot.kind) {
+      case "rob":
+        this.robStore();
+        this.exitInterior();
+        return;
+      case "meal":
+        if (this.player.cash >= 15) {
+          this.player.cash -= 15;
+          this.player.health = Math.min(100, this.player.health + 35);
+          this.audio.cash();
+          this.flash("HOT MEAL  ·  +35 health  ·  $15");
+        } else {
+          this.flash("CLERK  ·  fifteen bucks, friend");
+        }
+        return;
+      case "coffee":
+        if (this.player.cash >= 8) {
+          this.player.cash -= 8;
+          this.player.sprintBoost = 30;
+          this.audio.cash();
+          this.flash("COFFEE  ·  sprint boost 30s  ·  $8");
+        } else {
+          this.flash("MACHINE  ·  $8, exact change only");
+        }
+        return;
+      case "vest":
+        if (this.player.armor >= 95) {
+          this.flash("CLERK  ·  you're already wearing one");
+        } else if (this.player.cash >= 150) {
+          this.player.cash -= 150;
+          this.player.armor = Math.min(100, this.player.armor + 60);
+          this.audio.cash();
+          this.flash("KEVLAR VEST  ·  +60 armor  ·  $150");
+        } else {
+          this.flash("CLERK  ·  vest is $150, no layaway");
+        }
+        return;
+      case "leave":
+        this.exitInterior();
+        return;
+      default: {
+        const _n: never = spot.kind;
+        return _n;
       }
-      return;
-    }
-    if (near(cx - 50, cz + 24, 40)) {
-      if (this.player.cash >= 8) {
-        this.player.cash -= 8;
-        this.player.sprintBoost = 30;
-        this.audio.cash();
-        this.flash("COFFEE  ·  sprint boost 30s  ·  $8");
-      } else {
-        this.flash("MACHINE  ·  $8, exact change only");
-      }
-      return;
-    }
-    if (near(cx + 50, cz + 24, 40)) {
-      // The only legit armor source in the district.
-      if (this.player.armor >= 95) {
-        this.flash("CLERK  ·  you're already wearing one");
-      } else if (this.player.cash >= 150) {
-        this.player.cash -= 150;
-        this.player.armor = Math.min(100, this.player.armor + 60);
-        this.audio.cash();
-        this.flash("KEVLAR VEST  ·  +60 armor  ·  $150");
-      } else {
-        this.flash("CLERK  ·  vest is $150, no layaway");
-      }
-      return;
-    }
-    if (near(cx, cz + half - 24, 40)) {
-      this.exitInterior();
-      return;
     }
   }
 
   private interiorPrompt(): string {
     if (!this.interiorMode || !this.martRoom) return "";
-    const { cx, cz, half } = this.martRoom;
-    const spots: Array<[number, number, number, string]> = [
-      [cx + 34, cz - half + 34, 34, "E  ·  ROB THE TILL"],
-      [cx, cz - half + 34, 40, "E  ·  BUY MEAL $15 (+35 hp)"],
-      [cx - 50, cz + 24, 40, "E  ·  COFFEE $8 (sprint boost)"],
-      [cx + 50, cz + 24, 40, "E  ·  VEST $150 (+60 armor)"],
-      [cx, cz + half - 24, 40, "E  ·  LEAVE"],
-    ];
-    for (const [x, z, r, label] of spots) {
-      if (Math.hypot(this.player.x - x, this.player.z - z) < r) return label;
+    for (const s of this.martSpots()) {
+      if (Math.hypot(this.player.x - s.x, this.player.z - s.z) < s.r) return s.prompt;
     }
-    return "";
+    return "Walk onto a labeled disc";
   }
 
   // ---------------------------------------------------------------- update
@@ -825,20 +948,27 @@ export class ViceblockRuntime3D {
       this.persistT = 0;
       this.onPersist?.(this.snapshot());
     }
-    this.onHud?.(this.hud());
+    this.hudAcc += dt;
+    const hud = this.hud();
+    const key = `${hud.cash}|${hud.health}|${hud.armor}|${hud.prompt}|${hud.objective}|${hud.toast}|${hud.heat}|${hud.lockpick?.pos.toFixed(2) ?? ""}|${Math.round((hud.waypointBearing ?? 0) * 8)}|${hud.phoneOpen}|${hud.jailLeft}`;
+    if (this.lockpick || this.hudAcc > 0.07 || key !== this.lastHudKey) {
+      this.hudAcc = 0;
+      this.lastHudKey = key;
+      this.onHud?.(hud);
+    }
   }
 
   private updateDayNight(): void {
     const t = this.time;
     const day = t > 6.5 && t < 19;
     const dusk = (t > 5 && t <= 6.5) || (t >= 19 && t < 21);
-    this.hemi.intensity = this.blackout ? 0.12 : day ? 0.85 : dusk ? 0.5 : 0.28;
-    this.sun.intensity = this.blackout ? 0.02 : day ? 0.6 : dusk ? 0.3 : 0.05;
+    this.hemi.intensity = this.blackout ? 0.22 : day ? 0.95 : dusk ? 0.62 : 0.48;
+    this.sun.intensity = this.blackout ? 0.05 : day ? 0.78 : dusk ? 0.4 : 0.18;
     const sky = this.blackout
-      ? new Color4(0.03, 0.03, 0.05, 1)
-      : day ? new Color4(0.42, 0.55, 0.62, 1) : dusk ? new Color4(0.62, 0.38, 0.28, 1) : new Color4(0.07, 0.06, 0.1, 1);
+      ? new Color4(0.04, 0.04, 0.07, 1)
+      : day ? new Color4(0.48, 0.62, 0.7, 1) : dusk ? new Color4(0.66, 0.4, 0.3, 1) : new Color4(0.1, 0.09, 0.16, 1);
     this.scene.clearColor = sky;
-    const fog = this.weather === "fog" ? 0.004 : this.weather === "rain" ? 0.0016 : 0.0007;
+    const fog = this.weather === "fog" ? 0.0026 : this.weather === "rain" ? 0.0012 : 0.00045;
     this.scene.fogMode = Scene.FOGMODE_EXP2;
     this.scene.fogDensity = fog;
     this.scene.fogColor = new Color3(sky.r, sky.g, sky.b);
@@ -905,33 +1035,42 @@ export class ViceblockRuntime3D {
     }
     if (!this.interiorMode) this.tryFire(dt);
     const elev = this.interiorMode ? INTERIOR_Y : 0;
-    this.playerMesh.position.set(this.player.x, elev + 7 + this.player.y, this.player.z);
+    const bob = mag > 0.05 && this.player.grounded ? Math.abs(Math.sin(this.clock * (axis.sprint ? 14 : 9))) * 1.1 : 0;
+    this.playerMesh.position.set(this.player.x, elev + this.player.y + bob, this.player.z);
     this.playerMesh.rotation.y = Math.PI / 2 - this.player.heading;
+    this.poseWalk(this.playerMesh, mag > 0.05, axis.sprint);
     if (this.player.health <= 0) this.die();
   }
 
   private updateCamera(dt: number): void {
     const car = this.cars.find((c) => c.rt.id === this.player.vehicleId);
     const speed = car ? Math.hypot(car.rt.vx, car.rt.vy) : 0;
-    const dist = car ? 120 + Math.min(50, speed * 0.25) : 90;
+    let dist = car ? 120 + Math.min(50, speed * 0.25) : 90;
     const pitch = this.player.camPitch;
-    // While driving fast, ease the camera behind the velocity vector.
     if (car && speed > 30 && !this.dragYaw.active) {
       const desired = Math.atan2(car.rt.vx, car.rt.vy);
       this.player.camYaw += normalizeAngle(desired - this.player.camYaw) * Math.min(1, dt * 3);
     }
     const elev = this.interiorMode ? INTERIOR_Y : 0;
-    const bx = this.player.x - Math.sin(this.player.camYaw) * dist * Math.cos(pitch);
-    const bz = this.player.z - Math.cos(this.player.camYaw) * dist * Math.cos(pitch);
-    let camY = elev + 20 + Math.sin(pitch) * dist;
-    if (this.shake > 0 && this.settings.shake) camY += (Math.random() - 0.5) * this.shake;
-    const target = new Vector3(this.player.x, elev + 12 + this.player.y, this.player.z);
-    this.camera.position = new Vector3(
-      bx + (this.shake > 0 && this.settings.shake ? (Math.random() - 0.5) * this.shake : 0),
-      camY,
-      bz,
-    );
-    this.camera.setTarget(target);
+    const place = (d: number): { x: number; z: number; y: number } => {
+      const x = this.player.x - Math.sin(this.player.camYaw) * d * Math.cos(pitch);
+      const z = this.player.z - Math.cos(this.player.camYaw) * d * Math.cos(pitch);
+      return { x, z, y: elev + 22 + Math.sin(pitch) * d };
+    };
+    let p = place(dist);
+    if (!this.interiorMode && blocked(this.world, p.x, p.z, 10)) {
+      dist *= 0.55;
+      p = place(dist);
+      if (blocked(this.world, p.x, p.z, 10)) p = { ...p, y: p.y + 36 };
+    }
+    if (this.shake > 0 && this.settings.shake) {
+      p.x += (Math.random() - 0.5) * this.shake;
+      p.y += (Math.random() - 0.5) * this.shake;
+      p.z += (Math.random() - 0.5) * this.shake;
+    }
+    const desired = new Vector3(p.x, p.y, p.z);
+    this.camera.position = Vector3.Lerp(this.camera.position, desired, 1 - Math.pow(0.0008, dt));
+    this.camera.setTarget(new Vector3(this.player.x, elev + 14 + this.player.y, this.player.z));
   }
 
   private updateCars(dt: number): void {
@@ -939,7 +1078,7 @@ export class ViceblockRuntime3D {
     for (const car of this.cars) {
       let v = car.rt;
       if (v.exploded) {
-        car.mesh.position.y = 2.5;
+        car.mesh.position.y = 0.4;
         continue;
       }
       if (v.health <= 0) {
@@ -1017,9 +1156,11 @@ export class ViceblockRuntime3D {
         if (v.y > MAP_H * TILE) v.y = 8;
       }
       car.rt = v;
-      car.mesh.position.set(v.x, 5, v.y);
+      car.mesh.position.set(v.x, 0, v.y);
       car.mesh.rotation.y = -v.heading;
-      // Visible damage stages: a battered car starts to list.
+      const wheels = (car.mesh.metadata as { wheels?: Mesh[] } | undefined)?.wheels;
+      const spin = Math.hypot(v.vx, v.vy) * dt * 0.12;
+      if (wheels) for (const w of wheels) w.rotation.x += spin;
       const stage = damageStage(v);
       car.mesh.rotation.z = stage === 1 ? 0.03 : stage === 2 ? 0.08 : 0;
       const hpRatio = v.health / def.durability;
@@ -1037,7 +1178,7 @@ export class ViceblockRuntime3D {
     const hour = this.time;
     for (const a of this.actors) {
       if (a.kind === "named") {
-        a.mesh.position.set(a.x, 7, a.z);
+        a.mesh.position.set(a.x, 0, a.z);
         continue;
       }
       if (a.recording && a.recording > 0) {
@@ -1058,8 +1199,9 @@ export class ViceblockRuntime3D {
           a.z = nz;
         } else a.heading += 1.2;
       }
-      a.mesh.position.set(a.x, 7, a.z);
+      a.mesh.position.set(a.x, 0, a.z);
       a.mesh.rotation.y = Math.PI / 2 - a.heading;
+      this.poseWalk(a.mesh, a.panic <= 0 && !a.recording, false);
     }
   }
 
@@ -1119,8 +1261,9 @@ export class ViceblockRuntime3D {
         c.x = nx;
         c.z = nz;
       }
-      c.mesh.position.set(c.x, 7, c.z);
+      c.mesh.position.set(c.x, 0, c.z);
       c.mesh.rotation.y = Math.PI / 2 - ang;
+      this.poseWalk(c.mesh, true, this.heat.level >= 2);
       const d = Math.hypot(c.x - this.player.x, c.z - this.player.z);
       nearest = Math.min(nearest, d);
       if (seen && this.heat.level >= POLICE_CONFIG.copShootMinHeat && d < 190 && Math.random() < POLICE_CONFIG.copShootChancePerTick) {
@@ -1171,6 +1314,8 @@ export class ViceblockRuntime3D {
     const def = [...MISSIONS, HEIST_SUNSET].find((m) => m.id === this.mission.id);
     if (!def) return null;
     const target = def.objectives[Math.min(this.mission.step, def.objectives.length - 1)]?.targetId ?? "";
+    const actor = this.actors.find((a) => a.id === target);
+    if (actor) return { x: actor.x, z: actor.z };
     const alias: Record<string, string> = {
       rico: "rico-hideout",
       phone: "rico-hideout",
@@ -1392,12 +1537,40 @@ export class ViceblockRuntime3D {
     this.tracers.push({ mesh: p, life: 0.4 });
   }
 
+  private nearestNamed(r: number): Actor | undefined {
+    let best: Actor | undefined;
+    let bestD = r;
+    for (const a of this.actors) {
+      if (a.kind !== "named") continue;
+      const d = Math.hypot(a.x - this.player.x, a.z - this.player.z);
+      if (d < bestD) {
+        bestD = d;
+        best = a;
+      }
+    }
+    return best;
+  }
+
+  private talkTo(named: Actor): void {
+    const line = named.talk?.[Math.min(named.talk.length - 1, this.mission.step)] ?? named.talk?.[0] ?? "...";
+    this.say(named.name, line);
+    if (named.id === "rico" && this.mission.id === "fresh-off-the-bus") {
+      this.mission.step = Math.max(this.mission.step, 2);
+      this.player.phone = true;
+    }
+    if (named.id === "maya" && this.mission.id === "borrowed-wheels") this.mission.step = Math.max(this.mission.step, 3);
+  }
+
   private tryInteract(): void {
     if (!this.player.vehicleId) {
+      const named = this.nearestNamed(52);
+      if (named?.talk) {
+        this.talkTo(named);
+        return;
+      }
       const car = this.nearestCar(34);
       if (car && !car.rt.exploded) {
         const def = vehicleById(car.rt.defId);
-        // Security tiers: cheap cars open right up; nicer rides need a pick.
         if (def.security !== "none" && !this.unlocked.has(car.rt.id) && !car.rt.stolen) {
           const lockedOut = (this.alarmLockout.get(car.rt.id) ?? 0) > this.clock;
           if (lockedOut) {
@@ -1416,17 +1589,6 @@ export class ViceblockRuntime3D {
         return;
       }
     }
-    const named = this.actors.find((a) => a.kind === "named" && Math.hypot(a.x - this.player.x, a.z - this.player.z) < 40);
-    if (named?.talk) {
-      const line = named.talk[Math.min(named.talk.length - 1, this.mission.step)] ?? named.talk[0];
-      this.say(named.name, line ?? "...");
-      if (named.id === "rico" && this.mission.id === "fresh-off-the-bus") {
-        this.mission.step = Math.max(this.mission.step, 2);
-        this.player.phone = true;
-      }
-      if (named.id === "maya" && this.mission.id === "borrowed-wheels") this.mission.step = Math.max(this.mission.step, 3);
-      return;
-    }
     const mark = landmarkAt(this.world, this.player.x, this.player.z);
     if (mark) this.useLandmark(mark);
   }
@@ -1434,6 +1596,11 @@ export class ViceblockRuntime3D {
   private useLandmark(mark: Landmark): void {
     if (mark.id === "police") {
       this.flash(this.heat.level > 0 ? "NCPD  ·  bold of you to knock" : "NCPD  ·  nothing for you here, keep moving");
+      return;
+    }
+    if (mark.id === "rico-hideout") {
+      const rico = this.actors.find((a) => a.id === "rico");
+      if (rico) this.talkTo(rico);
       return;
     }
     if (mark.id === "coral-mart") return this.enterMart();
@@ -1998,7 +2165,7 @@ export class ViceblockRuntime3D {
       const mesh = r.mesh;
       mesh.position.x += (r.x - mesh.position.x) * 0.2;
       mesh.position.z += (r.z - mesh.position.z) * 0.2;
-      mesh.position.y = 7;
+      mesh.position.y = 0;
     }
   }
 
@@ -2087,7 +2254,10 @@ export class ViceblockRuntime3D {
     else if (this.interiorMode) prompt = this.interiorPrompt();
     else if (this.lockpick) prompt = "E  ·  PICK when the pin is in the zone";
     else if (this.heat.level >= 1 && !this.player.vehicleId && nearestCop < 34) prompt = "G  ·  SURRENDER (jail beats the morgue)";
-    else if (!this.player.vehicleId && car) {
+    else if (!this.player.vehicleId && this.nearestNamed(52)) {
+      const who = this.nearestNamed(52);
+      prompt = who ? `E  ·  TALK TO ${who.name.toUpperCase()}` : "";
+    } else if (!this.player.vehicleId && car) {
       const carDef = vehicleById(car.rt.defId);
       const locked = carDef.security !== "none" && !this.unlocked.has(car.rt.id) && !car.rt.stolen;
       const lockedOut = (this.alarmLockout.get(car.rt.id) ?? 0) > this.clock;

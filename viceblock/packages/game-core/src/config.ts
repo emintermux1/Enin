@@ -53,7 +53,7 @@ export const ECONOMY_CONFIG = {
 
 export const WORLD_CONFIG = {
   hoursPerRealSecond: 1 / 240,
-  weatherCycleSeconds: 90,
+  weatherCycleSeconds: 240,
   presenceIntervalMs: 800,
   autosaveSeconds: 4,
 };

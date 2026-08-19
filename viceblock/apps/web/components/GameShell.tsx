@@ -7,8 +7,6 @@ import { ViceblockRuntime3D } from "../game3d/runtime3d";
 import { blockRichPaste } from "../lib/sanitize-dom";
 import { WalletPanel } from "./WalletPanel";
 
-const IS_DEV = process.env.NODE_ENV === "development";
-
 const EMPTY: HudSnapshot = {
   cash: 500,
   bank: 0,
@@ -68,6 +66,7 @@ export function GameShell() {
   const [phoneTab, setPhoneTab] = useState<"map" | "jobs" | "crew" | "bank" | "profile">("jobs");
   const [walletOpen, setWalletOpen] = useState(false);
   const [debugOpen, setDebugOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [session, setSession] = useState<string>("");
   const [wallet, setWallet] = useState<{ address: string; sol: number; nfts: number; live: boolean } | null>(null);
 
@@ -258,11 +257,11 @@ export function GameShell() {
 
       {!started && (
         <div className="gate">
-          <p className="kicker">SEASON 1 — WELCOME TO NOVA</p>
+          <p className="kicker">SEASON 1 — SOUTHSIDE</p>
           <h1>VICEBLOCK</h1>
           <p className="lede">
-            Southside is already awake. Guest in, walk, steal a Sparrow, hit Coral Mart, lose the slow cops.
-            Music starts the second you enter. Wallet later.
+            Follow the gold pillar to Rico. Steal the unlocked Sparrow on the curb. Coral Mart is the red awning.
+            Cops are slow. Wallet later.
           </p>
           <label>
             STREET NAME
@@ -385,7 +384,10 @@ export function GameShell() {
             </div>
           ) : null}
 
-          <div className="dock">
+          <div className={`dock ${menuOpen ? "open" : ""}`}>
+            <button type="button" className="menu-toggle" onClick={() => setMenuOpen((v) => !v)}>
+              {menuOpen ? "CLOSE" : "MENU"}
+            </button>
             <button type="button" onClick={() => gameRef.current && (gameRef.current.player.phone = !gameRef.current.player.phone)}>
               PHONE
             </button>
@@ -426,16 +428,14 @@ export function GameShell() {
             >
               QUALITY
             </button>
-            {IS_DEV && (
-              <button type="button" onClick={() => setDebugOpen((v) => !v)}>
-                DEBUG
-              </button>
-            )}
+            <button type="button" onClick={() => setDebugOpen((v) => !v)}>
+              HELP
+            </button>
           </div>
 
-          {IS_DEV && debugOpen && (
+          {debugOpen && (
             <div className="debug">
-              <strong>DEV TOOLS</strong>
+              <strong>UNSTUCK / HELP</strong>
               <div>
                 {(["rico", "mart", "garage", "port", "race"] as const).map((s) => (
                   <button key={s} type="button" onClick={() => gameRef.current?.debugTeleport(s)}>
@@ -609,10 +609,16 @@ export function GameShell() {
         }
         .gate {
           position: absolute;
-          inset: auto 8vw 12vh 8vw;
+          inset: auto 8vw 10vh 8vw;
           max-width: 520px;
-          background: linear-gradient(180deg, rgba(28, 18, 14, 0.2), rgba(18, 12, 10, 0.88));
+          background: linear-gradient(180deg, rgba(28, 18, 14, 0.05), rgba(14, 9, 7, 0.78));
           padding: 28px 8px 8px;
+          pointer-events: none;
+        }
+        .gate label,
+        .gate input,
+        .gate .enter {
+          pointer-events: auto;
         }
         .kicker {
           letter-spacing: 0.28em;
@@ -960,6 +966,7 @@ export function GameShell() {
           transform: translateX(-50%);
           display: flex;
           gap: 8px;
+          z-index: 5;
         }
         .dock button {
           background: #2a2018;
@@ -968,6 +975,9 @@ export function GameShell() {
           padding: 8px 10px;
           letter-spacing: 0.08em;
           font-size: 11px;
+        }
+        .menu-toggle {
+          display: none;
         }
         .stick {
           position: absolute;
@@ -1104,7 +1114,7 @@ export function GameShell() {
             opacity: 0.55;
           }
         }
-        @media (min-width: 900px) {
+        @media (hover: hover) and (pointer: fine) {
           .stick,
           .act,
           .jump {
@@ -1150,11 +1160,22 @@ export function GameShell() {
             bottom: max(6px, env(safe-area-inset-bottom));
             gap: 4px;
             max-width: 96vw;
+            flex-wrap: wrap;
+            justify-content: center;
           }
           .dock button {
             padding: 6px 6px;
             font-size: 9px;
             letter-spacing: 0.04em;
+          }
+          .menu-toggle {
+            display: inline-block;
+            background: #c45a32;
+            color: #1a1410;
+            font-weight: 800;
+          }
+          .dock:not(.open) button:not(.menu-toggle) {
+            display: none;
           }
           .stick.move {
             left: max(16px, env(safe-area-inset-left));
