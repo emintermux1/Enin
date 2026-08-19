@@ -11,3 +11,4 @@ coverage
 data/*.json
 !data/.gitkeep
 .next-dev/
+.next-fresh/
