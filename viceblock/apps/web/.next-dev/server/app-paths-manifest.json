@@ -1,5 +1,0 @@
-{
-  "/api/presence/route": "app/api/presence/route.js",
-  "/api/save/route": "app/api/save/route.js",
-  "/page": "app/page.js"
-}

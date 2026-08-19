@@ -10,3 +10,4 @@ coverage
 .DS_Store
 data/*.json
 !data/.gitkeep
+.next-dev/
