@@ -14,7 +14,7 @@ Output is a ranked watchlist plus Telegram alerts when those wallets buy or sell
 
 This tool reads the blockchain. It does **not** log into fomo, does not use fomo's private app API, and does not automate follows, trades or any other account action. There is no public fomo API — `docs.fomo.com` belongs to an unrelated marketing product, and fomo.family directs technical requests to `support@fomo.family`. Bulk automated follows would also risk your account, so that is deliberately out of scope.
 
-Everything here works on addresses, not identities. Mapping a wallet to a fomo username requires the app and is not attempted.
+Everything here works on addresses, not identities. Mapping a wallet to a fomo username requires the app and is not attempted, which sets a hard limit on what any amount of throughput here can buy you: the output is a ranked list of wallets, and following on fomo is an in-app action against a profile. Screening 10,000 wallets a day is achievable; converting them into 10,000 follows is not something this tool can do, and no volume of on-chain data changes that.
 
 Solana only for now. fomo also trades on Base, BNB Chain and Monad, and bridges via [Relay](https://relay.link); those chains would need a separate adapter.
 
@@ -144,9 +144,24 @@ Raise `MIN_POSITION_SHARE` to demand conviction positions, lower it to count the
 | `MAX_WATCHLIST_SIZE` | 1000 | Watchlist cap, ranked by score |
 | `MIN_TRADE_ALERT_USD` | 500 | Minimum trade size to alert on |
 
-## Operation notes
+## Capacity
 
-**Screening is the bottleneck, not discovery.** The relayer supplies candidates far faster than they can be screened: a live run produced 60 distinct trader wallets from 60 transactions in 18 seconds, while screening costs roughly 14 seconds per wallet on public RPC. Most sponsored wallets are small retail accounts that fail the $3,000 test, so reaching a full watchlist means screening a lot of them. This is the concrete reason a paid RPC key matters here — raise `RPC_MAX_CONCURRENCY` and lower `RPC_MIN_SPACING_MS` and throughput scales with the endpoint.
+Discovery is not the constraint. The relayer produced 60 distinct trader wallets from 60 transactions in 18 seconds, roughly 288,000 per day, and it is a firehose that can be read faster than screened.
+
+Screening is the constraint, and it is bounded by the RPC endpoint. Wallets are screened in parallel (`SCAN_CONCURRENCY`, default 6), measured on free public RPC against an identical set of 20 wallets:
+
+| Setup | Time for 20 wallets | Per wallet | Screened per day |
+| --- | --- | --- | --- |
+| Sequential (`SCAN_CONCURRENCY=1`) | 121s | 6.1s | ~14,000 |
+| Parallel, cold price cache | 86s | 4.3s | ~20,000 |
+| Parallel, warm price cache | 86s | 4.3s | ~20,000 |
+| Parallel, concurrency 12 + RPC concurrency 10 | 84s | 4.2s | ~20,000 |
+
+All four runs returned identical verdicts. Two things are worth reading off this table. Parallelism is worth about 1.4x and then stops helping: raising `SCAN_CONCURRENCY` past 6 changes nothing because the free public endpoint itself is saturated, so the remaining headroom is bought with a paid RPC key, not with settings. And the warm cache matching the cold one means Jupiter pricing is not the limit at this scale — the cache earns its keep on wallets with hundreds of mints, not on the average wallet.
+
+Sustained throughput will be lower than the table: public endpoints answer `INTERNAL_ERROR` on wallets with very large token-account lists, and those wallets are retried on a later pass rather than dropped. Budget for it by screening more candidates than you need, since most sponsored wallets are small retail accounts that fail the $3,000 test anyway.
+
+## Operation notes
 
 Wallets are never rejected on incomplete data. If the pricing cap leaves mints unresolved the wallet is deferred, not dropped, and the cached misses let the next pass finish the job. RPC failures likewise defer rather than reject, so a flaky endpoint cannot quietly discard qualifying traders.
 

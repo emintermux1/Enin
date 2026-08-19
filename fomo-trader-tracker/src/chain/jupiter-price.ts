@@ -35,6 +35,7 @@ export class JupiterPrice {
   private readonly http: AxiosInstance;
   private readonly spacingMs: number;
   private readonly maxMintsPerWallet: number;
+  private queue: Promise<void> = Promise.resolve();
   private lastRequestAt = 0;
   private throttleWarned = false;
 
@@ -133,12 +134,22 @@ export class JupiterPrice {
     return found;
   }
 
-  private async waitForSlot(): Promise<void> {
-    const wait = this.lastRequestAt + this.spacingMs - Date.now();
-    if (wait > 0) {
-      await sleep(wait);
-    }
-    this.lastRequestAt = Date.now();
+  /**
+   * Reserves the next request slot. Callers are chained through a queue rather
+   * than each comparing against `lastRequestAt`, because wallets are screened in
+   * parallel and concurrent readers of a shared timestamp would all consider the
+   * same slot free and fire together, which is what triggers the 429s.
+   */
+  private waitForSlot(): Promise<void> {
+    const reserved = this.queue.then(async () => {
+      const wait = this.lastRequestAt + this.spacingMs - Date.now();
+      if (wait > 0) {
+        await sleep(wait);
+      }
+      this.lastRequestAt = Date.now();
+    });
+    this.queue = reserved.catch(() => undefined);
+    return reserved;
   }
 }
 

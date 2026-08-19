@@ -31,6 +31,10 @@ export interface AppConfig {
     signaturesPerFomoMint: number;
     signaturesPerSponsorScan: number;
   };
+  scan: {
+    /** Wallets screened in parallel. Raise it with a paid RPC endpoint. */
+    concurrency: number;
+  };
   filter: {
     minPortfolioUsd: number;
     minMemecoins: number;

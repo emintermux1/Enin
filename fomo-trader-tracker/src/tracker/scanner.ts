@@ -123,52 +123,45 @@ export async function runScan(batchSize: number): Promise<ScanSummary> {
   let dropped = 0;
   let deferred = 0;
 
-  for (const candidate of candidates) {
-    try {
-      const portfolio = await buildPortfolio(rpc, candidate.wallet);
+  // Wallets are screened in parallel because a single wallet spends most of its
+  // time waiting on RPC and price responses. Pacing and concurrency caps live in
+  // the RPC client and the price client, so this only fills capacity that the
+  // sequential version left idle.
+  let next = 0;
+  const workerCount = Math.max(1, Math.min(config.scan.concurrency, candidates.length));
 
-      // Every wallet screened teaches us about more fomo-launched tokens, whose
-      // holders become the next round of candidates.
-      recordFomoMints(extractFomoMints(portfolio.holdings.map((holding) => holding.mint)));
-
-      // Judging a wallet on partial pricing produces false rejections. The
-      // misses are cached, so the next pass resolves the remaining mints.
-      if (!portfolio.pricingComplete) {
-        console.log(
-          `[scan] ${short(candidate.wallet)} deferred: ${portfolio.mintCount} mints, pricing incomplete`
-        );
-        deferred += 1;
-        continue;
+  const worker = async (): Promise<void> => {
+    for (;;) {
+      const index = next;
+      next += 1;
+      const candidate = candidates[index];
+      if (!candidate) {
+        return;
       }
 
-      const activity = await measureActivity(rpc, candidate.wallet);
-      const result = evaluateTrader(portfolio, activity, candidate.source);
-
-      markCandidateChecked(candidate.wallet, result.reason);
-
-      if (result.qualified && result.trader) {
-        const isNew = upsertTrader(result.trader);
-        if (isNew) {
+      const outcome = await screenCandidate(candidate);
+      switch (outcome) {
+        case 'qualified':
           qualified += 1;
-          await alertNewTrader(result.trader);
+          break;
+        case 'dropped':
+          dropped += 1;
+          break;
+        case 'deferred':
+          deferred += 1;
+          break;
+        case 'refreshed':
+        case 'failed':
+          break;
+        default: {
+          const exhaustive: never = outcome;
+          throw new Error(`Unhandled scan outcome: ${String(exhaustive)}`);
         }
-        console.log(
-          `[scan] ${short(candidate.wallet)} qualified: $${Math.round(portfolio.totalUsdValue)}, ` +
-            `${portfolio.memecoinCount} memecoins above $${Math.round(portfolio.positionFloorUsd)}, ` +
-            `${activity.tradeCount} trades`
-        );
-      } else {
-        deactivateTrader(candidate.wallet);
-        dropped += 1;
-        console.log(`[scan] ${short(candidate.wallet)} rejected: ${describeReason(result.reason)}`);
       }
-    } catch (err) {
-      console.warn(
-        `[scan] ${short(candidate.wallet)} failed:`,
-        err instanceof Error ? err.message : String(err)
-      );
     }
-  }
+  };
+
+  await Promise.all(Array.from({ length: workerCount }, worker));
 
   const counts = countTraders();
 
@@ -180,4 +173,55 @@ export async function runScan(batchSize: number): Promise<ScanSummary> {
     watchlistSize: counts.active,
     candidates: counts.candidates,
   };
+}
+
+/** `refreshed` is a wallet that still qualifies and was already on the watchlist. */
+type ScanOutcome = 'qualified' | 'refreshed' | 'dropped' | 'deferred' | 'failed';
+
+async function screenCandidate(candidate: TraderCandidate): Promise<ScanOutcome> {
+  try {
+    const portfolio = await buildPortfolio(rpc, candidate.wallet);
+
+    // Every wallet screened teaches us about more fomo-launched tokens, whose
+    // holders become the next round of candidates.
+    recordFomoMints(extractFomoMints(portfolio.holdings.map((holding) => holding.mint)));
+
+    // Judging a wallet on partial pricing produces false rejections. The
+    // misses are cached, so the next pass resolves the remaining mints.
+    if (!portfolio.pricingComplete) {
+      console.log(
+        `[scan] ${short(candidate.wallet)} deferred: ${portfolio.mintCount} mints, pricing incomplete`
+      );
+      return 'deferred';
+    }
+
+    const activity = await measureActivity(rpc, candidate.wallet);
+    const result = evaluateTrader(portfolio, activity, candidate.source);
+
+    markCandidateChecked(candidate.wallet, result.reason);
+
+    if (result.qualified && result.trader) {
+      const isNew = upsertTrader(result.trader);
+      console.log(
+        `[scan] ${short(candidate.wallet)} qualified: $${Math.round(portfolio.totalUsdValue)}, ` +
+          `${portfolio.memecoinCount} memecoins above $${Math.round(portfolio.positionFloorUsd)}, ` +
+          `${activity.tradeCount} trades`
+      );
+      if (!isNew) {
+        return 'refreshed';
+      }
+      await alertNewTrader(result.trader);
+      return 'qualified';
+    }
+
+    deactivateTrader(candidate.wallet);
+    console.log(`[scan] ${short(candidate.wallet)} rejected: ${describeReason(result.reason)}`);
+    return 'dropped';
+  } catch (err) {
+    console.warn(
+      `[scan] ${short(candidate.wallet)} failed:`,
+      err instanceof Error ? err.message : String(err)
+    );
+    return 'failed';
+  }
 }

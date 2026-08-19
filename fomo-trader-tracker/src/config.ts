@@ -79,6 +79,9 @@ export const config: AppConfig = {
     signaturesPerFomoMint: readNumber('SIGNATURES_PER_FOMO_MINT', 100),
     signaturesPerSponsorScan: readNumber('SIGNATURES_PER_SPONSOR_SCAN', 500),
   },
+  scan: {
+    concurrency: readNumber('SCAN_CONCURRENCY', 6),
+  },
   filter: {
     minPortfolioUsd: readNumber('MIN_PORTFOLIO_USD', 3_000),
     minMemecoins: readNumber('MIN_MEMECOINS', 5),
