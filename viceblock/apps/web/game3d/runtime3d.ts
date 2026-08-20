@@ -249,6 +249,7 @@ export class ViceblockRuntime3D {
     this.player.z = this.world.spawnY;
 
     this.playerMesh = this.makeHumanoid("player", "#c45a32", "#e6c39a");
+    this.playerMesh.position.set(this.player.x, 0, this.player.z);
     this.input = new GameInput();
     this.audio = new GameAudio();
     this.seedWorld();
@@ -306,7 +307,8 @@ export class ViceblockRuntime3D {
       this.time = 15.4;
       this.updateDayNight();
       this.updateCars(dt);
-      this.updateActors(dt);
+      // Do not wander civilians on the title screen — they walk onto spawn
+      // and sit inside the player the second you tap Enter.
       const ox = this.world.spawnX + Math.sin(this.clock * 0.13) * 210;
       const oz = this.world.spawnY + Math.cos(this.clock * 0.13) * 210;
       this.camera.position.set(ox, 92, oz);
@@ -330,8 +332,14 @@ export class ViceblockRuntime3D {
     if (this.quality === "auto") this.quality = this.input.mobile ? "low" : "high";
     this.applyQuality();
     this.time = 15.4;
-    this.player.camYaw = 0.35;
-    this.player.camPitch = 0.48;
+    // Face Rico so the first shot is a street, a hideout trim, and a 3/4 face.
+    const ricoX = 29.5 * TILE;
+    const ricoZ = 49.2 * TILE;
+    this.player.heading = Math.atan2(ricoZ - this.player.z, ricoX - this.player.x);
+    this.player.camYaw = this.player.heading - Math.PI / 2 + 0.42;
+    this.player.camPitch = 0.38;
+    this.playerMesh.rotation.y = -this.player.heading;
+    this.evictCrowd(110);
     this.snapCamera();
     this.running = true;
     this.say("Rico Vale", "You walk like you still got a ticket in your pocket. Follow the gold pillar — that's me.");
@@ -465,40 +473,148 @@ export class ViceblockRuntime3D {
     return m;
   }
 
+  private faceMaterial(skinHex: string): StandardMaterial {
+    const key = `face-${skinHex}`;
+    const hit = this.matCache.get(key);
+    if (hit) return hit;
+    const tex = new DynamicTexture(`facetex-${skinHex}`, { width: 128, height: 128 }, this.scene, false);
+    const ctx = tex.getContext() as unknown as CanvasRenderingContext2D;
+    ctx.fillStyle = skinHex;
+    ctx.fillRect(0, 0, 128, 128);
+    ctx.fillStyle = "#1a1410";
+    ctx.fillRect(22, 28, 28, 8);
+    ctx.fillRect(78, 28, 28, 8);
+    ctx.fillStyle = "#f7f2ea";
+    ctx.beginPath();
+    ctx.ellipse(36, 52, 13, 16, 0, 0, Math.PI * 2);
+    ctx.ellipse(92, 52, 13, 16, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#1c1410";
+    ctx.beginPath();
+    ctx.ellipse(36, 54, 6, 8, 0, 0, Math.PI * 2);
+    ctx.ellipse(92, 54, 6, 8, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#f7f2ea";
+    ctx.beginPath();
+    ctx.ellipse(38, 51, 2.2, 2.2, 0, 0, Math.PI * 2);
+    ctx.ellipse(94, 51, 2.2, 2.2, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#8a4030";
+    ctx.beginPath();
+    ctx.ellipse(64, 92, 16, 6, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = skinHex;
+    ctx.fillRect(48, 84, 32, 6);
+    tex.hasAlpha = false;
+    tex.update();
+    const m = new StandardMaterial(key, this.scene);
+    m.diffuseTexture = tex;
+    m.emissiveTexture = tex;
+    m.emissiveColor = new Color3(0.35, 0.28, 0.22);
+    m.specularColor = Color3.Black();
+    this.matCache.set(key, m);
+    return m;
+  }
+
   private makeHumanoid(name: string, shirtHex: string, skinHex: string, pantsHex = "#2a2420"): Mesh {
     const root = MeshBuilder.CreateBox(`${name}-root`, { width: 0.4, depth: 0.4, height: 0.4 }, this.scene);
     root.isVisible = false;
-    const torso = MeshBuilder.CreateBox(`${name}-t`, { width: 8, depth: 5, height: 10 }, this.scene);
+    const torso = MeshBuilder.CreateBox(`${name}-t`, { width: 7.2, depth: 4.6, height: 9.2 }, this.scene);
     torso.material = this.material(shirtHex);
-    torso.position.y = 13;
+    torso.position.y = 13.2;
     torso.parent = root;
-    const head = MeshBuilder.CreateBox(`${name}-h`, { width: 5.4, depth: 5.4, height: 5.4 }, this.scene);
+    const neck = MeshBuilder.CreateCylinder(`${name}-nk`, { height: 1.8, diameter: 2.2, tessellation: 8 }, this.scene);
+    neck.material = this.material(skinHex);
+    neck.position.y = 18.4;
+    neck.parent = root;
+    const head = MeshBuilder.CreateBox(`${name}-h`, { width: 5.2, depth: 5.2, height: 5.4 }, this.scene);
     head.material = this.material(skinHex);
-    head.position.y = 20.6;
+    head.position.y = 21.4;
     head.parent = root;
-    const hair = MeshBuilder.CreateBox(`${name}-hair`, { width: 5.6, depth: 5.6, height: 1.6 }, this.scene);
+    const face = MeshBuilder.CreatePlane(`${name}-face`, { width: 5.1, height: 5.3 }, this.scene);
+    face.material = this.faceMaterial(skinHex);
+    face.position.set(2.65, 21.4, 0);
+    face.rotation.y = Math.PI / 2;
+    face.parent = root;
+    const brow = MeshBuilder.CreateBox(`${name}-brow`, { width: 1.1, depth: 3.8, height: 0.55 }, this.scene);
+    brow.material = this.material("#1a1410");
+    brow.position.set(2.5, 22.7, 0);
+    brow.parent = root;
+    const eyeWhiteL = MeshBuilder.CreateSphere(`${name}-ewl`, { diameter: 1.35, segments: 8 }, this.scene);
+    eyeWhiteL.material = this.material("#f4efe6", 0.18);
+    eyeWhiteL.position.set(2.55, 21.65, 1.2);
+    eyeWhiteL.parent = root;
+    const eyeWhiteR = MeshBuilder.CreateSphere(`${name}-ewr`, { diameter: 1.35, segments: 8 }, this.scene);
+    eyeWhiteR.material = this.material("#f4efe6", 0.18);
+    eyeWhiteR.position.set(2.55, 21.65, -1.2);
+    eyeWhiteR.parent = root;
+    const pupilL = MeshBuilder.CreateSphere(`${name}-pl`, { diameter: 0.72, segments: 6 }, this.scene);
+    pupilL.material = this.material("#14110e", 0.08);
+    pupilL.position.set(3.15, 21.6, 1.2);
+    pupilL.parent = root;
+    const pupilR = MeshBuilder.CreateSphere(`${name}-pr`, { diameter: 0.72, segments: 6 }, this.scene);
+    pupilR.material = this.material("#14110e", 0.08);
+    pupilR.position.set(3.15, 21.6, -1.2);
+    pupilR.parent = root;
+    const nose = MeshBuilder.CreateBox(`${name}-nose`, { width: 1.1, depth: 1.15, height: 1.35 }, this.scene);
+    nose.material = this.material(skinHex);
+    nose.position.set(2.85, 20.85, 0);
+    nose.parent = root;
+    const mouth = MeshBuilder.CreateBox(`${name}-mouth`, { width: 0.55, depth: 2.1, height: 0.45 }, this.scene);
+    mouth.material = this.material("#6a3028", 0.06);
+    mouth.position.set(2.7, 19.85, 0);
+    mouth.parent = root;
+    const hair = MeshBuilder.CreateBox(`${name}-hair`, { width: 5.5, depth: 5.5, height: 2 }, this.scene);
     hair.material = this.material("#1a1410");
-    hair.position.y = 23.6;
+    hair.position.y = 24.4;
     hair.parent = root;
-    const armL = MeshBuilder.CreateBox(`${name}-al`, { width: 2.2, depth: 2.4, height: 9 }, this.scene);
+    const hairBack = MeshBuilder.CreateBox(`${name}-hb`, { width: 1.2, depth: 5.3, height: 3.4 }, this.scene);
+    hairBack.material = this.material("#1a1410");
+    hairBack.position.set(-2.2, 22.6, 0);
+    hairBack.parent = root;
+    const earL = MeshBuilder.CreateBox(`${name}-el`, { width: 1.1, depth: 1.4, height: 2 }, this.scene);
+    earL.material = this.material(skinHex);
+    earL.position.set(0, 21.4, 2.9);
+    earL.parent = root;
+    const earR = MeshBuilder.CreateBox(`${name}-er`, { width: 1.1, depth: 1.4, height: 2 }, this.scene);
+    earR.material = this.material(skinHex);
+    earR.position.set(0, 21.4, -2.9);
+    earR.parent = root;
+    const armL = MeshBuilder.CreateBox(`${name}-al`, { width: 2.1, depth: 2.2, height: 8.6 }, this.scene);
     armL.material = this.material(shirtHex);
-    armL.position.set(0, 13.5, 4.1);
+    armL.position.set(0, 13.4, 3.8);
     armL.parent = root;
-    const armR = MeshBuilder.CreateBox(`${name}-ar`, { width: 2.2, depth: 2.4, height: 9 }, this.scene);
+    const armR = MeshBuilder.CreateBox(`${name}-ar`, { width: 2.1, depth: 2.2, height: 8.6 }, this.scene);
     armR.material = this.material(shirtHex);
-    armR.position.set(0, 13.5, -4.1);
+    armR.position.set(0, 13.4, -3.8);
     armR.parent = root;
-    const legL = MeshBuilder.CreateBox(`${name}-ll`, { width: 3.2, depth: 2.6, height: 8 }, this.scene);
+    const handL = MeshBuilder.CreateBox(`${name}-hl`, { width: 1.8, depth: 1.8, height: 1.8 }, this.scene);
+    handL.material = this.material(skinHex);
+    handL.position.set(0, 8.6, 3.8);
+    handL.parent = root;
+    const handR = MeshBuilder.CreateBox(`${name}-hr`, { width: 1.8, depth: 1.8, height: 1.8 }, this.scene);
+    handR.material = this.material(skinHex);
+    handR.position.set(0, 8.6, -3.8);
+    handR.parent = root;
+    const legL = MeshBuilder.CreateBox(`${name}-ll`, { width: 2.8, depth: 2.6, height: 8 }, this.scene);
     legL.material = this.material(pantsHex);
-    legL.position.set(0, 4, 1.5);
+    legL.position.set(0, 4.1, 1.7);
     legL.parent = root;
-    const legR = MeshBuilder.CreateBox(`${name}-lr`, { width: 3.2, depth: 2.6, height: 8 }, this.scene);
+    const legR = MeshBuilder.CreateBox(`${name}-lr`, { width: 2.8, depth: 2.6, height: 8 }, this.scene);
     legR.material = this.material(pantsHex);
-    legR.position.set(0, 4, -1.5);
+    legR.position.set(0, 4.1, -1.7);
     legR.parent = root;
-    const shadow = MeshBuilder.CreateCylinder(`${name}-sh`, { diameter: 12, height: 0.4, tessellation: 10 }, this.scene);
+    const shoeL = MeshBuilder.CreateBox(`${name}-sl`, { width: 3.6, depth: 2.7, height: 1.4 }, this.scene);
+    shoeL.material = this.material("#1a1410");
+    shoeL.position.set(0.6, 0.7, 1.7);
+    shoeL.parent = root;
+    const shoeR = MeshBuilder.CreateBox(`${name}-sr`, { width: 3.6, depth: 2.7, height: 1.4 }, this.scene);
+    shoeR.material = this.material("#1a1410");
+    shoeR.position.set(0.6, 0.7, -1.7);
+    shoeR.parent = root;
+    const shadow = MeshBuilder.CreateCylinder(`${name}-sh`, { diameter: 11, height: 0.35, tessellation: 10 }, this.scene);
     shadow.material = this.material("#0c0a08", 0);
-    shadow.position.y = 0.2;
+    shadow.position.y = 0.16;
     shadow.parent = root;
     root.metadata = { armL, armR, legL, legR };
     return root;
@@ -564,7 +680,7 @@ export class ViceblockRuntime3D {
 
   private seedWorld(): void {
     const spots: Array<[string, number, number, number, string, string?]> = [
-      ["sparrow", 18 * TILE, 64 * TILE, 0, "#c56b3a"],
+      ["sparrow", 22 * TILE, 65.2 * TILE, 0, "#c45a32"],
       ["sparrow", 38 * TILE, 52 * TILE, 1.5, "#d8c4a0", "sparrow-job"],
       ["ironback", 52 * TILE, 38 * TILE, 0.2, "#6b2d28"],
       ["mirage", 66 * TILE, 52 * TILE, 3.2, "#2f6f78"],
@@ -616,6 +732,7 @@ export class ViceblockRuntime3D {
     ];
     for (const [id, name, x, z, shirt, talk] of named) {
       const mesh = this.makeHumanoid(id, shirt, "#e6c39a");
+      mesh.position.set(x, 0, z);
       this.pinNameplate(mesh, name);
       this.actors.push({
         id,
@@ -650,6 +767,8 @@ export class ViceblockRuntime3D {
         panic: 0,
         mesh: this.makeHumanoid(`c${i}`, colors[i % colors.length] ?? "#c4a07a", "#d8b890"),
       });
+      const last = this.actors[this.actors.length - 1];
+      if (last) last.mesh.position.set(last.x, 0, last.z);
     }
   }
 
@@ -1040,21 +1159,41 @@ export class ViceblockRuntime3D {
     const elev = this.interiorMode ? INTERIOR_Y : 0;
     const bob = mag > 0.05 && this.player.grounded ? Math.abs(Math.sin(this.clock * (axis.sprint ? 14 : 9))) * 1.1 : 0;
     this.playerMesh.position.set(this.player.x, elev + this.player.y + bob, this.player.z);
-    this.playerMesh.rotation.y = Math.PI / 2 - this.player.heading;
+    this.playerMesh.rotation.y = -this.player.heading;
     this.poseWalk(this.playerMesh, mag > 0.05, axis.sprint);
     this.separateFromBodies();
     if (this.player.health <= 0) this.die();
   }
 
-  /** Keep NPCs from occupying the same space as the player (camera-in-body). */
+  /** Title-screen wander parks civilians on spawn; kick them out on enter. */
+  private evictCrowd(radius: number): void {
+    for (const a of this.actors) {
+      if (a.kind === "named") continue;
+      const d = Math.hypot(a.x - this.player.x, a.z - this.player.z);
+      if (d >= radius) continue;
+      for (let k = 0; k < 8; k++) {
+        const ang = (k / 8) * Math.PI * 2 + this.clock;
+        const nx = this.player.x + Math.cos(ang) * (radius + 50);
+        const nz = this.player.z + Math.sin(ang) * (radius + 50);
+        if (!blocked(this.world, nx, nz, 8)) {
+          a.x = nx;
+          a.z = nz;
+          a.mesh.position.set(nx, 0, nz);
+          break;
+        }
+      }
+    }
+  }
+
   private separateFromBodies(): void {
-    const min = this.player.vehicleId ? 22 : 16;
+    const min = this.player.vehicleId ? 28 : 24;
     for (const a of [...this.actors, ...this.cops]) {
       const dx = a.x - this.player.x;
       const dz = a.z - this.player.z;
       const d = Math.hypot(dx, dz);
+      a.mesh.setEnabled(d >= 20);
       if (d < 0.2 || d >= min) continue;
-      const push = (min - d) / d;
+      const push = (min - d) / Math.max(0.2, d);
       if (a.kind === "named") {
         const nx = this.player.x - dx * push;
         const nz = this.player.z - dz * push;
@@ -1067,30 +1206,38 @@ export class ViceblockRuntime3D {
         a.mesh.position.set(a.x, 0, a.z);
       }
     }
+    for (const r of this.remoteMeshes.values()) {
+      const d = Math.hypot(r.x - this.player.x, r.z - this.player.z);
+      r.mesh.setEnabled(d >= 22);
+    }
   }
 
   private cameraPlace(dist: number): { x: number; z: number; y: number } {
     const pitch = this.player.camPitch;
     const elev = this.interiorMode ? INTERIOR_Y : 0;
+    const yaw = this.player.camYaw;
+    const backX = -Math.sin(yaw) * dist * Math.cos(pitch);
+    const backZ = -Math.cos(yaw) * dist * Math.cos(pitch);
+    const side = 34;
     return {
-      x: this.player.x - Math.sin(this.player.camYaw) * dist * Math.cos(pitch),
-      z: this.player.z - Math.cos(this.player.camYaw) * dist * Math.cos(pitch),
+      x: this.player.x + backX + Math.cos(yaw) * side,
+      z: this.player.z + backZ - Math.sin(yaw) * side,
       y: elev + 26 + Math.sin(pitch) * dist,
     };
   }
 
   private snapCamera(): void {
-    const p = this.cameraPlace(this.player.vehicleId ? 130 : 110);
+    const p = this.cameraPlace(this.player.vehicleId ? 140 : 125);
     this.camera.position.set(p.x, p.y, p.z);
     const elev = this.interiorMode ? INTERIOR_Y : 0;
-    this.camera.setTarget(new Vector3(this.player.x, elev + 12 + this.player.y, this.player.z));
+    this.camera.setTarget(new Vector3(this.player.x, elev + 20 + this.player.y, this.player.z));
   }
 
   private updateCamera(dt: number): void {
     const car = this.cars.find((c) => c.rt.id === this.player.vehicleId);
     const speed = car ? Math.hypot(car.rt.vx, car.rt.vy) : 0;
-    let dist = car ? 130 + Math.min(50, speed * 0.25) : 110;
-    this.player.camPitch = Math.max(0.32, Math.min(0.92, this.player.camPitch));
+    let dist = car ? 140 + Math.min(50, speed * 0.25) : 125;
+    this.player.camPitch = Math.max(0.32, Math.min(0.85, this.player.camPitch));
     if (car && speed > 30 && !this.dragYaw.active) {
       const desired = Math.atan2(car.rt.vx, car.rt.vy);
       this.player.camYaw += normalizeAngle(desired - this.player.camYaw) * Math.min(1, dt * 3);
@@ -1098,7 +1245,7 @@ export class ViceblockRuntime3D {
     const elev = this.interiorMode ? INTERIOR_Y : 0;
     let p = this.cameraPlace(dist);
     if (!this.interiorMode && blocked(this.world, p.x, p.z, 10)) {
-      dist = Math.max(70, dist * 0.72);
+      dist = Math.max(80, dist * 0.78);
       p = this.cameraPlace(dist);
       if (blocked(this.world, p.x, p.z, 10)) p = { ...p, y: p.y + 40 };
     }
@@ -1109,8 +1256,8 @@ export class ViceblockRuntime3D {
     }
     const desired = new Vector3(p.x, p.y, p.z);
     this.camera.position = Vector3.Lerp(this.camera.position, desired, 1 - Math.pow(0.00008, dt));
-    this.camera.setTarget(new Vector3(this.player.x, elev + 12 + this.player.y, this.player.z));
-    const camD = Vector3.Distance(this.camera.position, new Vector3(this.player.x, elev + 12, this.player.z));
+    this.camera.setTarget(new Vector3(this.player.x, elev + 20 + this.player.y, this.player.z));
+    const camD = Vector3.Distance(this.camera.position, new Vector3(this.player.x, elev + 20, this.player.z));
     this.playerMesh.setEnabled(!this.player.vehicleId && camD > 26);
   }
 
@@ -1241,7 +1388,7 @@ export class ViceblockRuntime3D {
         } else a.heading += 1.2;
       }
       a.mesh.position.set(a.x, 0, a.z);
-      a.mesh.rotation.y = Math.PI / 2 - a.heading;
+      a.mesh.rotation.y = -a.heading;
       this.poseWalk(a.mesh, a.panic <= 0 && !a.recording, false);
     }
   }
@@ -1303,7 +1450,7 @@ export class ViceblockRuntime3D {
         c.z = nz;
       }
       c.mesh.position.set(c.x, 0, c.z);
-      c.mesh.rotation.y = Math.PI / 2 - ang;
+      c.mesh.rotation.y = -ang;
       this.poseWalk(c.mesh, true, this.heat.level >= 2);
       const d = Math.hypot(c.x - this.player.x, c.z - this.player.z);
       nearest = Math.min(nearest, d);
@@ -2207,6 +2354,8 @@ export class ViceblockRuntime3D {
       mesh.position.x += (r.x - mesh.position.x) * 0.2;
       mesh.position.z += (r.z - mesh.position.z) * 0.2;
       mesh.position.y = 0;
+      const d = Math.hypot(r.x - this.player.x, r.z - this.player.z);
+      mesh.setEnabled(d >= 22);
     }
   }
 

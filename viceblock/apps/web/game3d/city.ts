@@ -81,6 +81,22 @@ function asphaltTexture(scene: Scene): DynamicTexture {
   return tex;
 }
 
+function dirtTexture(scene: Scene): DynamicTexture {
+  const tex = new DynamicTexture("tex-dirt", { width: 128, height: 128 }, scene, false);
+  const ctx = tex.getContext();
+  ctx.fillStyle = "#2c221c";
+  ctx.fillRect(0, 0, 128, 128);
+  for (let i = 0; i < 500; i++) {
+    const n = 36 + ((i * 11) % 28);
+    ctx.fillStyle = `rgb(${n + 8},${n},${n - 6})`;
+    ctx.fillRect((i * 17) % 128, (i * 31) % 128, 3, 2);
+  }
+  tex.update();
+  tex.wrapU = 1;
+  tex.wrapV = 1;
+  return tex;
+}
+
 function walkTexture(scene: Scene): DynamicTexture {
   const tex = new DynamicTexture("tex-walk", { width: 128, height: 128 }, scene, false);
   const ctx = tex.getContext();
@@ -183,9 +199,15 @@ export function buildCity(scene: Scene, world: WorldData): CityMeshes {
   const textures: DynamicTexture[] = [];
   const landmarkTops = new Map<string, number>();
 
+  const dirt = dirtTexture(scene);
+  textures.push(dirt);
   const ground = MeshBuilder.CreateGround("ground", { width: MAP_W * TILE, height: MAP_H * TILE }, scene);
   ground.position = new Vector3((MAP_W * TILE) / 2, GROUND_Y, (MAP_H * TILE) / 2);
-  ground.material = mat(scene, "m-ground", "#3a2a22");
+  const groundMat = mat(scene, "m-ground", "#3a2a22");
+  groundMat.diffuseTexture = dirt;
+  (dirt as Texture).uScale = 24;
+  (dirt as Texture).vScale = 20;
+  ground.material = groundMat;
   disposables.push(ground);
 
   const asph = asphaltTexture(scene);
@@ -467,6 +489,8 @@ export function buildCity(scene: Scene, world: WorldData): CityMeshes {
     }
   }
 
+  dressSpawnStreet(scene, disposables, textures, lampMat, trunkMat, frondMat);
+
   const boardMat = mat(scene, "m-board", "#c45a32", 0.2);
   const boards: Array<[number, number, number]> = [
     [20 * TILE, 40, 18 * TILE],
@@ -510,6 +534,130 @@ export function buildCity(scene: Scene, world: WorldData): CityMeshes {
       for (const t of textures) t.dispose();
     },
   };
+}
+
+/** First 10 seconds of play happen here — pack the sidewalk so it isn't a tan void. */
+function dressSpawnStreet(
+  scene: Scene,
+  disposables: Mesh[],
+  textures: DynamicTexture[],
+  lampMat: StandardMaterial,
+  trunkMat: StandardMaterial,
+  frondMat: StandardMaterial,
+): void {
+  const sx = 16 * TILE + 16;
+  const sz = 63 * TILE + 8;
+  const rust = mat(scene, "m-spawn-rust", "#6a3a28");
+  const dump = mat(scene, "m-spawn-dump", "#3a4a32");
+  const crate = mat(scene, "m-spawn-crate", "#8a6238");
+  const cone = mat(scene, "m-spawn-cone", "#d45a20", 0.12);
+  const steel = mat(scene, "m-spawn-steel", "#4a4844");
+  const neon = mat(scene, "m-spawn-neon", "#e07040", 0.55);
+  const muralTex = muralTexture(scene);
+  textures.push(muralTex);
+  const muralMat = new StandardMaterial("m-spawn-mural", scene);
+  muralMat.diffuseTexture = muralTex;
+  muralMat.emissiveTexture = muralTex;
+  muralMat.emissiveColor = new Color3(0.4, 0.28, 0.18);
+  muralMat.specularColor = Color3.Black();
+
+  const mural = MeshBuilder.CreatePlane("spawn-mural", { width: 42, height: 22 }, scene);
+  mural.material = muralMat;
+  mural.position = new Vector3(sx - 28, 14, sz - 36);
+  mural.rotation.y = 0;
+  mural.freezeWorldMatrix();
+  disposables.push(mural);
+
+  const southside = signTexture(scene, "signtex-southside", "SOUTHSIDE", "#f3e6d2", "#8a2820");
+  textures.push(southside);
+  const ssMat = new StandardMaterial("m-ss-sign", scene);
+  ssMat.diffuseTexture = southside;
+  ssMat.emissiveTexture = southside;
+  ssMat.emissiveColor = new Color3(0.55, 0.3, 0.2);
+  ssMat.specularColor = Color3.Black();
+  const ss = MeshBuilder.CreatePlane("spawn-ss", { width: 36, height: 10 }, scene);
+  ss.material = ssMat;
+  ss.position = new Vector3(sx + 8, 26, sz - 40);
+  ss.freezeWorldMatrix();
+  disposables.push(ss);
+
+  const props: Array<[string, number, number, number, number, number, number, StandardMaterial]> = [
+    ["dump-a", 10, 8, 12, sx + 22, 6, sz + 18, dump],
+    ["dump-b", 8, 6, 9, sx - 18, 4.6, sz + 22, rust],
+    ["crate-a", 6, 5, 5, sx + 34, 2.6, sz + 6, crate],
+    ["crate-b", 5, 4, 4, sx + 40, 2.1, sz + 10, crate],
+    ["news", 4, 4, 8, sx - 8, 4, sz + 14, steel],
+    ["vendor", 14, 8, 8, sx + 48, 4, sz - 8, rust],
+    ["bench-s", 16, 3.4, 3.2, sx - 4, 1.7, sz - 18, crate],
+    ["planter", 8, 8, 4, sx + 18, 2, sz - 22, dump],
+    ["scooter", 9, 3.2, 4, sx + 56, 2.1, sz + 4, steel],
+  ];
+  for (const [id, w, d, h, x, y, z, m] of props) {
+    const box = MeshBuilder.CreateBox(id, { width: w, depth: d, height: h }, scene);
+    box.position = new Vector3(x, y, z);
+    box.material = m;
+    box.freezeWorldMatrix();
+    disposables.push(box);
+  }
+  for (let i = 0; i < 4; i++) {
+    const c = MeshBuilder.CreateCylinder(`cone-${i}`, { height: 4.4, diameterTop: 0.6, diameterBottom: 2.4, tessellation: 6 }, scene);
+    c.position = new Vector3(sx + 28 + i * 5, 2.2, sz + 28);
+    c.material = cone;
+    c.freezeWorldMatrix();
+    disposables.push(c);
+  }
+  for (let i = 0; i < 3; i++) {
+    const pole = MeshBuilder.CreateBox(`sp-lamp-${i}`, { width: 1.5, depth: 1.5, height: 24 }, scene);
+    pole.position = new Vector3(sx - 20 + i * 28, 12, sz + 8);
+    pole.material = lampMat;
+    pole.freezeWorldMatrix();
+    disposables.push(pole);
+    const head = MeshBuilder.CreateBox(`sp-lamph-${i}`, { width: 6, depth: 5, height: 2.2 }, scene);
+    head.position = new Vector3(sx - 20 + i * 28, 24, sz + 8);
+    head.material = neon;
+    head.freezeWorldMatrix();
+    disposables.push(head);
+  }
+  const trunk = MeshBuilder.CreateCylinder("sp-palm", { height: 30, diameterTop: 2.2, diameterBottom: 3.8, tessellation: 6 }, scene);
+  trunk.position = new Vector3(sx - 36, 15, sz + 6);
+  trunk.material = trunkMat;
+  trunk.freezeWorldMatrix();
+  disposables.push(trunk);
+  for (let f = 0; f < 5; f++) {
+    const frond = MeshBuilder.CreateBox(`sp-frond-${f}`, { width: 18, depth: 3.4, height: 1.2 }, scene);
+    const ang = (f / 5) * Math.PI * 2;
+    frond.position = new Vector3(sx - 36 + Math.cos(ang) * 6, 31, sz + 6 + Math.sin(ang) * 6);
+    frond.rotation.y = ang;
+    frond.rotation.z = -0.35;
+    frond.material = frondMat;
+    frond.freezeWorldMatrix();
+    disposables.push(frond);
+  }
+}
+
+function muralTexture(scene: Scene): DynamicTexture {
+  const tex = new DynamicTexture("tex-mural", { width: 512, height: 256 }, scene, false);
+  const ctx = canvas2d(tex.getContext());
+  ctx.fillStyle = "#2a1c18";
+  ctx.fillRect(0, 0, 512, 256);
+  ctx.fillStyle = "#c45a32";
+  ctx.fillRect(0, 0, 512, 36);
+  ctx.fillStyle = "#e8b060";
+  ctx.font = "bold 64px Impact, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("NOVA CITY", 256, 88);
+  ctx.fillStyle = "#f3e6d2";
+  ctx.font = "bold 36px Impact, sans-serif";
+  ctx.fillText("SOUTHSIDE NEVER SLEEPS", 256, 160);
+  ctx.fillStyle = "#6a8a48";
+  ctx.fillRect(24, 200, 80, 36);
+  ctx.fillStyle = "#4a90d8";
+  ctx.fillRect(216, 204, 70, 32);
+  ctx.fillStyle = "#c45a32";
+  ctx.fillRect(400, 200, 88, 36);
+  tex.update();
+  return tex;
 }
 
 function landmarkHeight(lm: Landmark): number {

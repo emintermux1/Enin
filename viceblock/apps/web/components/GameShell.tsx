@@ -346,7 +346,7 @@ export function GameShell() {
           </div>
           {hud.health < 35 && hud.jailLeft <= 0 ? <div className="vignette" /> : null}
           <canvas ref={minimapRef} width={132} height={132} className="minimap" />
-          {!hud.inVehicle && <div className="crosshair" />}
+          {!hud.inVehicle && hud.weapon !== "Fists" && <div className="crosshair" />}
           {hud.prompt ? <div className="prompt">{hud.prompt}</div> : null}
           {hud.toast ? <div className="toast">{hud.toast}</div> : null}
           {hud.news ? <div className="news">NOVA NEWS · {hud.news}</div> : null}

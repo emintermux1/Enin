@@ -25,4 +25,11 @@ describe("world spawn points", () => {
     const world = buildSouthside();
     expect(blocked(world, world.spawnX, world.spawnY, 7)).toBe(false);
   });
+
+  it("Rico stands well clear of spawn so he cannot clip into the player", () => {
+    const world = buildSouthside();
+    const ricoX = 29.5 * TILE;
+    const ricoZ = 49.2 * TILE;
+    expect(Math.hypot(ricoX - world.spawnX, ricoZ - world.spawnY)).toBeGreaterThan(200);
+  });
 });
