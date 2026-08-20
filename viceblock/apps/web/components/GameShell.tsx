@@ -1403,9 +1403,15 @@ export function GameShell() {
           align-items: center;
           justify-content: space-between;
         }
+        .camera-panel input[type="range"],
+        .camera-panel input[type="checkbox"] {
+          accent-color: #e8703c;
+        }
         .camera-panel input[type="range"] {
           width: 100%;
-          accent-color: #e8703c;
+        }
+        .camera-panel label.row span {
+          white-space: nowrap;
         }
         .camera-panel button {
           background: #2a2018;

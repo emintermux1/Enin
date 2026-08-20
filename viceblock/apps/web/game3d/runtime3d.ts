@@ -6,6 +6,7 @@ import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { FreeCamera } from "@babylonjs/core/Cameras/freeCamera";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import type { Mesh } from "@babylonjs/core/Meshes/mesh";
+import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
 import { Scene } from "@babylonjs/core/scene";
@@ -276,6 +277,7 @@ export class ViceblockRuntime3D {
   /** Walkable interior state: rooms are built high above the city. */
   private interiorMode: { id: string; returnX: number; returnZ: number } | null = null;
   private martRoom: { cx: number; cz: number; half: number } | null = null;
+  private martMeshes: AbstractMesh[] = [];
   private tow: { mesh: Mesh; targetId: string } | null = null;
   private towCooldown = 20;
   private race: { checkpoint: number; t: number; marker: Mesh } | null = null;
@@ -945,10 +947,14 @@ export class ViceblockRuntime3D {
       [cx + half, cz, 6, half * 2],
     ];
     walls.forEach(([x, z, w, d], i) => {
-      const wall = MeshBuilder.CreateBox(`mart-wall-${i}`, { width: w, depth: d, height: 40 }, this.scene);
+      const wall = MeshBuilder.CreateBox(`mart-wall-${i}`, { width: w, depth: d, height: 90 }, this.scene);
       wall.material = wallMat;
-      wall.position = new Vector3(x, INTERIOR_Y + 20, z);
+      wall.position = new Vector3(x, INTERIOR_Y + 45, z);
     });
+    // Without a lid the shop reads as a doll's house floating over the city.
+    const ceiling = MeshBuilder.CreateBox("mart-ceiling", { width: half * 2, depth: half * 2, height: 3 }, this.scene);
+    ceiling.material = this.surface("plaster", "#4a2e26");
+    ceiling.position = new Vector3(cx, INTERIOR_Y + 90, cz);
     const counter = MeshBuilder.CreateBox("mart-counter", { width: 90, depth: 18, height: 14 }, this.scene);
     counter.material = this.surface("metal", "#4a5a68");
     counter.position = new Vector3(cx, INTERIOR_Y + 7, cz - half + 34);
@@ -990,10 +996,19 @@ export class ViceblockRuntime3D {
       lmat.emissiveColor = new Color3(0.8, 0.7, 0.5);
       lmat.specularColor = Color3.Black();
       label.material = lmat;
-      label.position = new Vector3(spot.x, INTERIOR_Y + 18, spot.z);
+      // Above head height: at eye level the plate sits in the player's face.
+      label.position = new Vector3(spot.x, INTERIOR_Y + 34, spot.z);
       label.billboardMode = 7;
       label.isPickable = false;
     });
+    // The room sits high above the city so the street cannot see into it, but a
+    // camera pulled right back could still catch it hanging in the sky.
+    this.martMeshes = this.scene.meshes.filter((m) => m.name.startsWith("mart-"));
+    this.showInterior(false);
+  }
+
+  private showInterior(on: boolean): void {
+    for (const m of this.martMeshes) m.setEnabled(on);
   }
 
   /** Shared interior spots — discs, prompts, and E-actions must agree. */
@@ -1013,6 +1028,7 @@ export class ViceblockRuntime3D {
   private enterMart(): void {
     if (!this.martRoom) return;
     this.interiorMode = { id: "coral-mart", returnX: this.player.x, returnZ: this.player.z };
+    this.showInterior(true);
     this.player.x = this.martRoom.cx;
     this.player.z = this.martRoom.cz + this.martRoom.half - 24;
     this.player.vehicleId = null;
@@ -1025,6 +1041,7 @@ export class ViceblockRuntime3D {
     this.player.x = this.interiorMode.returnX;
     this.player.z = this.interiorMode.returnZ;
     this.interiorMode = null;
+    this.showInterior(false);
     this.audio.uiClick();
   }
 
@@ -1423,11 +1440,21 @@ export class ViceblockRuntime3D {
     // The shoulder offset closes up as the view goes overhead, where an
     // off-centre camera just looks like a mistake.
     const side = 34 * Math.max(0, 1 - Math.max(0, pitch - 0.8) / 0.65);
-    return {
+    const place = {
       x: this.player.x + backX + Math.cos(yaw) * side,
       z: this.player.z + backZ - Math.sin(yaw) * side,
       y: Math.max(elev + CAMERA.minHeight, elev + 26 + Math.sin(pitch) * dist),
     };
+    const room = this.interiorMode ? this.martRoom : null;
+    if (room) {
+      // Indoors the boom has to stay in the room, or it swings out through a
+      // wall and films the shop hanging in mid-air over the city.
+      const edge = room.half - 14;
+      place.x = Math.max(room.cx - edge, Math.min(room.cx + edge, place.x));
+      place.z = Math.max(room.cz - edge, Math.min(room.cz + edge, place.z));
+      place.y = Math.min(elev + 78, place.y);
+    }
+    return place;
   }
 
   /**
@@ -2151,6 +2178,7 @@ export class ViceblockRuntime3D {
     this.loot = [];
     this.player.vehicleId = null;
     this.interiorMode = null;
+    this.showInterior(false);
     this.lockpick = null;
     this.lockpickCar = null;
     this.player.cash = Math.max(0, this.player.cash - 60);
