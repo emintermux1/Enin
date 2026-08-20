@@ -53,6 +53,112 @@ function windowTexture(scene: Scene, name: string, wall: string, lit: string): D
   return tex;
 }
 
+function canvas2d(ctx: ReturnType<DynamicTexture["getContext"]>): CanvasRenderingContext2D {
+  return ctx as unknown as CanvasRenderingContext2D;
+}
+
+function asphaltTexture(scene: Scene): DynamicTexture {
+  const tex = new DynamicTexture("tex-asphalt", { width: 256, height: 256 }, scene, false);
+  const ctx = tex.getContext();
+  ctx.fillStyle = "#2a2826";
+  ctx.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 900; i++) {
+    const n = 28 + ((i * 17) % 40);
+    ctx.fillStyle = `rgb(${n},${n - 2},${n - 4})`;
+    ctx.fillRect((i * 13) % 256, (i * 29) % 256, 2, 2);
+  }
+  ctx.fillStyle = "rgba(196,160,80,0.35)";
+  ctx.fillRect(124, 0, 3, 18);
+  ctx.fillRect(124, 36, 3, 18);
+  ctx.fillRect(124, 72, 3, 18);
+  ctx.fillRect(124, 108, 3, 18);
+  ctx.fillRect(124, 144, 3, 18);
+  ctx.fillRect(124, 180, 3, 18);
+  ctx.fillRect(124, 216, 3, 18);
+  tex.update();
+  tex.wrapU = 0;
+  tex.wrapV = 0;
+  return tex;
+}
+
+function walkTexture(scene: Scene): DynamicTexture {
+  const tex = new DynamicTexture("tex-walk", { width: 128, height: 128 }, scene, false);
+  const ctx = tex.getContext();
+  const c2 = canvas2d(ctx);
+  ctx.fillStyle = "#8a7460";
+  ctx.fillRect(0, 0, 128, 128);
+  c2.strokeStyle = "rgba(40,28,20,0.28)";
+  c2.lineWidth = 2;
+  for (let i = 0; i < 128; i += 16) {
+    c2.beginPath();
+    c2.moveTo(i, 0);
+    c2.lineTo(i, 128);
+    c2.stroke();
+    c2.beginPath();
+    c2.moveTo(0, i);
+    c2.lineTo(128, i);
+    c2.stroke();
+  }
+  tex.update();
+  tex.wrapU = 0;
+  tex.wrapV = 0;
+  return tex;
+}
+
+function grassTexture(scene: Scene): DynamicTexture {
+  const tex = new DynamicTexture("tex-grass", { width: 128, height: 128 }, scene, false);
+  const ctx = tex.getContext();
+  ctx.fillStyle = "#2f5a38";
+  ctx.fillRect(0, 0, 128, 128);
+  for (let i = 0; i < 400; i++) {
+    ctx.fillStyle = i % 3 === 0 ? "#3a6e42" : "#245030";
+    ctx.fillRect((i * 19) % 128, (i * 37) % 128, 3, 5);
+  }
+  tex.update();
+  tex.wrapU = 0;
+  tex.wrapV = 0;
+  return tex;
+}
+
+function skyTexture(scene: Scene): DynamicTexture {
+  const tex = new DynamicTexture("tex-sky", { width: 512, height: 512 }, scene, false);
+  const ctx = canvas2d(tex.getContext());
+  const g = ctx.createLinearGradient(0, 0, 0, 512);
+  g.addColorStop(0, "#3d6ea8");
+  g.addColorStop(0.45, "#7eb6d4");
+  g.addColorStop(0.72, "#f2c9a0");
+  g.addColorStop(1, "#e09060");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 512, 512);
+  ctx.fillStyle = "rgba(255,255,255,0.18)";
+  ctx.beginPath();
+  ctx.ellipse(140, 200, 70, 22, 0, 0, Math.PI * 2);
+  ctx.ellipse(200, 188, 50, 16, 0, 0, Math.PI * 2);
+  ctx.ellipse(360, 160, 80, 20, 0, 0, Math.PI * 2);
+  ctx.fill();
+  tex.update();
+  return tex;
+}
+
+function shopTexture(scene: Scene, glass: string): DynamicTexture {
+  const tex = new DynamicTexture(`tex-shop-${glass}`, { width: 256, height: 128 }, scene, false);
+  const ctx = tex.getContext();
+  ctx.fillStyle = "#2a2018";
+  ctx.fillRect(0, 0, 256, 128);
+  ctx.fillStyle = glass;
+  ctx.fillRect(8, 16, 72, 96);
+  ctx.fillRect(92, 16, 72, 96);
+  ctx.fillRect(176, 16, 72, 96);
+  ctx.fillStyle = "rgba(255,230,180,0.22)";
+  ctx.fillRect(8, 16, 72, 28);
+  ctx.fillRect(92, 16, 72, 28);
+  ctx.fillRect(176, 16, 72, 28);
+  tex.update();
+  tex.wrapU = 0;
+  tex.wrapV = 0;
+  return tex;
+}
+
 function signTexture(scene: Scene, name: string, title: string, ink: string, paper: string): DynamicTexture {
   const tex = new DynamicTexture(name, { width: 512, height: 128 }, scene, false);
   const ctx = tex.getContext();
@@ -82,11 +188,23 @@ export function buildCity(scene: Scene, world: WorldData): CityMeshes {
   ground.material = mat(scene, "m-ground", "#3a2a22");
   disposables.push(ground);
 
+  const asph = asphaltTexture(scene);
+  const walk = walkTexture(scene);
+  const grass = grassTexture(scene);
+  textures.push(asph, walk, grass);
+  const roadMat = mat(scene, "m-road", "#2c2826");
+  roadMat.diffuseTexture = asph;
+  (asph as Texture).uScale = 8;
+  (asph as Texture).vScale = 1;
+  const walkMat = mat(scene, "m-walk", "#7a6854");
+  walkMat.diffuseTexture = walk;
+  const grassMat = mat(scene, "m-grass", "#2a4a30");
+  grassMat.diffuseTexture = grass;
   const stripMats: Record<number, StandardMaterial> = {
-    [Cell.Road]: mat(scene, "m-road", "#2c2826"),
-    [Cell.Walk]: mat(scene, "m-walk", "#7a6854"),
-    [Cell.Grass]: mat(scene, "m-grass", "#2a4a30"),
-    [Cell.Water]: mat(scene, "m-water", "#1e5a68", 0.22),
+    [Cell.Road]: roadMat,
+    [Cell.Walk]: walkMat,
+    [Cell.Grass]: grassMat,
+    [Cell.Water]: mat(scene, "m-water", "#1e5a68", 0.28),
     [Cell.Sand]: mat(scene, "m-sand", "#d4b078"),
     [Cell.Alley]: mat(scene, "m-alley", "#241c16"),
     [Cell.Court]: mat(scene, "m-court", "#9a6230"),
@@ -157,6 +275,12 @@ export function buildCity(scene: Scene, world: WorldData): CityMeshes {
   }
 
   const acMat = mat(scene, "m-ac", "#5a5854");
+  const shopTex = shopTexture(scene, "#3a6078");
+  textures.push(shopTex);
+  const shopGlass = mat(scene, "m-shop", "#2a4050", 0.18);
+  shopGlass.diffuseTexture = shopTex;
+  shopGlass.emissiveTexture = shopTex;
+  shopGlass.emissiveColor = new Color3(0.2, 0.28, 0.32);
   for (let y = 0; y < MAP_H; y++) {
     for (let x = 0; x < MAP_W; x++) {
       const idx = y * MAP_W + x;
@@ -182,6 +306,11 @@ export function buildCity(scene: Scene, world: WorldData): CityMeshes {
       box.material = (x + y) % 2 ? buildingMat : buildingMat2;
       box.freezeWorldMatrix();
       disposables.push(box);
+      const shop = MeshBuilder.CreateBox(`shop-${x}-${y}`, { width: Math.max(10, w * TILE - 10), depth: 2.4, height: 13 }, scene);
+      shop.position = new Vector3(box.position.x, 6.6, box.position.z + (h * TILE - 4) / 2 + 0.2);
+      shop.material = shopGlass;
+      shop.freezeWorldMatrix();
+      disposables.push(shop);
       // Rooftop junk so the skyline isn't a flat lid.
       if (((x + y) & 3) === 0) {
         const ac = MeshBuilder.CreateBox(`ac-${x}-${y}`, { width: 10, depth: 14, height: 6 }, scene);
@@ -287,7 +416,92 @@ export function buildCity(scene: Scene, world: WorldData): CityMeshes {
     }
   }
 
-  scene.clearColor = new Color4(0.42, 0.55, 0.62, 1);
+  const curbMat = mat(scene, "m-curb", "#6a5a4c");
+  const zebraMat = mat(scene, "m-zebra", "#e8d8c0", 0.08);
+  for (const yTile of [10, 22, 36, 50, 64]) {
+    const north = MeshBuilder.CreateBox(`curb-n-${yTile}`, { width: MAP_W * TILE, depth: 1.8, height: 1.2 }, scene);
+    north.position = new Vector3((MAP_W * TILE) / 2, 0.6, (yTile - 0.15) * TILE);
+    north.material = curbMat;
+    north.freezeWorldMatrix();
+    disposables.push(north);
+    const south = MeshBuilder.CreateBox(`curb-s-${yTile}`, { width: MAP_W * TILE, depth: 1.8, height: 1.2 }, scene);
+    south.position = new Vector3((MAP_W * TILE) / 2, 0.6, (yTile + 3.15) * TILE);
+    south.material = curbMat;
+    south.freezeWorldMatrix();
+    disposables.push(south);
+  }
+  for (const xTile of [8, 22, 36, 50, 64, 80]) {
+    for (const yTile of [10, 22, 36, 50, 64]) {
+      for (let s = 0; s < 5; s++) {
+        const zebra = MeshBuilder.CreateBox(`zw-${xTile}-${yTile}-${s}`, { width: 10, depth: 4, height: 0.25 }, scene);
+        zebra.position = new Vector3((xTile + 1.5) * TILE, 0.28, yTile * TILE + 8 + s * 10);
+        zebra.material = zebraMat;
+        zebra.freezeWorldMatrix();
+        disposables.push(zebra);
+      }
+    }
+  }
+
+  const binMat = mat(scene, "m-bin", "#3a4a38");
+  const hydrantMat = mat(scene, "m-hyd", "#c45a32", 0.1);
+  const benchMat = mat(scene, "m-bench", "#4a3024");
+  let prop = 0;
+  for (const yTile of [14, 28, 42, 56]) {
+    for (let x = 10; x < MAP_W - 4; x += 14) {
+      const bin = MeshBuilder.CreateBox(`bin-${prop}`, { width: 6, depth: 4, height: 7 }, scene);
+      bin.position = new Vector3(x * TILE, 3.6, yTile * TILE);
+      bin.material = binMat;
+      bin.freezeWorldMatrix();
+      disposables.push(bin);
+      const hyd = MeshBuilder.CreateCylinder(`hyd-${prop}`, { height: 5, diameter: 2.4, tessellation: 6 }, scene);
+      hyd.position = new Vector3((x + 3) * TILE, 2.6, (yTile + 1) * TILE);
+      hyd.material = hydrantMat;
+      hyd.freezeWorldMatrix();
+      disposables.push(hyd);
+      const bench = MeshBuilder.CreateBox(`bench-${prop}`, { width: 12, depth: 3.2, height: 3 }, scene);
+      bench.position = new Vector3((x + 6) * TILE, 1.6, (yTile - 1) * TILE);
+      bench.material = benchMat;
+      bench.freezeWorldMatrix();
+      disposables.push(bench);
+      prop++;
+    }
+  }
+
+  const boardMat = mat(scene, "m-board", "#c45a32", 0.2);
+  const boards: Array<[number, number, number]> = [
+    [20 * TILE, 40, 18 * TILE],
+    [60 * TILE, 48, 38 * TILE],
+    [44 * TILE, 36, 68 * TILE],
+    [76 * TILE, 42, 24 * TILE],
+  ];
+  boards.forEach(([bx, by, bz], i) => {
+    const pole = MeshBuilder.CreateBox(`bp-${i}`, { width: 1.8, depth: 1.8, height: by }, scene);
+    pole.position = new Vector3(bx, by / 2, bz);
+    pole.material = lampMat;
+    pole.freezeWorldMatrix();
+    disposables.push(pole);
+    const face = MeshBuilder.CreateBox(`bf-${i}`, { width: 36, depth: 1.4, height: 16 }, scene);
+    face.position = new Vector3(bx, by + 6, bz);
+    face.material = boardMat;
+    face.freezeWorldMatrix();
+    disposables.push(face);
+  });
+
+  const skyTex = skyTexture(scene);
+  textures.push(skyTex);
+  const skyMat = new StandardMaterial("m-sky", scene);
+  skyMat.emissiveTexture = skyTex;
+  skyMat.diffuseTexture = skyTex;
+  skyMat.disableLighting = true;
+  skyMat.backFaceCulling = false;
+  skyMat.emissiveColor = new Color3(1, 1, 1);
+  const sky = MeshBuilder.CreateSphere("sky", { diameter: 4200, segments: 12 }, scene);
+  sky.material = skyMat;
+  sky.infiniteDistance = true;
+  sky.isPickable = false;
+  disposables.push(sky);
+
+  scene.clearColor = new Color4(0.55, 0.68, 0.78, 1);
 
   return {
     landmarkTops,

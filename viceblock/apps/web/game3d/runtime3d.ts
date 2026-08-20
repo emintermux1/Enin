@@ -242,8 +242,8 @@ export class ViceblockRuntime3D {
     this.sun.intensity = 0.78;
 
     this.camera = new FreeCamera("cam", new Vector3(0, 40, -40), this.scene);
-    this.camera.minZ = 1;
-    this.camera.maxZ = 2600;
+    this.camera.minZ = 2;
+    this.camera.maxZ = 4200;
 
     this.player.x = this.world.spawnX;
     this.player.z = this.world.spawnY;
@@ -266,7 +266,7 @@ export class ViceblockRuntime3D {
     const move = (e: PointerEvent): void => {
       if (!this.dragYaw.active || e.pointerId !== this.dragYaw.id) return;
       this.player.camYaw += (e.clientX - this.dragYaw.lastX) * 0.005;
-      this.player.camPitch = Math.max(0.25, Math.min(1.15, this.player.camPitch + (e.clientY - this.dragYaw.lastY) * 0.004));
+      this.player.camPitch = Math.max(0.32, Math.min(0.92, this.player.camPitch + (e.clientY - this.dragYaw.lastY) * 0.003));
       this.dragYaw.lastX = e.clientX;
       this.dragYaw.lastY = e.clientY;
     };
@@ -303,7 +303,7 @@ export class ViceblockRuntime3D {
         return;
       }
       this.clock += dt;
-      this.time = 17.6;
+      this.time = 15.4;
       this.updateDayNight();
       this.updateCars(dt);
       this.updateActors(dt);
@@ -329,15 +329,17 @@ export class ViceblockRuntime3D {
     this.audio.setLevels(this.settings);
     if (this.quality === "auto") this.quality = this.input.mobile ? "low" : "high";
     this.applyQuality();
+    this.time = 15.4;
     this.player.camYaw = 0.35;
-    this.player.camPitch = 0.55;
+    this.player.camPitch = 0.48;
+    this.snapCamera();
     this.running = true;
     this.say("Rico Vale", "You walk like you still got a ticket in your pocket. Follow the gold pillar — that's me.");
   }
 
   applyQuality(): void {
-    const scale = this.quality === "low" ? 0.62 : this.quality === "medium" ? 0.8 : 1;
-    this.engine.setHardwareScalingLevel(1 / scale / Math.min(2, window.devicePixelRatio || 1));
+    const scale = this.quality === "low" ? 0.82 : this.quality === "medium" ? 0.92 : 1;
+    this.engine.setHardwareScalingLevel(1 / scale / Math.min(1.5, window.devicePixelRatio || 1));
   }
 
   setQuality(q: Quality): void {
@@ -636,6 +638,7 @@ export class ViceblockRuntime3D {
       const x = (8 + (i * 17) % 80) * TILE + 10;
       const z = (12 + (i * 11) % 60) * TILE + 10;
       if (blocked(this.world, x, z, 8)) continue;
+      if (Math.hypot(x - this.world.spawnX, z - this.world.spawnY) < 160) continue;
       this.actors.push({
         id: `c${i}`,
         kind: "civilian",
@@ -962,13 +965,13 @@ export class ViceblockRuntime3D {
     const t = this.time;
     const day = t > 6.5 && t < 19;
     const dusk = (t > 5 && t <= 6.5) || (t >= 19 && t < 21);
-    this.hemi.intensity = this.blackout ? 0.22 : day ? 0.95 : dusk ? 0.62 : 0.48;
-    this.sun.intensity = this.blackout ? 0.05 : day ? 0.78 : dusk ? 0.4 : 0.18;
+    this.hemi.intensity = this.blackout ? 0.28 : day ? 1.15 : dusk ? 0.82 : 0.58;
+    this.sun.intensity = this.blackout ? 0.08 : day ? 1.05 : dusk ? 0.55 : 0.22;
     const sky = this.blackout
-      ? new Color4(0.04, 0.04, 0.07, 1)
-      : day ? new Color4(0.48, 0.62, 0.7, 1) : dusk ? new Color4(0.66, 0.4, 0.3, 1) : new Color4(0.1, 0.09, 0.16, 1);
+      ? new Color4(0.05, 0.05, 0.08, 1)
+      : day ? new Color4(0.55, 0.7, 0.8, 1) : dusk ? new Color4(0.72, 0.48, 0.36, 1) : new Color4(0.12, 0.11, 0.18, 1);
     this.scene.clearColor = sky;
-    const fog = this.weather === "fog" ? 0.0026 : this.weather === "rain" ? 0.0012 : 0.00045;
+    const fog = this.weather === "fog" ? 0.00055 : this.weather === "rain" ? 0.00035 : 0.00018;
     this.scene.fogMode = Scene.FOGMODE_EXP2;
     this.scene.fogDensity = fog;
     this.scene.fogColor = new Color3(sky.r, sky.g, sky.b);
@@ -1039,29 +1042,65 @@ export class ViceblockRuntime3D {
     this.playerMesh.position.set(this.player.x, elev + this.player.y + bob, this.player.z);
     this.playerMesh.rotation.y = Math.PI / 2 - this.player.heading;
     this.poseWalk(this.playerMesh, mag > 0.05, axis.sprint);
+    this.separateFromBodies();
     if (this.player.health <= 0) this.die();
+  }
+
+  /** Keep NPCs from occupying the same space as the player (camera-in-body). */
+  private separateFromBodies(): void {
+    const min = this.player.vehicleId ? 22 : 16;
+    for (const a of [...this.actors, ...this.cops]) {
+      const dx = a.x - this.player.x;
+      const dz = a.z - this.player.z;
+      const d = Math.hypot(dx, dz);
+      if (d < 0.2 || d >= min) continue;
+      const push = (min - d) / d;
+      if (a.kind === "named") {
+        const nx = this.player.x - dx * push;
+        const nz = this.player.z - dz * push;
+        if (!blocked(this.world, nx, this.player.z, PLAYER_CONFIG.radius)) this.player.x = nx;
+        if (!blocked(this.world, this.player.x, nz, PLAYER_CONFIG.radius)) this.player.z = nz;
+      } else {
+        a.x += dx * push;
+        a.z += dz * push;
+        a.heading = Math.atan2(dz, dx);
+        a.mesh.position.set(a.x, 0, a.z);
+      }
+    }
+  }
+
+  private cameraPlace(dist: number): { x: number; z: number; y: number } {
+    const pitch = this.player.camPitch;
+    const elev = this.interiorMode ? INTERIOR_Y : 0;
+    return {
+      x: this.player.x - Math.sin(this.player.camYaw) * dist * Math.cos(pitch),
+      z: this.player.z - Math.cos(this.player.camYaw) * dist * Math.cos(pitch),
+      y: elev + 26 + Math.sin(pitch) * dist,
+    };
+  }
+
+  private snapCamera(): void {
+    const p = this.cameraPlace(this.player.vehicleId ? 130 : 110);
+    this.camera.position.set(p.x, p.y, p.z);
+    const elev = this.interiorMode ? INTERIOR_Y : 0;
+    this.camera.setTarget(new Vector3(this.player.x, elev + 12 + this.player.y, this.player.z));
   }
 
   private updateCamera(dt: number): void {
     const car = this.cars.find((c) => c.rt.id === this.player.vehicleId);
     const speed = car ? Math.hypot(car.rt.vx, car.rt.vy) : 0;
-    let dist = car ? 120 + Math.min(50, speed * 0.25) : 90;
-    const pitch = this.player.camPitch;
+    let dist = car ? 130 + Math.min(50, speed * 0.25) : 110;
+    this.player.camPitch = Math.max(0.32, Math.min(0.92, this.player.camPitch));
     if (car && speed > 30 && !this.dragYaw.active) {
       const desired = Math.atan2(car.rt.vx, car.rt.vy);
       this.player.camYaw += normalizeAngle(desired - this.player.camYaw) * Math.min(1, dt * 3);
     }
     const elev = this.interiorMode ? INTERIOR_Y : 0;
-    const place = (d: number): { x: number; z: number; y: number } => {
-      const x = this.player.x - Math.sin(this.player.camYaw) * d * Math.cos(pitch);
-      const z = this.player.z - Math.cos(this.player.camYaw) * d * Math.cos(pitch);
-      return { x, z, y: elev + 22 + Math.sin(pitch) * d };
-    };
-    let p = place(dist);
+    let p = this.cameraPlace(dist);
     if (!this.interiorMode && blocked(this.world, p.x, p.z, 10)) {
-      dist *= 0.55;
-      p = place(dist);
-      if (blocked(this.world, p.x, p.z, 10)) p = { ...p, y: p.y + 36 };
+      dist = Math.max(70, dist * 0.72);
+      p = this.cameraPlace(dist);
+      if (blocked(this.world, p.x, p.z, 10)) p = { ...p, y: p.y + 40 };
     }
     if (this.shake > 0 && this.settings.shake) {
       p.x += (Math.random() - 0.5) * this.shake;
@@ -1069,8 +1108,10 @@ export class ViceblockRuntime3D {
       p.z += (Math.random() - 0.5) * this.shake;
     }
     const desired = new Vector3(p.x, p.y, p.z);
-    this.camera.position = Vector3.Lerp(this.camera.position, desired, 1 - Math.pow(0.0008, dt));
-    this.camera.setTarget(new Vector3(this.player.x, elev + 14 + this.player.y, this.player.z));
+    this.camera.position = Vector3.Lerp(this.camera.position, desired, 1 - Math.pow(0.00008, dt));
+    this.camera.setTarget(new Vector3(this.player.x, elev + 12 + this.player.y, this.player.z));
+    const camD = Vector3.Distance(this.camera.position, new Vector3(this.player.x, elev + 12, this.player.z));
+    this.playerMesh.setEnabled(!this.player.vehicleId && camD > 26);
   }
 
   private updateCars(dt: number): void {
@@ -1194,7 +1235,7 @@ export class ViceblockRuntime3D {
         a.heading += (Math.random() - 0.5) * 0.4;
         const nx = a.x + Math.cos(a.heading) * wander * dt;
         const nz = a.z + Math.sin(a.heading) * wander * dt;
-        if (!blocked(this.world, nx, nz, 7)) {
+        if (!blocked(this.world, nx, nz, 7) && Math.hypot(nx - this.player.x, nz - this.player.z) > 16) {
           a.x = nx;
           a.z = nz;
         } else a.heading += 1.2;
