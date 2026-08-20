@@ -3,7 +3,7 @@
  * Crimes with no witnesses raise no heat; witnessed crimes are reported
  * after a believable delay instead of instant magical police knowledge.
  */
-export type CrimeKind = "car-theft" | "robbery" | "gunfire" | "assault" | "lockpick-alarm";
+export type CrimeKind = "car-theft" | "robbery" | "gunfire" | "assault" | "lockpick-alarm" | "hit-and-run" | "homicide";
 
 export interface CrimeReport {
   reported: boolean;
@@ -24,6 +24,10 @@ export function crimeSeverity(kind: CrimeKind): number {
       return 1;
     case "lockpick-alarm":
       return 1;
+    case "hit-and-run":
+      return 2;
+    case "homicide":
+      return 3;
     default: {
       const _never: never = kind;
       return _never;

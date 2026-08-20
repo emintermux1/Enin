@@ -14,6 +14,7 @@ import {
   applyReward,
   applyVehicleDamage,
   collisionDamage,
+  COLLISION_CONFIG,
   assistAim,
   assistHint,
   attemptPick,
@@ -43,7 +44,9 @@ import {
   PLAYER_CONFIG,
   POLICE_CONFIG,
   raceResult,
+  pedestrianImpact,
   recognitionRange,
+  resolveCarCollision,
   scoreStunt,
   shootTire,
   speedCameraDistance,
@@ -107,6 +110,11 @@ interface Actor {
   searchZ?: number;
   /** Seconds left filming the player instead of fleeing. */
   recording?: number;
+  /** Seconds since this one went down; the body lies there, then is cleared. */
+  dead?: number;
+  /** Thrown by a car: velocity that decays over the next moment. */
+  flungX?: number;
+  flungZ?: number;
 }
 
 interface CarEntity {
@@ -194,6 +202,7 @@ export class ViceblockRuntime3D {
   private hitStop = 0;
   private thrill: ThrillState = createThrill();
   private driftTime = 0;
+  private civilianSeq = 0;
   private nearMissCooldown = new Map<string, number>();
   private baseFov = 1.08;
   dialogue: { who: string; line: string; t: number } | null = null;
@@ -805,26 +814,44 @@ export class ViceblockRuntime3D {
     }
     this.buildMartInterior();
 
-    const colors = ["#c4a07a", "#8a6a54", "#d8c8b0", "#6a4a3a", "#b08870"];
     const count = 52;
     for (let i = 0; i < count; i++) {
       const x = (8 + (i * 17) % 80) * TILE + 10;
       const z = (12 + (i * 11) % 60) * TILE + 10;
       if (blocked(this.world, x, z, 8)) continue;
       if (Math.hypot(x - this.world.spawnX, z - this.world.spawnY) < 160) continue;
-      this.actors.push({
-        id: `c${i}`,
-        kind: "civilian",
-        name: "local",
-        x,
-        z,
-        heading: Math.random() * 6,
-        hp: 30,
-        panic: 0,
-        mesh: this.makeHumanoid(`c${i}`, colors[i % colors.length] ?? "#c4a07a", "#d8b890"),
-      });
-      const last = this.actors[this.actors.length - 1];
-      if (last) last.mesh.position.set(last.x, 0, last.z);
+      this.addCivilian(x, z);
+    }
+  }
+
+  private addCivilian(x: number, z: number): void {
+    const colors = ["#c4a07a", "#8a6a54", "#d8c8b0", "#6a4a3a", "#b08870"];
+    const id = `c${this.civilianSeq++}`;
+    const actor: Actor = {
+      id,
+      kind: "civilian",
+      name: "local",
+      x,
+      z,
+      heading: Math.random() * 6,
+      hp: 30,
+      panic: 0,
+      mesh: this.makeHumanoid(id, colors[this.civilianSeq % colors.length] ?? "#c4a07a", "#d8b890"),
+    };
+    actor.mesh.position.set(x, 0, z);
+    this.actors.push(actor);
+  }
+
+  /** Keeps the streets populated after the crowd thins from violence. */
+  private replaceCivilian(): void {
+    for (let tries = 0; tries < 20; tries++) {
+      const x = Math.random() * MAP_W * TILE;
+      const z = Math.random() * MAP_H * TILE;
+      if (blocked(this.world, x, z, 8)) continue;
+      // Out of sight: nobody should watch a local pop into existence.
+      if (Math.hypot(x - this.player.x, z - this.player.z) < 320) continue;
+      this.addCivilian(x, z);
+      return;
     }
   }
 
@@ -1493,14 +1520,102 @@ export class ViceblockRuntime3D {
         }
       }
     }
+    this.collideCars();
+    this.runDownPedestrians();
+  }
+
+  /** Mass from durability: a wrecking ball of a muscle car shoves a compact. */
+  private carMass(v: VehicleRuntime): number {
+    return vehicleById(v.defId).durability * 12;
+  }
+
+  private collideCars(): void {
+    for (let i = 0; i < this.cars.length; i++) {
+      const a = this.cars[i];
+      if (!a || a.rt.exploded) continue;
+      for (let j = i + 1; j < this.cars.length; j++) {
+        const b = this.cars[j];
+        if (!b || b.rt.exploded) continue;
+        const hit = resolveCarCollision(
+          { x: a.rt.x, y: a.rt.y, vx: a.rt.vx, vy: a.rt.vy, mass: this.carMass(a.rt) },
+          { x: b.rt.x, y: b.rt.y, vx: b.rt.vx, vy: b.rt.vy, mass: this.carMass(b.rt) },
+        );
+        if (!hit) continue;
+        a.rt.vx = hit.a.vx;
+        a.rt.vy = hit.a.vy;
+        b.rt.vx = hit.b.vx;
+        b.rt.vy = hit.b.vy;
+        // Push the pair apart so they cannot settle inside each other.
+        const push = hit.depth / 2 + 0.1;
+        a.rt.x -= hit.nx * push;
+        a.rt.y -= hit.ny * push;
+        b.rt.x += hit.nx * push;
+        b.rt.y += hit.ny * push;
+        if (hit.damageA <= 0 && hit.damageB <= 0) continue;
+        a.rt = applyVehicleDamage(a.rt, hit.damageA, hit.closing > VEHICLE_CONFIG.crashSpeedThreshold);
+        b.rt = applyVehicleDamage(b.rt, hit.damageB, hit.closing > VEHICLE_CONFIG.crashSpeedThreshold);
+        this.spawnPuff((a.rt.x + b.rt.x) / 2, 8, (a.rt.y + b.rt.y) / 2, "#e8d8a0");
+        const mine = this.player.vehicleId === a.rt.id || this.player.vehicleId === b.rt.id;
+        if (mine) {
+          this.impact(hit.closing > VEHICLE_CONFIG.crashSpeedThreshold ? "crash" : "hit");
+          this.driftTime = 0;
+          this.panicNear();
+        }
+      }
+    }
+  }
+
+  private runDownPedestrians(): void {
+    for (const car of this.cars) {
+      if (car.rt.exploded) continue;
+      const speed = Math.hypot(car.rt.vx, car.rt.vy);
+      if (speed < 12) continue;
+      const mine = this.player.vehicleId === car.rt.id;
+      for (const a of this.actors) {
+        if (a.dead !== undefined) continue;
+        const d = Math.hypot(a.x - car.rt.x, a.z - car.rt.y);
+        if (d > COLLISION_CONFIG.carRadius + COLLISION_CONFIG.pedestrianRadius) continue;
+        const hit = pedestrianImpact(speed, a.hp);
+        const dir = Math.atan2(car.rt.vy, car.rt.vx);
+        a.flungX = Math.cos(dir) * hit.knockback;
+        a.flungZ = Math.sin(dir) * hit.knockback;
+        if (hit.damage <= 0) {
+          a.panic = Math.max(a.panic, 4);
+          a.heading = dir;
+          continue;
+        }
+        this.hitActor(a, hit.damage, "vehicle", mine);
+      }
+    }
   }
 
   private updateActors(dt: number): void {
     const hour = this.time;
+    let cleared = 0;
     for (const a of this.actors) {
+      if (a.dead !== undefined) {
+        a.dead += dt;
+        // Face down where they fell, still sliding a little from the impact.
+        a.flungX = (a.flungX ?? 0) * Math.max(0, 1 - dt * 4);
+        a.flungZ = (a.flungZ ?? 0) * Math.max(0, 1 - dt * 4);
+        a.x += a.flungX * dt;
+        a.z += a.flungZ * dt;
+        a.mesh.position.set(a.x, 3, a.z);
+        a.mesh.rotation.x = Math.PI / 2;
+        continue;
+      }
       if (a.kind === "named") {
         a.mesh.position.set(a.x, 0, a.z);
         continue;
+      }
+      if (a.flungX !== undefined || a.flungZ !== undefined) {
+        // Clipped but alive: stumble along the bonnet's direction first.
+        const fx = (a.flungX ?? 0) * Math.max(0, 1 - dt * 5);
+        const fz = (a.flungZ ?? 0) * Math.max(0, 1 - dt * 5);
+        a.x += fx * dt;
+        a.z += fz * dt;
+        a.flungX = Math.hypot(fx, fz) < 2 ? undefined : fx;
+        a.flungZ = Math.hypot(fx, fz) < 2 ? undefined : fz;
       }
       if (a.recording && a.recording > 0) {
         // Filming: stand still, face the player, phone up.
@@ -1524,6 +1639,48 @@ export class ViceblockRuntime3D {
       a.mesh.rotation.y = -a.heading;
       this.poseWalk(a.mesh, a.panic <= 0 && !a.recording, false);
     }
+
+    this.actors = this.actors.filter((a) => {
+      if (a.dead === undefined || a.dead < 26) return true;
+      a.mesh.dispose();
+      cleared++;
+      return false;
+    });
+    for (let i = 0; i < cleared; i++) this.replaceCivilian();
+  }
+
+  /**
+   * One way in for every kind of harm done to a person. Killing someone is a
+   * homicide the neighbourhood can report, which is what makes a crowd
+   * something to think about rather than scenery.
+   */
+  private hitActor(a: Actor, damage: number, cause: "gun" | "fists" | "vehicle", byPlayer: boolean): void {
+    if (a.dead !== undefined) return;
+    if (a.kind === "named") {
+      // Story contacts are needed alive; they take the hint and back off.
+      a.panic = 4;
+      a.heading = Math.atan2(a.z - this.player.z, a.x - this.player.x);
+      if (byPlayer) this.flash(`${a.name.toUpperCase()}  ·  you need me alive, genius`);
+      return;
+    }
+    a.hp -= damage;
+    a.recording = 0;
+    if (a.hp > 0) {
+      a.panic = 5;
+      a.heading = Math.atan2(a.z - this.player.z, a.x - this.player.x);
+      if (byPlayer && cause !== "fists") this.reportCrime(cause === "vehicle" ? "hit-and-run" : "gunfire");
+      return;
+    }
+    a.dead = 0;
+    a.hp = 0;
+    this.spawnPuff(a.x, 9, a.z, "#8a1c14");
+    if (byPlayer) {
+      this.impact("kill");
+      this.reportCrime("homicide");
+      this.flash(cause === "vehicle" ? "HIT AND RUN  ·  somebody is dialing 911" : "BODY  ·  that one is not getting up");
+      this.pushNews("Southside: another body on the pavement. NCPD asking for witnesses.");
+    }
+    this.panicNear();
   }
 
   private updateCops(dt: number): void {
@@ -1764,13 +1921,12 @@ export class ViceblockRuntime3D {
         return;
       }
       const civ = this.actors.find(
-        (a) => a.kind === "civilian" && Math.hypot(a.x - this.player.x, a.z - this.player.z) < weapon.range,
+        (a) => a.dead === undefined && Math.hypot(a.x - this.player.x, a.z - this.player.z) < weapon.range,
       );
       if (civ) {
-        civ.panic = 5;
-        civ.heading = Math.atan2(civ.z - this.player.z, civ.x - this.player.x);
+        this.hitActor(civ, weapon.damage, "fists", true);
         this.reportCrime("assault");
-        this.flash("SHOVE  ·  they want no part of you");
+        if (civ.dead === undefined) this.flash("SHOVE  ·  they want no part of you");
       }
       return;
     }
@@ -1819,18 +1975,37 @@ export class ViceblockRuntime3D {
     this.reportCrime("gunfire");
     this.panicNear();
 
-    // Hit test along the ray against cops and cars.
+    // One bullet, one victim: whatever stands closest along the ray takes it,
+    // so a body between you and a car actually stops the round.
+    let best: { d: number; hit: () => void } | null = null;
+    const consider = (x: number, z: number, radius: number, hit: () => void): void => {
+      if (!pointNearSegment(x, z, this.player.x, this.player.z, tx, tz, radius)) return;
+      const d = Math.hypot(x - this.player.x, z - this.player.z);
+      if (!best || d < best.d) best = { d, hit };
+    };
     for (const c of this.cops) {
-      if (pointNearSegment(c.x, c.z, this.player.x, this.player.z, tx, tz, 12)) {
+      consider(c.x, c.z, 12, () => {
         c.hp -= weapon.damage;
         this.spawnPuff(c.x, 10, c.z, "#c43020");
         this.impact(c.hp <= 0 ? "kill" : "hit");
         this.flash(c.hp <= 0 ? "DOWN  ·  that one's staying down" : "HIT");
-        break;
-      }
+        if (c.hp <= 0) {
+          // Shooting an officer is the one crime the city never shrugs off.
+          this.raiseHeat(2);
+          this.pushNews("Officer down in Southside. Every unit is rolling.");
+        }
+      });
+    }
+    for (const a of this.actors) {
+      if (a.dead !== undefined) continue;
+      consider(a.x, a.z, 11, () => {
+        this.spawnPuff(a.x, 10, a.z, "#c43020");
+        this.hitActor(a, weapon.damage, "gun", true);
+      });
     }
     for (const car of this.cars) {
-      if (!car.rt.exploded && pointNearSegment(car.rt.x, car.rt.y, this.player.x, this.player.z, tx, tz, 16)) {
+      if (car.rt.exploded) continue;
+      consider(car.rt.x, car.rt.y, 16, () => {
         car.rt = applyVehicleDamage(car.rt, Math.round(weapon.damage * 0.65), false);
         this.spawnPuff(car.rt.x, 8, car.rt.y, "#e8d8a0");
         if (Math.random() < 0.3) {
@@ -1838,9 +2013,9 @@ export class ViceblockRuntime3D {
           this.flash("TIRE  ·  shredded, she'll wander now");
         }
         if (car.rt.health <= 0) this.flash("CAR  ·  fuel tank's punching out");
-        break;
-      }
+      });
     }
+    (best as { hit: () => void } | null)?.hit();
   }
 
   private spawnTracer(x0: number, y0: number, z0: number, x1: number, y1: number, z1: number): void {
@@ -2228,6 +2403,12 @@ export class ViceblockRuntime3D {
       this.hurt(VEHICLE_CONFIG.explosionDamageDriver);
     }
     if (Math.hypot(this.player.x - car.rt.x, this.player.z - car.rt.y) < 70) this.hurt(VEHICLE_CONFIG.explosionDamageNear);
+    // A fireball in the street is not something a crowd stands around for.
+    for (const a of this.actors) {
+      const d = Math.hypot(a.x - car.rt.x, a.z - car.rt.y);
+      if (d < 60) this.hitActor(a, Math.round(70 - d), "vehicle", false);
+    }
+    this.panicNear();
     this.raiseHeat(1);
     this.flash("BOOM  ·  wreck stays in the street");
   }
