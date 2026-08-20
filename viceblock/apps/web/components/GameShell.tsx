@@ -114,6 +114,10 @@ export function GameShell() {
     const game = new ViceblockRuntime3D(c);
     game.minimap = minimapRef.current;
     gameRef.current = game;
+    // Handle for the browser smoke checks and for anyone poking at the game in
+    // a console. The client is not trusted for rewards, so this exposes nothing
+    // a player could not already reach.
+    (window as unknown as { viceblock?: ViceblockRuntime3D }).viceblock = game;
     game.attach();
     game.onHud = (h) => setHud(h);
     game.onPersist = (save) => {
@@ -145,6 +149,7 @@ export function GameShell() {
     };
     return () => {
       game.detach();
+      delete (window as unknown as { viceblock?: ViceblockRuntime3D }).viceblock;
       gameRef.current = null;
     };
   }, []);

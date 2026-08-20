@@ -18,7 +18,7 @@ export const PURSUIT_CONFIG = {
   turnAroundAngle: 2,
   /** How far ahead of the target a cruiser aims, to cut the corner. */
   leadSeconds: 0.6,
-  spawnDistance: 420,
+  spawnDistance: 340,
   /** Beyond this a cruiser has lost the plot and is recycled. */
   despawnDistance: 1400,
 };

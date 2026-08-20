@@ -45,6 +45,7 @@ import {
   PLAYER_CONFIG,
   POLICE_CONFIG,
   raceResult,
+  normalizeAngleTo,
   pedestrianImpact,
   PURSUIT_CONFIG,
   pursuitInput,
@@ -126,6 +127,8 @@ interface CarEntity {
   smoke: number;
   /** Seconds until this car can take collision damage again. */
   bump: number;
+  /** Seconds a traffic car has spent going nowhere, before it is recycled. */
+  stuck?: number;
 }
 
 interface Tracer {
@@ -1323,6 +1326,21 @@ export class ViceblockRuntime3D {
     }
   }
 
+  /**
+   * The furthest the camera can sit behind the player with nothing solid in
+   * between. Walks the boom in from the requested length in short steps.
+   */
+  private clearCameraDistance(want: number): number {
+    const min = 52;
+    let last = min;
+    for (let d = min; d <= want; d += 12) {
+      const p = this.cameraPlace(d);
+      if (blocked(this.world, p.x, p.z, 10)) return last;
+      last = d;
+    }
+    return want;
+  }
+
   private cameraPlace(dist: number): { x: number; z: number; y: number } {
     const pitch = this.player.camPitch;
     const elev = this.interiorMode ? INTERIOR_Y : 0;
@@ -1413,12 +1431,11 @@ export class ViceblockRuntime3D {
       this.player.camYaw += normalizeAngle(desired - this.player.camYaw) * Math.min(1, dt * 3);
     }
     const elev = this.interiorMode ? INTERIOR_Y : 0;
-    let p = this.cameraPlace(dist);
-    if (!this.interiorMode && blocked(this.world, p.x, p.z, 10)) {
-      dist = Math.max(80, dist * 0.78);
-      p = this.cameraPlace(dist);
-      if (blocked(this.world, p.x, p.z, 10)) p = { ...p, y: p.y + 40 };
-    }
+    // Pull the camera in until the line back from the player is clear. Lifting
+    // it over the obstacle instead, as this used to, parks the lens inside the
+    // roof of whatever you drove past and fills the screen with its underside.
+    if (!this.interiorMode) dist = this.clearCameraDistance(dist);
+    const p = this.cameraPlace(dist);
     if (this.shake > 0 && this.settings.shake) {
       p.x += (Math.random() - 0.5) * this.shake;
       p.y += (Math.random() - 0.5) * this.shake;
@@ -1541,7 +1558,7 @@ export class ViceblockRuntime3D {
           v.vx *= -0.25;
           v.vy *= -0.25;
           // Pick a side to peel off toward instead of grinding the wall.
-          v.heading += Math.PI / 3;
+          v.heading = normalizeAngleTo(v.heading + Math.PI / 3);
         } else {
           v.x = nx;
           v.y = nz;
@@ -1554,10 +1571,15 @@ export class ViceblockRuntime3D {
         v.vy = Math.sin(v.heading) * spd;
         const nx = v.x + v.vx * dt;
         const nz = v.y + v.vy * dt;
-        if (!blocked(this.world, nx, nz, 12)) {
+        const moved = !blocked(this.world, nx, nz, 12);
+        if (moved) {
           v.x = nx;
           v.y = nz;
         }
+        // A car wedged against a wall or stuck behind something parked would
+        // otherwise sit there for the rest of the session; move it on.
+        car.stuck = moved && spd > 0 ? 0 : (car.stuck ?? 0) + dt;
+        if (car.stuck > 6) this.relocateTraffic(car);
       }
       car.rt = v;
       car.mesh.position.set(v.x, 0, v.y);
@@ -1592,9 +1614,9 @@ export class ViceblockRuntime3D {
       if (blocked(this.world, px, pz, 12)) return false;
       return cellAt(this.world, px, pz) === Cell.Road;
     };
-    const straight = v.heading;
-    const left = v.heading - Math.PI / 2;
-    const right = v.heading + Math.PI / 2;
+    const straight = normalizeAngleTo(v.heading);
+    const left = normalizeAngleTo(straight - Math.PI / 2);
+    const right = normalizeAngleTo(straight + Math.PI / 2);
     // At a junction with room to turn, sometimes take it, so the streets are
     // not a set of fixed loops.
     if (onRoad(straight, 26)) {
@@ -1603,21 +1625,56 @@ export class ViceblockRuntime3D {
     }
     if (onRoad(left, 30)) return left;
     if (onRoad(right, 30)) return right;
-    return v.heading + Math.PI;
+    // Off the tarmac — shunted there by a crash, most likely. Carry on while
+    // the way is clear rather than flip-flopping on the spot looking for a road.
+    if (!blocked(this.world, v.x + Math.cos(straight) * 26, v.y + Math.sin(straight) * 26, 12)) return straight;
+    return normalizeAngleTo(straight + Math.PI / 2);
   }
 
-  /** True when another car sits close in front, in roughly the same direction. */
+  /**
+   * True when something is close in front worth stopping for: the car you are
+   * queueing behind, or a person about to be under the wheels. Oncoming cars
+   * are deliberately excluded — two cars nose to nose would both wait forever.
+   */
   private laneBlockedAhead(v: VehicleRuntime): boolean {
+    const fx = Math.cos(v.heading);
+    const fz = Math.sin(v.heading);
     for (const other of this.cars) {
       if (other.rt.id === v.id || other.rt.exploded) continue;
       const dx = other.rt.x - v.x;
       const dz = other.rt.y - v.y;
-      const d = Math.hypot(dx, dz);
-      if (d > 34) continue;
-      const ahead = Math.cos(v.heading) * dx + Math.sin(v.heading) * dz;
-      if (ahead > 6) return true;
+      if (Math.hypot(dx, dz) > 34) continue;
+      if (fx * dx + fz * dz <= 6) continue;
+      const oncoming = Math.cos(other.rt.heading) * fx + Math.sin(other.rt.heading) * fz < -0.3;
+      if (!oncoming) return true;
+    }
+    for (const a of this.actors) {
+      if (a.dead !== undefined) continue;
+      const dx = a.x - v.x;
+      const dz = a.z - v.y;
+      if (Math.hypot(dx, dz) > 26) continue;
+      if (fx * dx + fz * dz > 4) return true;
     }
     return false;
+  }
+
+  /** Drop a jammed traffic car back onto open road, out of the player's sight. */
+  private relocateTraffic(car: CarEntity): void {
+    for (let tries = 0; tries < 24; tries++) {
+      const x = Math.random() * MAP_W * TILE;
+      const z = Math.random() * MAP_H * TILE;
+      if (cellAt(this.world, x, z) !== Cell.Road) continue;
+      if (blocked(this.world, x, z, 14)) continue;
+      if (Math.hypot(x - this.player.x, z - this.player.z) < 400) continue;
+      car.rt.x = x;
+      car.rt.y = z;
+      car.rt.heading = Math.round(Math.random() * 4) * (Math.PI / 2);
+      car.rt.vx = 0;
+      car.rt.vy = 0;
+      car.stuck = 0;
+      return;
+    }
+    car.stuck = 0;
   }
 
   /** Mass from durability: a wrecking ball of a muscle car shoves a compact. */
@@ -2434,7 +2491,10 @@ export class ViceblockRuntime3D {
     const witnesses = Math.max(
       minWitnesses,
       this.actors.filter(
-        (a) => Math.hypot(a.x - this.player.x, a.z - this.player.z) < 150 && this.lineOpen(a.x, a.z, this.player.x, this.player.z),
+        (a) =>
+          a.dead === undefined &&
+          Math.hypot(a.x - this.player.x, a.z - this.player.z) < 150 &&
+          this.lineOpen(a.x, a.z, this.player.x, this.player.z),
       ).length,
     );
     const copSaw = this.cops.some(
