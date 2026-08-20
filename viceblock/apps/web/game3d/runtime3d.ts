@@ -137,6 +137,10 @@ interface MissionRuntime {
   id: string;
   step: number;
   raceHits: number;
+  /** Whether police ever showed up, for objectives that ask you to lose them. */
+  chased?: boolean;
+  /** One-shot nudge when an objective's precondition has not happened yet. */
+  hinted?: boolean;
 }
 
 const RACE_CPS = [
@@ -414,8 +418,11 @@ export class ViceblockRuntime3D {
     this.mission.id = save.activeMissionId ?? nextMission(save.missionsCompleted)?.id ?? "fresh-off-the-bus";
     this.settings = { ...DEFAULT_SETTINGS, ...save.settings };
     this.player.raceBestMs = save.raceBestMs ?? 0;
+    this.mission.step = save.missionStep ?? 0;
     if (save.inventory.some((i) => i.id === "smg")) this.player.weapon = "smg";
     else if (save.inventory.some((i) => i.id === "pistol")) this.player.weapon = "pistol";
+    if (this.player.weapon !== "fists") this.player.ammo = save.ammo ?? 0;
+    if (this.player.health <= 0) this.player.health = 100;
     // Reconnect where you left off, as long as the spot is still walkable.
     if (save.x > 0 && save.y > 0 && !blocked(this.world, save.x, save.y, PLAYER_CONFIG.radius)) {
       this.player.x = save.x;
@@ -475,6 +482,8 @@ export class ViceblockRuntime3D {
       achievements: [],
       settings: this.settings,
       raceBestMs: this.player.raceBestMs,
+      ammo: this.player.ammo,
+      missionStep: this.mission.step,
       updatedAt: Date.now(),
     };
   }
@@ -1538,20 +1547,17 @@ export class ViceblockRuntime3D {
           v.y = nz;
         }
       } else if (v.id.startsWith("traffic-") && !v.stolen) {
-        const spd = 70 * wet;
+        v.heading = this.trafficHeading(v);
+        // Queue behind whatever is in front instead of shunting it down the road.
+        const spd = this.laneBlockedAhead(v) ? 0 : 70 * wet;
         v.vx = Math.cos(v.heading) * spd;
         v.vy = Math.sin(v.heading) * spd;
         const nx = v.x + v.vx * dt;
         const nz = v.y + v.vy * dt;
-        if (blocked(this.world, nx, nz, 12)) v.heading += Math.PI / 2;
-        else {
+        if (!blocked(this.world, nx, nz, 12)) {
           v.x = nx;
           v.y = nz;
         }
-        if (v.x < 0) v.x = MAP_W * TILE - 8;
-        if (v.y < 0) v.y = MAP_H * TILE - 8;
-        if (v.x > MAP_W * TILE) v.x = 8;
-        if (v.y > MAP_H * TILE) v.y = 8;
       }
       car.rt = v;
       car.mesh.position.set(v.x, 0, v.y);
@@ -1572,6 +1578,46 @@ export class ViceblockRuntime3D {
     }
     this.collideCars();
     this.runDownPedestrians();
+  }
+
+  /**
+   * Traffic keeps to tarmac. It used to drive dead straight, turn ninety
+   * degrees into whatever it hit, and teleport across the map at the edges;
+   * now it takes junctions and turns back at the waterfront like everyone else.
+   */
+  private trafficHeading(v: VehicleRuntime): number {
+    const onRoad = (h: number, dist: number): boolean => {
+      const px = v.x + Math.cos(h) * dist;
+      const pz = v.y + Math.sin(h) * dist;
+      if (blocked(this.world, px, pz, 12)) return false;
+      return cellAt(this.world, px, pz) === Cell.Road;
+    };
+    const straight = v.heading;
+    const left = v.heading - Math.PI / 2;
+    const right = v.heading + Math.PI / 2;
+    // At a junction with room to turn, sometimes take it, so the streets are
+    // not a set of fixed loops.
+    if (onRoad(straight, 26)) {
+      const turning = Math.random() < 0.004 && onRoad(left, 34) ? left : Math.random() < 0.004 && onRoad(right, 34) ? right : straight;
+      return turning;
+    }
+    if (onRoad(left, 30)) return left;
+    if (onRoad(right, 30)) return right;
+    return v.heading + Math.PI;
+  }
+
+  /** True when another car sits close in front, in roughly the same direction. */
+  private laneBlockedAhead(v: VehicleRuntime): boolean {
+    for (const other of this.cars) {
+      if (other.rt.id === v.id || other.rt.exploded) continue;
+      const dx = other.rt.x - v.x;
+      const dz = other.rt.y - v.y;
+      const d = Math.hypot(dx, dz);
+      if (d > 34) continue;
+      const ahead = Math.cos(v.heading) * dx + Math.sin(v.heading) * dz;
+      if (ahead > 6) return true;
+    }
+    return false;
   }
 
   /** Mass from durability: a wrecking ball of a muscle car shoves a compact. */
@@ -1891,6 +1937,19 @@ export class ViceblockRuntime3D {
     const target = def.objectives[Math.min(this.mission.step, def.objectives.length - 1)]?.targetId ?? "";
     const actor = this.actors.find((a) => a.id === target);
     if (actor) return { x: actor.x, z: actor.z };
+    // Car objectives point at the car: the job Sparrow had no marker at all,
+    // and "steal a getaway car" pointed at nothing.
+    const wanted = this.cars.find((c) => c.rt.id === target && !c.rt.exploded);
+    if (wanted) return { x: wanted.rt.x, z: wanted.rt.y };
+    if (target === "getaway") {
+      const nearest = this.cars
+        .filter((c) => !c.rt.exploded && !c.rt.stolen && c.rt.id !== this.player.vehicleId)
+        .sort(
+          (a, b) =>
+            Math.hypot(a.rt.x - this.player.x, a.rt.y - this.player.z) - Math.hypot(b.rt.x - this.player.x, b.rt.y - this.player.z),
+        )[0];
+      if (nearest) return { x: nearest.rt.x, z: nearest.rt.y };
+    }
     const alias: Record<string, string> = {
       rico: "rico-hideout",
       phone: "rico-hideout",
@@ -2637,31 +2696,52 @@ export class ViceblockRuntime3D {
       if (this.mission.step >= 2) this.complete("fresh-off-the-bus");
     }
     if (this.mission.id === "borrowed-wheels") {
+      // The objective list starts at "steal the Sparrow": sitting in it is the
+      // step, not a silent prerequisite of the delivery.
+      if (this.player.vehicleId === "sparrow-job") this.mission.step = Math.max(this.mission.step, 1);
       const maya = landmarkAt(this.world, this.player.x, this.player.z, 60);
       if (this.player.vehicleId === "sparrow-job" && maya?.id === "maya-garage") this.mission.step = Math.max(this.mission.step, 2);
       if (this.mission.step >= 3) this.complete("borrowed-wheels");
     }
-    if (this.mission.id === "easy-money" && this.mission.step >= 1 && this.heat.level === 0) this.complete("easy-money");
+    if (this.mission.id === "easy-money") {
+      // "Lose the cops" needs cops to have existed. Robbing an empty store with
+      // nobody watching used to complete the mission the instant the till opened.
+      if (this.heat.level >= 1) this.mission.chased = true;
+      if (this.mission.step >= 1 && !this.mission.chased && !this.mission.hinted) {
+        this.mission.hinted = true;
+        this.flash("NOBODY CALLED IT IN  ·  make some noise, then lose them");
+      }
+      if (this.mission.step >= 1 && this.mission.chased && this.heat.level === 0) this.complete("easy-money");
+    }
     if (this.mission.id === "midnight-run") {
       const cp = RACE_CPS[this.mission.raceHits];
       if (cp && Math.hypot(this.player.x - cp.x, this.player.z - cp.z) < 48) {
         this.mission.raceHits += 1;
+        // Keep the objective line in step with the checkpoints being hit.
+        this.mission.step = 1;
         this.flash(`CHECKPOINT  ${this.mission.raceHits}/${RACE_CPS.length}`);
       }
       if (this.mission.raceHits >= RACE_CPS.length) this.complete("midnight-run");
     }
     if (this.mission.id === "port-authority") {
+      const yard = landmarkAt(this.world, this.player.x, this.player.z, 90);
+      if (yard?.id === "warehouse") this.mission.step = Math.max(this.mission.step, 1);
       if (this.player.crate) this.mission.step = Math.max(this.mission.step, 2);
       const rico = landmarkAt(this.world, this.player.x, this.player.z, 50);
       if (this.player.crate && rico?.id === "rico-hideout") {
         this.player.crate = false;
-        this.complete("port-authority");
+        this.mission.step = 3;
+        this.flash("CRATE DROPPED  ·  now shake anyone who followed you");
       }
+      // The last objective is to leave clean, so heat has to be gone.
+      if (this.mission.step >= 3 && this.heat.level === 0) this.complete("port-authority");
     }
     if (this.mission.id === "sunset-jewelry") {
       const near = landmarkAt(this.world, this.player.x, this.player.z, 50);
       if (near?.id === "jewelry") this.mission.step = Math.max(this.mission.step, 1);
-      if (this.player.vehicleId) this.mission.step = Math.max(this.mission.step, 2);
+      // A getaway car is one you took, not the taxi you were already sitting in.
+      const ride = this.cars.find((c) => c.rt.id === this.player.vehicleId);
+      if (ride?.rt.stolen) this.mission.step = Math.max(this.mission.step, 2);
       if (this.mission.step >= 3 && near?.id === "apartment") this.complete("sunset-jewelry");
     }
   }

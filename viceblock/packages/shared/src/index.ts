@@ -97,6 +97,10 @@ export interface PlayerSave {
   settings: PlayerSettings;
   /** Best Midnight Line race time in milliseconds; 0 = no finish yet. */
   raceBestMs?: number;
+  /** Rounds carried for the equipped weapon. */
+  ammo?: number;
+  /** How far into the active mission's objective list the player has got. */
+  missionStep?: number;
   updatedAt: number;
 }
 

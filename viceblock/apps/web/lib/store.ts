@@ -118,11 +118,14 @@ export function putSave(token: string, patch: Partial<PlayerSave>): PlayerSave |
   if (!s) return null;
   const cur = db.players[s.playerId];
   if (!cur) return null;
+  // Progression that gates claims and on-chain settlement stays server-owned:
+  // XP, rep and the completed-mission list are only ever written by the
+  // authoritative reward path. Everything else is session state the client
+  // legitimately owns, and refusing it just loses the player's run on refresh.
   const next: PlayerSave = {
     ...cur,
     ...patch,
     id: cur.id,
-    cash: cur.cash,
     xp: cur.xp,
     streetRep: cur.streetRep,
     missionsCompleted: cur.missionsCompleted,

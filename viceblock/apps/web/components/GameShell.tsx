@@ -1,11 +1,14 @@
 "use client";
 
-import { GAME_NAME, sanitizeText } from "@viceblock/shared";
+import { GAME_NAME, sanitizeText, type PlayerSave } from "@viceblock/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { HudSnapshot } from "../game/hud";
 import { ViceblockRuntime3D } from "../game3d/runtime3d";
 import { blockRichPaste } from "../lib/sanitize-dom";
 import { WalletPanel } from "./WalletPanel";
+
+/** Keeps the same character across refreshes instead of minting a new guest. */
+const SESSION_KEY = "viceblock.session";
 
 const EMPTY: HudSnapshot = {
   cash: 500,
@@ -173,6 +176,29 @@ export function GameShell() {
   }, [started, session]);
 
   useEffect(() => {
+    if (!started || !session) return;
+    // Autosave on a timer as well as at the dramatic moments, so closing the
+    // tab mid-run does not throw the whole session away.
+    const save = (): void => {
+      const g = gameRef.current;
+      if (!g) return;
+      void fetch("/api/save", {
+        method: "PUT",
+        headers: { "content-type": "application/json", authorization: `Bearer ${session}` },
+        body: JSON.stringify(g.snapshot()),
+        keepalive: true,
+      }).catch(() => undefined);
+    };
+    const t = window.setInterval(save, 15000);
+    window.addEventListener("pagehide", save);
+    return () => {
+      window.clearInterval(t);
+      window.removeEventListener("pagehide", save);
+      save();
+    };
+  }, [started, session]);
+
+  useEffect(() => {
     if (!hud.phoneOpen || phoneTab !== "map") return;
     const draw = (): void => {
       const c = bigMapRef.current;
@@ -183,22 +209,47 @@ export function GameShell() {
     return () => window.clearInterval(t);
   }, [hud.phoneOpen, phoneTab]);
 
+  /** Reuse the stored session so a refresh resumes the same character. */
+  async function resumeSession(): Promise<{ token: string; player: PlayerSave } | null> {
+    const token = window.localStorage.getItem(SESSION_KEY);
+    if (!token) return null;
+    try {
+      const res = await fetch("/api/save", { headers: { authorization: `Bearer ${token}` } });
+      if (!res.ok) return null;
+      const data = (await res.json()) as { player?: PlayerSave };
+      return data.player ? { token, player: data.player } : null;
+    } catch {
+      return null;
+    }
+  }
+
   async function enterCity(): Promise<void> {
     setBootError("");
     try {
-      const res = await fetch("/api/session", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ username: sanitizeText(name, 20) || "rookie" }),
-      });
-      const data = (await res.json()) as { token?: string; player?: { username: string } };
-      if (!res.ok || !data.token) throw new Error("session failed");
-      sessionRef.current = data.token;
-      setSession(data.token);
+      const resumed = await resumeSession();
+      let token = resumed?.token ?? "";
+      let save = resumed?.player ?? null;
+      if (!token) {
+        const res = await fetch("/api/session", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ username: sanitizeText(name, 20) || "rookie" }),
+        });
+        const data = (await res.json()) as { token?: string; player?: PlayerSave };
+        if (!res.ok || !data.token) throw new Error("session failed");
+        token = data.token;
+        save = data.player ?? null;
+      }
+      window.localStorage.setItem(SESSION_KEY, token);
+      sessionRef.current = token;
+      setSession(token);
       const g = gameRef.current;
       if (!g) throw new Error("engine missing");
       g.username = sanitizeText(name, 20) || "rookie";
       await g.start();
+      // After start(): the world has to exist before a saved position can be
+      // checked against it.
+      if (save) g.applySave({ ...save, username: g.username });
       if (!g.audio.playing) {
         setBootError("Music blocked — tap the radio chip.");
       }
