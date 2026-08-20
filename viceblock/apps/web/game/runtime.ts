@@ -921,6 +921,11 @@ export class ViceblockRuntime {
       ammo: this.player.ammo,
       raceBestMs: 0,
       waypointBearing: null,
+      combo: 0,
+      comboMultiplier: 1,
+      comboCash: 0,
+      speed: v ? Math.round(Math.hypot(v.vx, v.vy) * 0.62) : 0,
+      drifting: false,
     };
   }
 

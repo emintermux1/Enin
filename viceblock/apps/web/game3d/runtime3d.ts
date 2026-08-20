@@ -17,16 +17,23 @@ import {
   assistHint,
   attemptPick,
   copCountForHeat,
+  comboMultiplier,
   createDirector,
   createHeatState,
   createLockpick,
+  createThrill,
   createVehicleRuntime,
+  driftValue,
   ECONOMY_CONFIG,
   fenceValue,
   HEIST_SUNSET,
+  hitStopSeconds,
+  impactShake,
+  isDrifting,
   lootLabel,
   MISSIONS,
   missionRating,
+  nearMissValue,
   nextMission,
   normalizeAngle,
   damageStage,
@@ -35,11 +42,15 @@ import {
   POLICE_CONFIG,
   raceResult,
   recognitionRange,
+  scoreStunt,
   shootTire,
+  speedCameraDistance,
+  speedFov,
   surfaceGrip,
   tickDirector,
   tickHeat,
   tickLockpick,
+  tickThrill,
   tickVehicleExplosion,
   vehicleById,
   VEHICLE_CONFIG,
@@ -50,8 +61,10 @@ import {
   type CrimeKind,
   type DirectorState,
   type HeatState,
+  type ImpactKind,
   type LockpickState,
   type LootItem,
+  type ThrillState,
   type VehicleRuntime,
   type WeaponId,
   type WorldEventDef,
@@ -171,6 +184,12 @@ export class ViceblockRuntime3D {
   weather: "clear" | "rain" | "fog" = "clear";
   weatherT = 0;
   shake = 0;
+  /** Seconds of near-freeze left; sells an impact better than a louder sound. */
+  private hitStop = 0;
+  private thrill: ThrillState = createThrill();
+  private driftTime = 0;
+  private nearMissCooldown = new Map<string, number>();
+  private baseFov = 1.08;
   dialogue: { who: string; line: string; t: number } | null = null;
   toast = "";
   toastT = 0;
@@ -463,6 +482,23 @@ export class ViceblockRuntime3D {
     plate.billboardMode = 2;
     plate.parent = parent;
     plate.isPickable = false;
+  }
+
+  /** One call for every impact: freeze, shake, and shove the combo along. */
+  private impact(kind: ImpactKind): void {
+    if (this.settings.shake) this.shake = Math.max(this.shake, impactShake(kind));
+    if (!this.settings.reduceFlashes) this.hitStop = Math.max(this.hitStop, hitStopSeconds(kind));
+  }
+
+  /** Stunt payouts land as cash plus a combo toast. */
+  private bankStunt(base: number, label: string): void {
+    const scored = scoreStunt(this.thrill, base);
+    if (scored.payout <= 0) return;
+    this.thrill = scored.state;
+    this.player.cash += scored.payout;
+    const mult = comboMultiplier(scored.state.combo - 1);
+    this.audio.uiClick();
+    this.flash(`${label}  ·  +$${scored.payout}${mult > 1 ? `  ·  x${mult.toFixed(1)}` : ""}`);
   }
 
   private surface(kind: Surface, hex: string, emissive = 0): StandardMaterial {
@@ -948,7 +984,13 @@ export class ViceblockRuntime3D {
 
   // ---------------------------------------------------------------- update
 
-  private update(dt: number): void {
+  private update(rawDt: number): void {
+    // Hit stop runs on real time; everything else crawls while it lasts.
+    let dt = rawDt;
+    if (this.hitStop > 0) {
+      this.hitStop = Math.max(0, this.hitStop - rawDt);
+      dt = rawDt * 0.14;
+    }
     this.clock += dt;
     this.time = (this.time + dt * WORLD_CONFIG.hoursPerRealSecond * 3600) % 24;
     this.weatherT += dt;
@@ -1071,6 +1113,7 @@ export class ViceblockRuntime3D {
       this.flash("RADIO  ·  UNDERGROUND 88 cuts in — pursuit mix");
     }
 
+    this.updateThrill(dt);
     this.shake = Math.max(0, this.shake - dt * 8);
     if (this.dialogue) {
       this.dialogue.t -= dt;
@@ -1086,7 +1129,7 @@ export class ViceblockRuntime3D {
     }
     this.hudAcc += dt;
     const hud = this.hud();
-    const key = `${hud.cash}|${hud.health}|${hud.armor}|${hud.prompt}|${hud.objective}|${hud.toast}|${hud.heat}|${hud.lockpick?.pos.toFixed(2) ?? ""}|${Math.round((hud.waypointBearing ?? 0) * 8)}|${hud.phoneOpen}|${hud.jailLeft}`;
+    const key = `${hud.cash}|${hud.health}|${hud.armor}|${hud.prompt}|${hud.objective}|${hud.toast}|${hud.heat}|${hud.lockpick?.pos.toFixed(2) ?? ""}|${Math.round((hud.waypointBearing ?? 0) * 8)}|${hud.phoneOpen}|${hud.jailLeft}|${hud.combo}|${Math.round(hud.speed / 4)}`;
     if (this.lockpick || this.hudAcc > 0.07 || key !== this.lastHudKey) {
       this.hudAcc = 0;
       this.lastHudKey = key;
@@ -1247,10 +1290,66 @@ export class ViceblockRuntime3D {
     this.camera.setTarget(new Vector3(this.player.x, elev + 20 + this.player.y, this.player.z));
   }
 
+  /**
+   * Rewards the driving nobody asked you to do: shaving past traffic and
+   * pedestrians, and holding a slide. Both feed one combo that lapses if you
+   * settle down, so the loop pushes you to keep the car moving badly on purpose.
+   */
+  private updateThrill(dt: number): void {
+    const lapse = tickThrill(this.thrill, dt);
+    this.thrill = lapse.state;
+    if (lapse.lapsed && lapse.lapsed.combo >= 3) {
+      this.flash(`RUN CLEAR  ·  x${lapse.lapsed.combo} chain  ·  $${lapse.lapsed.cash} banked`);
+    }
+    for (const [id, t] of this.nearMissCooldown) {
+      const left = t - dt;
+      if (left <= 0) this.nearMissCooldown.delete(id);
+      else this.nearMissCooldown.set(id, left);
+    }
+
+    const car = this.cars.find((c) => c.rt.id === this.player.vehicleId);
+    if (!car || car.rt.exploded) {
+      this.driftTime = 0;
+      return;
+    }
+    const v = car.rt;
+    const speed = Math.hypot(v.vx, v.vy);
+
+    if (isDrifting(speed, Math.cos(v.heading), Math.sin(v.heading), v.vx, v.vy)) {
+      this.driftTime += dt;
+    } else if (this.driftTime > 0) {
+      this.bankStunt(driftValue(this.driftTime, this.heat.level), "DRIFT");
+      this.driftTime = 0;
+    }
+
+    for (const other of this.cars) {
+      if (other === car || other.rt.exploded) continue;
+      if (this.nearMissCooldown.has(other.rt.id)) continue;
+      const d = Math.hypot(other.rt.x - v.x, other.rt.y - v.y);
+      const value = nearMissValue(speed, d - 12, this.heat.level);
+      if (value <= 0) continue;
+      this.nearMissCooldown.set(other.rt.id, 1.5);
+      this.bankStunt(value, "NEAR MISS");
+    }
+    for (const a of this.actors) {
+      if (this.nearMissCooldown.has(a.id)) continue;
+      const d = Math.hypot(a.x - v.x, a.z - v.y);
+      const value = nearMissValue(speed, d - 8, this.heat.level);
+      if (value <= 0) continue;
+      this.nearMissCooldown.set(a.id, 2);
+      a.panic = Math.max(a.panic, 2.5);
+      this.bankStunt(Math.round(value * 1.3), "SIDEWALK KISS");
+    }
+  }
+
   private updateCamera(dt: number): void {
     const car = this.cars.find((c) => c.rt.id === this.player.vehicleId);
     const speed = car ? Math.hypot(car.rt.vx, car.rt.vy) : 0;
-    let dist = car ? 165 + Math.min(50, speed * 0.25) : 175;
+    const topSpeed = car ? Math.max(1, vehicleById(car.rt.defId).topSpeed) : 1;
+    let dist = car ? speedCameraDistance(165, speed, topSpeed) : 175;
+    // The lens opens as you wind the car out, so speed reads on screen.
+    const wantFov = car ? speedFov(this.baseFov, speed, topSpeed) : this.baseFov;
+    this.camera.fov += (wantFov - this.camera.fov) * Math.min(1, dt * 2.5);
     this.player.camPitch = Math.max(0.22, Math.min(0.78, this.player.camPitch));
     if (car && speed > 30 && !this.dragYaw.active) {
       const desired = Math.atan2(car.rt.vx, car.rt.vy);
@@ -1332,7 +1431,12 @@ export class ViceblockRuntime3D {
           v = applyVehicleDamage(v, crash ? 18 + s * 0.08 : 6, crash);
           v.vx *= -0.2;
           v.vy *= -0.2;
-          this.shake = this.settings.shake ? 5 : 0;
+          if (crash) {
+            this.impact("crash");
+            this.driftTime = 0;
+          } else if (this.settings.shake) {
+            this.shake = Math.max(this.shake, 3);
+          }
           if (v.health <= 0) this.flash("ENGINE  ·  she's gonna go");
         } else {
           v.x = nx;
@@ -1696,7 +1800,7 @@ export class ViceblockRuntime3D {
     // Muzzle flash right off the barrel.
     this.spawnPuff(this.player.x + Math.cos(heading) * 10, 9, this.player.z + Math.sin(heading) * 10, "#f8e080");
     this.audio.gun();
-    this.shake = this.settings.shake ? (weapon.id === "smg" ? 1.6 : 3) : 0;
+    if (this.settings.shake) this.shake = weapon.id === "smg" ? 1.6 : 3;
     this.reportCrime("gunfire");
     this.panicNear();
 
@@ -1705,7 +1809,8 @@ export class ViceblockRuntime3D {
       if (pointNearSegment(c.x, c.z, this.player.x, this.player.z, tx, tz, 12)) {
         c.hp -= weapon.damage;
         this.spawnPuff(c.x, 10, c.z, "#c43020");
-        this.flash("HIT");
+        this.impact(c.hp <= 0 ? "kill" : "hit");
+        this.flash(c.hp <= 0 ? "DOWN  ·  that one's staying down" : "HIT");
         break;
       }
     }
@@ -2096,7 +2201,7 @@ export class ViceblockRuntime3D {
       }
     }
     this.audio.explosion();
-    this.shake = this.settings.reduceFlashes ? 4 : 10;
+    this.impact("explosion");
     for (let i = 0; i < 22; i++) {
       this.spawnPuff(car.rt.x, 8 + Math.random() * 14, car.rt.y, i % 2 ? "#f0b040" : "#d84020");
     }
@@ -2115,7 +2220,10 @@ export class ViceblockRuntime3D {
   private raiseHeat(n: number): void {
     const before = this.heat.level;
     this.heat = tickHeat(this.heat, 0, true, this.player.x, this.player.z, n, this.player.vehicleId ? this.currentDefId() : "");
-    if (this.heat.level > before) this.audio.wanted();
+    if (this.heat.level > before) {
+      this.audio.wanted();
+      this.impact("wanted");
+    }
   }
 
   private hurt(n: number): void {
@@ -2127,7 +2235,7 @@ export class ViceblockRuntime3D {
     }
     this.player.health -= left;
     this.missionStat.dmg += left;
-    this.shake = 4;
+    this.impact("hit");
   }
 
   private die(): void {
@@ -2509,6 +2617,11 @@ export class ViceblockRuntime3D {
       waypointBearing: wp
         ? normalizeAngle(Math.atan2(wp.x - this.player.x, wp.z - this.player.z) - this.player.camYaw)
         : null,
+      combo: this.thrill.combo,
+      comboMultiplier: comboMultiplier(this.thrill.combo),
+      comboCash: this.thrill.pending,
+      speed: drive ? Math.round(Math.hypot(drive.rt.vx, drive.rt.vy) * 0.62) : 0,
+      drifting: this.driftTime > 0,
     };
   }
 

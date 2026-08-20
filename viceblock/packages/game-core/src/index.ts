@@ -10,4 +10,5 @@ export * from "./contracts";
 export * from "./director";
 export * from "./weapons";
 export * from "./rating";
+export * from "./thrill";
 export { sanitizeText, looksLikeMarkup } from "@viceblock/shared";

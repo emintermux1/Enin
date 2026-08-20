@@ -43,6 +43,11 @@ const EMPTY: HudSnapshot = {
   ammo: 0,
   raceBestMs: 0,
   waypointBearing: null,
+  combo: 0,
+  comboMultiplier: 1,
+  comboCash: 0,
+  speed: 0,
+  drifting: false,
 };
 
 function xpPct(xp: number, level: number): number {
@@ -347,6 +352,22 @@ export function GameShell() {
           {hud.health < 35 && hud.jailLeft <= 0 ? <div className="vignette" /> : null}
           <canvas ref={minimapRef} width={132} height={132} className="minimap" />
           {!hud.inVehicle && hud.weapon !== "Fists" && <div className="crosshair" />}
+          {hud.inVehicle ? (
+            <div className={`speedo${hud.speed > 110 ? " fast" : ""}`}>
+              <b>{hud.speed}</b>
+              <span>KM/H</span>
+              {hud.drifting ? <em>DRIFT</em> : null}
+            </div>
+          ) : null}
+          {hud.combo > 0 ? (
+            <div className="combo" key={hud.combo}>
+              <b>x{hud.comboMultiplier.toFixed(1)}</b>
+              <span>
+                {hud.combo} CHAIN · ${hud.comboCash}
+              </span>
+            </div>
+          ) : null}
+          {hud.speed > 130 ? <div className="rush" /> : null}
           {hud.prompt ? <div className="prompt">{hud.prompt}</div> : null}
           {hud.toast ? <div className="toast">{hud.toast}</div> : null}
           {hud.news ? <div className="news">NOVA NEWS · {hud.news}</div> : null}
@@ -1060,6 +1081,79 @@ export function GameShell() {
           height: 132px;
           border: 1px solid rgba(243, 230, 210, 0.3);
           background: #241c16;
+        }
+        .speedo {
+          position: absolute;
+          right: 24px;
+          bottom: 164px;
+          text-align: right;
+          line-height: 1;
+          pointer-events: none;
+          text-shadow: 0 2px 0 rgba(16, 10, 8, 0.85);
+        }
+        .speedo b {
+          display: block;
+          font-size: 34px;
+          letter-spacing: 0.02em;
+          color: #f3e6d2;
+        }
+        .speedo span {
+          font-size: 10px;
+          letter-spacing: 0.22em;
+          color: #b7a68f;
+        }
+        .speedo.fast b {
+          color: #ffcf5c;
+        }
+        .speedo em {
+          display: block;
+          margin-top: 4px;
+          font-style: normal;
+          font-size: 11px;
+          letter-spacing: 0.2em;
+          color: #ff8a3d;
+        }
+        .combo {
+          position: absolute;
+          right: 24px;
+          bottom: 232px;
+          text-align: right;
+          line-height: 1.1;
+          pointer-events: none;
+          animation: comboPop 220ms ease-out;
+          text-shadow: 0 2px 0 rgba(16, 10, 8, 0.85);
+        }
+        .combo b {
+          display: block;
+          font-size: 26px;
+          color: #ff8a3d;
+        }
+        .combo span {
+          font-size: 10px;
+          letter-spacing: 0.18em;
+          color: #f3e6d2;
+        }
+        @keyframes comboPop {
+          from {
+            transform: scale(1.35);
+            opacity: 0.4;
+          }
+          to {
+            transform: scale(1);
+            opacity: 1;
+          }
+        }
+        /* Speed rush: the frame closes in once the car is genuinely quick. */
+        .rush {
+          position: absolute;
+          inset: 0;
+          pointer-events: none;
+          background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0) 42%, rgba(20, 8, 4, 0.55) 100%);
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .combo {
+            animation: none;
+          }
         }
         .crosshair {
           position: absolute;

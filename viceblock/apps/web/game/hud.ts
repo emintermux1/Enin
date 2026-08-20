@@ -35,4 +35,11 @@ export interface HudSnapshot {
   raceBestMs: number;
   /** Bearing to the active waypoint relative to the camera (radians), or null. */
   waypointBearing: number | null;
+  /** Stunt chain: number of linked near misses and drifts before the window lapses. */
+  combo: number;
+  comboMultiplier: number;
+  comboCash: number;
+  /** Speedometer reading in km/h, 0 on foot. */
+  speed: number;
+  drifting: boolean;
 }
