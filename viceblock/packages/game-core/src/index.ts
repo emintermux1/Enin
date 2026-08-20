@@ -13,4 +13,5 @@ export * from "./rating";
 export * from "./thrill";
 export * from "./driving";
 export * from "./collision";
+export * from "./pursuit";
 export { sanitizeText, looksLikeMarkup } from "@viceblock/shared";

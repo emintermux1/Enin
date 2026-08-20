@@ -42,4 +42,6 @@ export interface HudSnapshot {
   /** Speedometer reading in km/h, 0 on foot. */
   speed: number;
   drifting: boolean;
+  /** Full-screen failure card shown briefly after dying or being arrested. */
+  failure: "wasted" | "busted" | null;
 }

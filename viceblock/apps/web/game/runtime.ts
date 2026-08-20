@@ -926,6 +926,7 @@ export class ViceblockRuntime {
       comboCash: 0,
       speed: v ? Math.round(Math.hypot(v.vx, v.vy) * 0.62) : 0,
       drifting: false,
+      failure: null,
     };
   }
 

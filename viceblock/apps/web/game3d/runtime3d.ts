@@ -18,6 +18,7 @@ import {
   assistAim,
   assistHint,
   attemptPick,
+  copCarsForHeat,
   copCountForHeat,
   comboMultiplier,
   createDirector,
@@ -45,6 +46,8 @@ import {
   POLICE_CONFIG,
   raceResult,
   pedestrianImpact,
+  PURSUIT_CONFIG,
+  pursuitInput,
   recognitionRange,
   resolveCarCollision,
   scoreStunt,
@@ -203,6 +206,10 @@ export class ViceblockRuntime3D {
   private thrill: ThrillState = createThrill();
   private driftTime = 0;
   private civilianSeq = 0;
+  private copCarSeq = 0;
+  /** Full-screen failure card: the moment needs to land, not scroll past in a toast. */
+  private failure: "wasted" | "busted" | null = null;
+  private failureT = 0;
   private nearMissCooldown = new Map<string, number>();
   private baseFov = 1.08;
   dialogue: { who: string; line: string; t: number } | null = null;
@@ -1146,6 +1153,12 @@ export class ViceblockRuntime3D {
       this.flash("RADIO  ·  UNDERGROUND 88 cuts in — pursuit mix");
     }
 
+    // Checked here rather than inside the on-foot branch: a player shot to
+    // pieces behind the wheel used to simply keep driving at zero health.
+    if (this.player.health <= 0 && this.jailLeft <= 0) this.die();
+    if (this.failureT > 0) this.failureT -= dt;
+    else this.failure = null;
+
     this.updateThrill(dt);
     this.shake = Math.max(0, this.shake - dt * 8);
     if (this.dialogue) {
@@ -1252,7 +1265,6 @@ export class ViceblockRuntime3D {
     this.playerMesh.rotation.y = -this.player.heading;
     this.poseWalk(this.playerMesh, mag > 0.05, axis.sprint);
     this.separateFromBodies();
-    if (this.player.health <= 0) this.die();
   }
 
   /** Title-screen wander parks civilians on spawn; kick them out on enter. */
@@ -1487,6 +1499,44 @@ export class ViceblockRuntime3D {
         this.player.x = v.x;
         this.player.z = v.y;
         this.player.heading = v.heading;
+      } else if (v.id.startsWith("cop-car-") && !v.stolen) {
+        const chased = this.cars.find((c) => c.rt.id === this.player.vehicleId);
+        const input = pursuitInput(
+          { x: v.x, y: v.y, heading: v.heading, vx: v.vx, vy: v.vy },
+          { x: this.player.x, y: this.player.z, vx: chased?.rt.vx ?? 0, vy: chased?.rt.vy ?? 0 },
+        );
+        const drive = stepCar(
+          { heading: v.heading, vx: v.vx, vy: v.vy },
+          input,
+          {
+            acceleration: def.acceleration,
+            topSpeed: def.topSpeed * wet,
+            handling: def.handling,
+            braking: def.braking,
+            grip: this.weather === "rain" ? surfaceGrip("wet-asphalt") : surfaceGrip("asphalt"),
+            power: performanceMultipliers(v).accel,
+          },
+          dt,
+        );
+        v.heading = drive.heading;
+        v.vx = drive.vx;
+        v.vy = drive.vy;
+        const nx = v.x + v.vx * dt;
+        const nz = v.y + v.vy * dt;
+        if (blocked(this.world, nx, nz, 12)) {
+          // Cruisers clout walls in the chase; they take it like the player does.
+          if (car.bump <= 0) {
+            car.bump = VEHICLE_CONFIG.bumpCooldownSeconds;
+            v = applyVehicleDamage(v, collisionDamage(Math.hypot(v.vx, v.vy)), false);
+          }
+          v.vx *= -0.25;
+          v.vy *= -0.25;
+          // Pick a side to peel off toward instead of grinding the wall.
+          v.heading += Math.PI / 3;
+        } else {
+          v.x = nx;
+          v.y = nz;
+        }
       } else if (v.id.startsWith("traffic-") && !v.stolen) {
         const spd = 70 * wet;
         v.vx = Math.cos(v.heading) * spd;
@@ -1705,6 +1755,7 @@ export class ViceblockRuntime3D {
       const c = this.cops.pop();
       c?.mesh.dispose();
     }
+    this.updatePoliceCars();
     const speed = PLAYER_CONFIG.sprintSpeed * POLICE_CONFIG.footSpeedRatio * (0.9 + this.heat.level * 0.05);
     let nearest = Infinity;
     for (const c of this.cops) {
@@ -1751,7 +1802,16 @@ export class ViceblockRuntime3D {
     }
     this.audio.setSirenDistance(Number.isFinite(nearest) ? nearest : 900);
 
-    // Arrest window: cornered on foot with cops in your face.
+    // Arrest window: cornered on foot with cops in your face. A cruiser pulling
+    // up counts too, otherwise a car chase that ends on foot has no ending.
+    const cruiser = this.cars.reduce(
+      (min, c) =>
+        c.rt.id.startsWith("cop-car-") && !c.rt.stolen && !c.rt.exploded
+          ? Math.min(min, Math.hypot(c.rt.x - this.player.x, c.rt.y - this.player.z))
+          : min,
+      Infinity,
+    );
+    nearest = Math.min(nearest, cruiser);
     const cornered = this.heat.level >= 1 && !this.player.vehicleId && !this.interiorMode && nearest < 34;
     if (this.input.surrenderQueued) {
       this.input.surrenderQueued = false;
@@ -1771,6 +1831,43 @@ export class ViceblockRuntime3D {
       }
       return true;
     });
+  }
+
+  /**
+   * Cruisers on the street scale with the wanted level. Anything the player
+   * has commandeered is left alone — a stolen patrol car is the player's now.
+   */
+  private updatePoliceCars(): void {
+    const want = copCarsForHeat(this.heat.level);
+    const active = this.cars.filter((c) => c.rt.id.startsWith("cop-car-") && !c.rt.stolen && !c.rt.exploded);
+    for (const c of active) {
+      const far = Math.hypot(c.rt.x - this.player.x, c.rt.y - this.player.z) > PURSUIT_CONFIG.despawnDistance;
+      if (!far && active.length <= want) continue;
+      if (this.player.vehicleId === c.rt.id) continue;
+      if (active.length > want || far) {
+        c.mesh.dispose();
+        this.cars = this.cars.filter((x) => x !== c);
+      }
+    }
+    const live = this.cars.filter((c) => c.rt.id.startsWith("cop-car-") && !c.rt.stolen && !c.rt.exploded).length;
+    for (let i = live; i < want; i++) this.spawnPoliceCar();
+  }
+
+  private spawnPoliceCar(): void {
+    for (let tries = 0; tries < 24; tries++) {
+      const ang = Math.random() * Math.PI * 2;
+      const d = PURSUIT_CONFIG.spawnDistance * (0.8 + Math.random() * 0.5);
+      const x = this.player.x + Math.cos(ang) * d;
+      const z = this.player.z + Math.sin(ang) * d;
+      if (x < 40 || z < 40 || x > MAP_W * TILE - 40 || z > MAP_H * TILE - 40) continue;
+      // Cruisers must arrive on tarmac, not inside somebody's kitchen.
+      if (cellAt(this.world, x, z) !== Cell.Road) continue;
+      const rt = createVehicleRuntime("ironback", x, z, Math.atan2(this.player.z - z, this.player.x - x), "#22303e");
+      rt.id = `cop-car-${this.copCarSeq++}`;
+      rt.registered = true;
+      this.cars.push({ rt, mesh: this.makeCarMesh(rt.id, "#22303e", true), smoke: 0, bump: 0 });
+      return;
+    }
   }
 
   private currentDefId(): string {
@@ -1855,8 +1952,10 @@ export class ViceblockRuntime3D {
       this.player.heading = Math.PI / 2;
       this.player.camYaw = 0;
     }
+    this.failure = "busted";
+    this.failureT = 3.2;
     this.flash(msg);
-    this.audio.wanted();
+    this.audio.uiClick();
     this.onPersist?.(this.snapshot());
   }
 
@@ -2436,13 +2535,24 @@ export class ViceblockRuntime3D {
 
   private die(): void {
     this.player.health = 100;
+    this.player.armor = 0;
     this.player.x = this.world.spawnX;
     this.player.z = this.world.spawnY;
     this.player.vehicleId = null;
     this.player.cash = Math.max(0, this.player.cash - PLAYER_CONFIG.respawnMedicalFee);
     this.player.crate = false;
+    // Contraband does not survive a trip through the county morgue either.
+    const lost = this.loot.reduce((s, l) => s + l.value, 0);
+    this.loot = [];
     this.heat = createHeatState();
-    this.flash(`COUNTY  ·  $${PLAYER_CONFIG.respawnMedicalFee} medical  ·  street cash lighter`);
+    this.failure = "wasted";
+    this.failureT = 3.2;
+    this.impact("explosion");
+    this.flash(
+      lost > 0
+        ? `COUNTY  ·  $${PLAYER_CONFIG.respawnMedicalFee} medical  ·  $${lost} of hot goods gone`
+        : `COUNTY  ·  $${PLAYER_CONFIG.respawnMedicalFee} medical  ·  street cash lighter`,
+    );
     this.onPersist?.(this.snapshot());
   }
 
@@ -2825,6 +2935,7 @@ export class ViceblockRuntime3D {
       comboCash: this.thrill.pending,
       speed: drive ? speedoKmh(Math.hypot(drive.rt.vx, drive.rt.vy)) : 0,
       drifting: this.driftTime > 0,
+      failure: this.failure,
     };
   }
 

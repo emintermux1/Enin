@@ -48,6 +48,7 @@ const EMPTY: HudSnapshot = {
   comboCash: 0,
   speed: 0,
   drifting: false,
+  failure: null,
 };
 
 function xpPct(xp: number, level: number): number {
@@ -368,6 +369,12 @@ export function GameShell() {
             </div>
           ) : null}
           {hud.speed > 130 ? <div className="rush" /> : null}
+          {hud.failure ? (
+            <div className={`failure ${hud.failure}`}>
+              <h2>{hud.failure === "wasted" ? "WASTED" : "BUSTED"}</h2>
+              <p>{hud.failure === "wasted" ? "County morgue, then the street again." : "Southside Holding. Contraband logged."}</p>
+            </div>
+          ) : null}
           {hud.prompt ? <div className="prompt">{hud.prompt}</div> : null}
           {hud.toast ? <div className="toast">{hud.toast}</div> : null}
           {hud.news ? <div className="news">NOVA NEWS · {hud.news}</div> : null}
@@ -1141,6 +1148,53 @@ export function GameShell() {
           to {
             transform: scale(1);
             opacity: 1;
+          }
+        }
+        .failure {
+          position: absolute;
+          inset: 0;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 10px;
+          text-align: center;
+          pointer-events: none;
+          z-index: 7;
+          animation: failureIn 420ms ease-out;
+        }
+        .failure::before {
+          content: "";
+          position: absolute;
+          inset: 0;
+          background: radial-gradient(ellipse at center, rgba(24, 6, 4, 0.55) 0%, rgba(10, 4, 3, 0.9) 100%);
+        }
+        .failure h2 {
+          position: relative;
+          margin: 0;
+          font-size: clamp(48px, 9vw, 108px);
+          letter-spacing: 0.16em;
+          color: #e8412c;
+          text-shadow: 0 4px 0 rgba(10, 4, 3, 0.9);
+        }
+        .failure.busted h2 {
+          color: #4a90d8;
+        }
+        .failure p {
+          position: relative;
+          margin: 0;
+          font-size: 13px;
+          letter-spacing: 0.2em;
+          color: #d8c8b0;
+        }
+        @keyframes failureIn {
+          from {
+            opacity: 0;
+            transform: scale(1.12);
+          }
+          to {
+            opacity: 1;
+            transform: scale(1);
           }
         }
         /* Speed rush: the frame closes in once the car is genuinely quick. */
