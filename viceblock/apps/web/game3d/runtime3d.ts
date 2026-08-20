@@ -32,6 +32,7 @@ import {
   impactShake,
   isDrifting,
   lootLabel,
+  maxSpeedFor,
   MISSIONS,
   missionRating,
   nearMissValue,
@@ -47,6 +48,8 @@ import {
   shootTire,
   speedCameraDistance,
   speedFov,
+  speedoKmh,
+  stepCar,
   surfaceGrip,
   tickDirector,
   tickHeat,
@@ -1348,7 +1351,10 @@ export class ViceblockRuntime3D {
   private updateCamera(dt: number): void {
     const car = this.cars.find((c) => c.rt.id === this.player.vehicleId);
     const speed = car ? Math.hypot(car.rt.vx, car.rt.vy) : 0;
-    const topSpeed = car ? Math.max(1, vehicleById(car.rt.defId).topSpeed) : 1;
+    const def = car ? vehicleById(car.rt.defId) : null;
+    const topSpeed = def
+      ? Math.max(1, maxSpeedFor({ acceleration: def.acceleration, topSpeed: def.topSpeed, handling: def.handling, braking: def.braking, grip: 1, power: 1 }))
+      : 1;
     let dist = car ? speedCameraDistance(165, speed, topSpeed) : 175;
     // The lens opens as you wind the car out, so speed reads on screen.
     const wantFov = car ? speedFov(this.baseFov, speed, topSpeed) : this.baseFov;
@@ -1397,23 +1403,27 @@ export class ViceblockRuntime3D {
       const driving = this.player.vehicleId === v.id;
       if (driving) {
         const axis = this.input.axis();
-        const throttle = -axis.y;
-        const steer = axis.x;
-        const spd = Math.hypot(v.vx, v.vy);
         const hand = this.input.keys.has("Space");
         // Component damage + ground surface both shape the handling model.
         const perf = performanceMultipliers(v);
         const cell = cellAt(this.world, v.x, v.y);
         const ground = cell === Cell.Grass ? surfaceGrip("grass") : cell === Cell.Sand ? surfaceGrip("sand") : cell === Cell.Dirt ? surfaceGrip("gravel") : this.weather === "rain" ? surfaceGrip("wet-asphalt") : surfaceGrip("asphalt");
-        const grip = ground * perf.grip;
-        v.heading += steer * def.handling * grip * (hand ? 2.1 : 1.25) * dt * (0.35 + Math.min(1, spd / 80));
-        const acc = throttle * def.acceleration * perf.accel * dt;
-        v.vx += Math.cos(v.heading) * acc;
-        v.vy += Math.sin(v.heading) * acc;
-        const brake = hand ? def.braking * grip : 28;
-        v.vx -= v.vx * Math.min(1, brake * 0.004 * dt * 60);
-        v.vy -= v.vy * Math.min(1, brake * 0.004 * dt * 60);
-        const max = def.topSpeed * 0.55 * wet * perf.top * (0.6 + grip * 0.4);
+        const drive = stepCar(
+          { heading: v.heading, vx: v.vx, vy: v.vy },
+          { throttle: -axis.y, steer: axis.x, handbrake: hand },
+          {
+            acceleration: def.acceleration,
+            topSpeed: def.topSpeed * wet,
+            handling: def.handling,
+            braking: def.braking,
+            grip: ground * perf.grip,
+            power: perf.accel,
+          },
+          dt,
+        );
+        v.heading = drive.heading;
+        v.vx = drive.vx;
+        v.vy = drive.vy;
         // A lockpicked GPS car keeps snitching until it's repainted at the garage.
         if (def.security === "gps" && v.stolen && !v.registered) {
           this.gpsT += dt;
@@ -1424,10 +1434,6 @@ export class ViceblockRuntime3D {
           }
         }
         const s = Math.hypot(v.vx, v.vy);
-        if (s > max) {
-          v.vx *= max / s;
-          v.vy *= max / s;
-        }
         const nx = v.x + v.vx * dt;
         const nz = v.y + v.vy * dt;
         if (blocked(this.world, nx, nz, 12)) {
@@ -2530,9 +2536,16 @@ export class ViceblockRuntime3D {
     this.debugSpawnToggle = !this.debugSpawnToggle;
     const defId = this.debugSpawnToggle ? "sparrow" : "mirage";
     const color = this.debugSpawnToggle ? "#a05a2c" : "#2f6f78";
-    const rt = createVehicleRuntime(defId, this.player.x + 40, this.player.z, 0, color);
+    // On the player's own tile: anywhere else risks dropping the car inside a
+    // wall, where it is pinned and cannot pull away.
+    const rt = createVehicleRuntime(defId, this.player.x, this.player.z, this.player.heading, color);
     rt.id = `debug-${Math.random().toString(36).slice(2, 6)}`;
+    rt.stolen = true;
     this.cars.push({ rt, mesh: this.makeCarMesh(rt.id, color, false), smoke: 0, bump: 0 });
+    // This menu exists to get a stranded player moving, so hand them the keys.
+    this.unlocked.add(rt.id);
+    this.player.vehicleId = rt.id;
+    this.flash(`UNSTUCK  ·  ${vehicleById(defId).name} is yours, go`);
   }
 
   debugSetHeat(level: number): void {
@@ -2629,7 +2642,7 @@ export class ViceblockRuntime3D {
       combo: this.thrill.combo,
       comboMultiplier: comboMultiplier(this.thrill.combo),
       comboCash: this.thrill.pending,
-      speed: drive ? Math.round(Math.hypot(drive.rt.vx, drive.rt.vy) * 0.62) : 0,
+      speed: drive ? speedoKmh(Math.hypot(drive.rt.vx, drive.rt.vy)) : 0,
       drifting: this.driftTime > 0,
     };
   }
