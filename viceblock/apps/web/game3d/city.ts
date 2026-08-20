@@ -8,6 +8,7 @@ import type { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import type { Scene } from "@babylonjs/core/scene";
 import { MAP_H, MAP_W, TILE } from "@viceblock/shared";
 import { Cell, type Landmark, type WorldData } from "../game/world";
+import type { TextureKit } from "./textures";
 
 /** World units: 1 unit = 1 game pixel of the 2D grid (TILE = 32). */
 export const GROUND_Y = 0;
@@ -268,7 +269,7 @@ function signTexture(scene: Scene, name: string, title: string, ink: string, pap
   return tex;
 }
 
-export function buildCity(scene: Scene, world: WorldData): CityMeshes {
+export function buildCity(scene: Scene, world: WorldData, kit: TextureKit): CityMeshes {
   const disposables: Mesh[] = [];
   const textures: DynamicTexture[] = [];
   const landmarkTops = new Map<string, number>();
@@ -300,11 +301,11 @@ export function buildCity(scene: Scene, world: WorldData): CityMeshes {
     [Cell.Road]: roadMat,
     [Cell.Walk]: walkMat,
     [Cell.Grass]: grassMat,
-    [Cell.Water]: mat(scene, "m-water", "#1e5a68", 0.28),
-    [Cell.Sand]: mat(scene, "m-sand", "#d4b078"),
-    [Cell.Alley]: mat(scene, "m-alley", "#241c16"),
-    [Cell.Court]: mat(scene, "m-court", "#9a6230"),
-    [Cell.Dock]: mat(scene, "m-dock", "#5a4c3c"),
+    [Cell.Water]: kit.material("glass", "#1e5a68", 0.28),
+    [Cell.Sand]: kit.material("concrete", "#d4b078"),
+    [Cell.Alley]: kit.material("concrete", "#241c16"),
+    [Cell.Court]: kit.material("concrete", "#9a6230"),
+    [Cell.Dock]: kit.material("wood", "#5a4c3c"),
   };
 
   for (let y = 0; y < MAP_H; y++) {
@@ -370,7 +371,7 @@ export function buildCity(scene: Scene, world: WorldData): CityMeshes {
     }
   }
 
-  const acMat = mat(scene, "m-ac", "#5a5854");
+  const acMat = kit.material("metal", "#5a5854");
   const shopTexA = shopTexture(scene, "#3a6078");
   const shopTexB = shopTexture(scene, "#784838");
   const shopTexC = shopTexture(scene, "#2a5a48");
@@ -379,8 +380,8 @@ export function buildCity(scene: Scene, world: WorldData): CityMeshes {
   const shopGlassB = shopMat(scene, "m-shop-b", shopTexB, new Color3(0.32, 0.18, 0.14));
   const shopGlassC = shopMat(scene, "m-shop-c", shopTexC, new Color3(0.16, 0.3, 0.22));
   const shopMats = [shopGlassA, shopGlassB, shopGlassC];
-  const awningCols = [mat(scene, "m-awn-a", "#c45a32", 0.12), mat(scene, "m-awn-b", "#2a6a78", 0.12), mat(scene, "m-awn-c", "#d8a030", 0.12)];
-  const railMat = mat(scene, "m-rail", "#2a2622");
+  const awningCols = [kit.material("canvas", "#c45a32"), kit.material("canvas", "#2a6a78"), kit.material("canvas", "#d8a030")];
+  const railMat = kit.material("metal", "#2a2622");
   const neonMats = [
     mat(scene, "m-neon-a", "#e07040", 0.7),
     mat(scene, "m-neon-b", "#40c0d0", 0.7),
@@ -427,7 +428,7 @@ export function buildCity(scene: Scene, world: WorldData): CityMeshes {
     }
   }
 
-  const awningMat = mat(scene, "m-awn", "#c45a32", 0.12);
+  const awningMat = kit.material("canvas", "#c45a32");
   for (const lm of world.landmarks) {
     const height = landmarkHeight(lm);
     landmarkTops.set(lm.id, height);
@@ -454,7 +455,7 @@ export function buildCity(scene: Scene, world: WorldData): CityMeshes {
     // Recessed door on the south face — the street the player actually walks.
     const door = MeshBuilder.CreateBox(`ld-${lm.id}`, { width: 16, depth: 4, height: 20 }, scene);
     door.position = new Vector3(lm.doorX * TILE + TILE / 2, 10, lm.doorY * TILE + 3);
-    door.material = mat(scene, `md-${lm.id}`, "#120e0c", 0.05);
+    door.material = kit.material("wood", "#3a2820");
     door.freezeWorldMatrix();
     disposables.push(door);
 
@@ -494,7 +495,7 @@ export function buildCity(scene: Scene, world: WorldData): CityMeshes {
     );
   }
 
-  const lampMat = mat(scene, "m-lamp", "#2a2622");
+  const lampMat = kit.material("metal", "#2a2622");
   const lampHead = mat(scene, "m-lamphead", "#f0d890", 0.95);
   for (const yTile of [10, 22, 36, 50, 64]) {
     for (let x = 6; x < MAP_W; x += 12) {
@@ -512,8 +513,8 @@ export function buildCity(scene: Scene, world: WorldData): CityMeshes {
   }
 
   // Palms along the water and a few courtyards — cheap silhouette, big read.
-  const trunkMat = mat(scene, "m-trunk", "#5a3a28");
-  const frondMat = mat(scene, "m-frond", "#2f6a48", 0.08);
+  const trunkMat = kit.material("bark", "#5a3a28");
+  const frondMat = kit.material("foliage", "#2f6a48");
   const palmSpots: Array<[number, number]> = [];
   for (let x = 4; x < MAP_W; x += 7) palmSpots.push([x * TILE, 4.2 * TILE]);
   palmSpots.push(
@@ -548,7 +549,7 @@ export function buildCity(scene: Scene, world: WorldData): CityMeshes {
     }
   }
 
-  const curbMat = mat(scene, "m-curb", "#6a5a4c");
+  const curbMat = kit.material("concrete", "#6a5a4c");
   const zebraMat = mat(scene, "m-zebra", "#e8d8c0", 0.08);
   for (const yTile of [10, 22, 36, 50, 64]) {
     const north = MeshBuilder.CreateBox(`curb-n-${yTile}`, { width: MAP_W * TILE, depth: 1.8, height: 1.2 }, scene);
@@ -574,9 +575,9 @@ export function buildCity(scene: Scene, world: WorldData): CityMeshes {
     }
   }
 
-  const binMat = mat(scene, "m-bin", "#3a4a38");
-  const hydrantMat = mat(scene, "m-hyd", "#c45a32", 0.1);
-  const benchMat = mat(scene, "m-bench", "#4a3024");
+  const binMat = kit.material("metal", "#3a4a38");
+  const hydrantMat = kit.material("metal", "#c45a32");
+  const benchMat = kit.material("wood", "#4a3024");
   let prop = 0;
   for (const yTile of [14, 28, 42, 56]) {
     for (let x = 10; x < MAP_W - 4; x += 14) {
@@ -599,10 +600,10 @@ export function buildCity(scene: Scene, world: WorldData): CityMeshes {
     }
   }
 
-  dressSpawnStreet(scene, disposables, textures, lampMat, trunkMat, frondMat);
-  dressCityStreets(scene, world, disposables, lampMat, lampHead, binMat, hydrantMat, benchMat, curbMat);
+  dressSpawnStreet(scene, kit, disposables, textures, lampMat, trunkMat, frondMat);
+  dressCityStreets(scene, kit, world, disposables, lampMat, lampHead, binMat, hydrantMat, benchMat, curbMat);
 
-  const boardMat = mat(scene, "m-board", "#c45a32", 0.2);
+  const boardMat = kit.material("plastic", "#c45a32", 0.2);
   const boards: Array<[number, number, number]> = [
     [20 * TILE, 40, 18 * TILE],
     [60 * TILE, 48, 38 * TILE],
@@ -655,7 +656,7 @@ function parkedCar(
   z: number,
   rot: number,
   body: StandardMaterial,
-  tire: StandardMaterial,
+  glass: StandardMaterial,
 ): void {
   const root = MeshBuilder.CreateBox(`${id}-b`, { width: 22, depth: 10, height: 5.4 }, scene);
   root.position = new Vector3(x, 4.2, z);
@@ -668,13 +669,14 @@ function parkedCar(
   const oz = -Math.sin(rot) * -3;
   cabin.position = new Vector3(x + ox, 8.4, z + oz);
   cabin.rotation.y = rot;
-  cabin.material = tire;
+  cabin.material = glass;
   cabin.freezeWorldMatrix();
   disposables.push(cabin);
 }
 
 function dressCityStreets(
   scene: Scene,
+  kit: TextureKit,
   world: WorldData,
   disposables: Mesh[],
   lampMat: StandardMaterial,
@@ -685,13 +687,13 @@ function dressCityStreets(
   curbMat: StandardMaterial,
 ): void {
   const carCols = [
-    mat(scene, "m-park-a", "#c45a32"),
-    mat(scene, "m-park-b", "#2a4a68"),
-    mat(scene, "m-park-c", "#d8c4a0"),
-    mat(scene, "m-park-d", "#3a2a28"),
-    mat(scene, "m-park-e", "#6a8a48"),
+    kit.material("carPaint", "#c45a32"),
+    kit.material("carPaint", "#2a4a68"),
+    kit.material("carPaint", "#d8c4a0"),
+    kit.material("carPaint", "#3a2a28"),
+    kit.material("carPaint", "#6a8a48"),
   ];
-  const tire = mat(scene, "m-park-tire", "#1a1614");
+  const cabinGlass = kit.material("glass", "#1c2630");
   const lightRed = mat(scene, "m-tl-r", "#c43020", 0.85);
   const lightGo = mat(scene, "m-tl-g", "#2a8a50", 0.35);
   let n = 0;
@@ -750,14 +752,14 @@ function dressCityStreets(
   for (const yTile of arterials) {
     for (let x = 4; x < MAP_W - 4; x += 7) {
       if (x % 14 < 3) continue;
-      parkedCar(scene, disposables, `pk-${c}`, x * TILE, (yTile + 0.32) * TILE, 0, carCols[c % carCols.length] ?? tire, tire);
+      parkedCar(scene, disposables, `pk-${c}`, x * TILE, (yTile + 0.32) * TILE, 0, carCols[c % carCols.length] ?? cabinGlass, cabinGlass);
       c++;
     }
   }
   for (const xTile of [8, 22, 36, 50, 64, 80]) {
     for (let y = 6; y < MAP_H - 4; y += 8) {
       if (arterials.some((r) => Math.abs(y - r) < 3)) continue;
-      parkedCar(scene, disposables, `pkv-${c}`, (xTile + 0.32) * TILE, y * TILE, Math.PI / 2, carCols[c % carCols.length] ?? tire, tire);
+      parkedCar(scene, disposables, `pkv-${c}`, (xTile + 0.32) * TILE, y * TILE, Math.PI / 2, carCols[c % carCols.length] ?? cabinGlass, cabinGlass);
       c++;
     }
   }
@@ -789,6 +791,7 @@ function dressCityStreets(
 /** First 10 seconds of play happen here — pack the sidewalk so it isn't a tan void. */
 function dressSpawnStreet(
   scene: Scene,
+  kit: TextureKit,
   disposables: Mesh[],
   textures: DynamicTexture[],
   lampMat: StandardMaterial,
@@ -797,11 +800,11 @@ function dressSpawnStreet(
 ): void {
   const sx = 16 * TILE + 16;
   const sz = 63 * TILE + 8;
-  const rust = mat(scene, "m-spawn-rust", "#6a3a28");
-  const dump = mat(scene, "m-spawn-dump", "#3a4a32");
-  const crate = mat(scene, "m-spawn-crate", "#8a6238");
-  const cone = mat(scene, "m-spawn-cone", "#d45a20", 0.12);
-  const steel = mat(scene, "m-spawn-steel", "#4a4844");
+  const rust = kit.material("metal", "#6a3a28");
+  const dump = kit.material("metal", "#3a4a32");
+  const crate = kit.material("wood", "#8a6238");
+  const cone = kit.material("plastic", "#d45a20");
+  const steel = kit.material("metal", "#4a4844");
   const neon = mat(scene, "m-spawn-neon", "#e07040", 0.55);
   const muralTex = muralTexture(scene);
   textures.push(muralTex);

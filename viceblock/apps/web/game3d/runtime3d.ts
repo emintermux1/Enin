@@ -70,6 +70,7 @@ import { GameInput } from "../game/input";
 import type { HudSnapshot } from "../game/hud";
 import { blocked, buildSouthside, Cell, cellAt, hideSpotNear, landmarkAt, type Landmark, type WorldData } from "../game/world";
 import { buildCity, type CityMeshes } from "./city";
+import { TextureKit, type Surface } from "./textures";
 
 type Quality = "low" | "medium" | "high" | "auto";
 
@@ -125,6 +126,7 @@ export class ViceblockRuntime3D {
   scene: Scene;
   world: WorldData;
   city: CityMeshes;
+  tex: TextureKit;
   input: GameInput;
   audio: GameAudio;
   camera: FreeCamera;
@@ -234,7 +236,8 @@ export class ViceblockRuntime3D {
     this.scene = new Scene(this.engine);
     this.scene.clearColor = new Color4(0.42, 0.55, 0.62, 1);
     this.world = buildSouthside();
-    this.city = buildCity(this.scene, this.world);
+    this.tex = new TextureKit(this.scene);
+    this.city = buildCity(this.scene, this.world, this.tex);
 
     this.hemi = new HemisphericLight("hemi", new Vector3(0.2, 1, 0.1), this.scene);
     this.hemi.intensity = 0.95;
@@ -323,6 +326,7 @@ export class ViceblockRuntime3D {
     this.unbind?.();
     this.audio.setSiren(false);
     this.engine.stopRenderLoop();
+    this.tex.dispose();
     this.scene.dispose();
     this.engine.dispose();
   }
@@ -461,6 +465,10 @@ export class ViceblockRuntime3D {
     plate.isPickable = false;
   }
 
+  private surface(kind: Surface, hex: string, emissive = 0): StandardMaterial {
+    return this.tex.material(kind, hex, emissive);
+  }
+
   private material(hex: string, emissive = 0): StandardMaterial {
     const key = `${hex}-${emissive}`;
     let m = this.matCache.get(key);
@@ -521,15 +529,15 @@ export class ViceblockRuntime3D {
     const root = MeshBuilder.CreateBox(`${name}-root`, { width: 0.4, depth: 0.4, height: 0.4 }, this.scene);
     root.isVisible = false;
     const torso = MeshBuilder.CreateBox(`${name}-t`, { width: 7.2, depth: 4.6, height: 9.2 }, this.scene);
-    torso.material = this.material(shirtHex);
+    torso.material = this.surface("cloth", shirtHex);
     torso.position.y = 13.2;
     torso.parent = root;
     const neck = MeshBuilder.CreateCylinder(`${name}-nk`, { height: 1.8, diameter: 2.2, tessellation: 8 }, this.scene);
-    neck.material = this.material(skinHex);
+    neck.material = this.surface("skin", skinHex);
     neck.position.y = 18.4;
     neck.parent = root;
     const head = MeshBuilder.CreateBox(`${name}-h`, { width: 5.2, depth: 5.2, height: 5.4 }, this.scene);
-    head.material = this.material(skinHex);
+    head.material = this.surface("skin", skinHex);
     head.position.y = 21.4;
     head.parent = root;
     const face = MeshBuilder.CreatePlane(`${name}-face`, { width: 5.1, height: 5.3 }, this.scene);
@@ -538,7 +546,7 @@ export class ViceblockRuntime3D {
     face.rotation.y = Math.PI / 2;
     face.parent = root;
     const brow = MeshBuilder.CreateBox(`${name}-brow`, { width: 1.1, depth: 3.8, height: 0.55 }, this.scene);
-    brow.material = this.material("#1a1410");
+    brow.material = this.surface("hair", "#1a1410");
     brow.position.set(2.5, 22.7, 0);
     brow.parent = root;
     const eyeWhiteL = MeshBuilder.CreateSphere(`${name}-ewl`, { diameter: 1.35, segments: 8 }, this.scene);
@@ -558,7 +566,7 @@ export class ViceblockRuntime3D {
     pupilR.position.set(3.15, 21.6, -1.2);
     pupilR.parent = root;
     const nose = MeshBuilder.CreateBox(`${name}-nose`, { width: 1.1, depth: 1.15, height: 1.35 }, this.scene);
-    nose.material = this.material(skinHex);
+    nose.material = this.surface("skin", skinHex);
     nose.position.set(2.85, 20.85, 0);
     nose.parent = root;
     const mouth = MeshBuilder.CreateBox(`${name}-mouth`, { width: 0.55, depth: 2.1, height: 0.45 }, this.scene);
@@ -566,51 +574,51 @@ export class ViceblockRuntime3D {
     mouth.position.set(2.7, 19.85, 0);
     mouth.parent = root;
     const hair = MeshBuilder.CreateBox(`${name}-hair`, { width: 5.5, depth: 5.5, height: 2 }, this.scene);
-    hair.material = this.material("#1a1410");
+    hair.material = this.surface("hair", "#1a1410");
     hair.position.y = 24.4;
     hair.parent = root;
     const hairBack = MeshBuilder.CreateBox(`${name}-hb`, { width: 1.2, depth: 5.3, height: 3.4 }, this.scene);
-    hairBack.material = this.material("#1a1410");
+    hairBack.material = this.surface("hair", "#1a1410");
     hairBack.position.set(-2.2, 22.6, 0);
     hairBack.parent = root;
     const earL = MeshBuilder.CreateBox(`${name}-el`, { width: 1.1, depth: 1.4, height: 2 }, this.scene);
-    earL.material = this.material(skinHex);
+    earL.material = this.surface("skin", skinHex);
     earL.position.set(0, 21.4, 2.9);
     earL.parent = root;
     const earR = MeshBuilder.CreateBox(`${name}-er`, { width: 1.1, depth: 1.4, height: 2 }, this.scene);
-    earR.material = this.material(skinHex);
+    earR.material = this.surface("skin", skinHex);
     earR.position.set(0, 21.4, -2.9);
     earR.parent = root;
     const armL = MeshBuilder.CreateBox(`${name}-al`, { width: 2.1, depth: 2.2, height: 8.6 }, this.scene);
-    armL.material = this.material(shirtHex);
+    armL.material = this.surface("cloth", shirtHex);
     armL.position.set(0, 13.4, 3.8);
     armL.parent = root;
     const armR = MeshBuilder.CreateBox(`${name}-ar`, { width: 2.1, depth: 2.2, height: 8.6 }, this.scene);
-    armR.material = this.material(shirtHex);
+    armR.material = this.surface("cloth", shirtHex);
     armR.position.set(0, 13.4, -3.8);
     armR.parent = root;
     const handL = MeshBuilder.CreateBox(`${name}-hl`, { width: 1.8, depth: 1.8, height: 1.8 }, this.scene);
-    handL.material = this.material(skinHex);
+    handL.material = this.surface("skin", skinHex);
     handL.position.set(0, 8.6, 3.8);
     handL.parent = root;
     const handR = MeshBuilder.CreateBox(`${name}-hr`, { width: 1.8, depth: 1.8, height: 1.8 }, this.scene);
-    handR.material = this.material(skinHex);
+    handR.material = this.surface("skin", skinHex);
     handR.position.set(0, 8.6, -3.8);
     handR.parent = root;
     const legL = MeshBuilder.CreateBox(`${name}-ll`, { width: 2.8, depth: 2.6, height: 8 }, this.scene);
-    legL.material = this.material(pantsHex);
+    legL.material = this.surface("denim", pantsHex);
     legL.position.set(0, 4.1, 1.7);
     legL.parent = root;
     const legR = MeshBuilder.CreateBox(`${name}-lr`, { width: 2.8, depth: 2.6, height: 8 }, this.scene);
-    legR.material = this.material(pantsHex);
+    legR.material = this.surface("denim", pantsHex);
     legR.position.set(0, 4.1, -1.7);
     legR.parent = root;
     const shoeL = MeshBuilder.CreateBox(`${name}-sl`, { width: 3.6, depth: 2.7, height: 1.4 }, this.scene);
-    shoeL.material = this.material("#1a1410");
+    shoeL.material = this.surface("leather", "#1a1410");
     shoeL.position.set(0.6, 0.7, 1.7);
     shoeL.parent = root;
     const shoeR = MeshBuilder.CreateBox(`${name}-sr`, { width: 3.6, depth: 2.7, height: 1.4 }, this.scene);
-    shoeR.material = this.material("#1a1410");
+    shoeR.material = this.surface("leather", "#1a1410");
     shoeR.position.set(0.6, 0.7, -1.7);
     shoeR.parent = root;
     const shadow = MeshBuilder.CreateCylinder(`${name}-sh`, { diameter: 11, height: 0.35, tessellation: 10 }, this.scene);
@@ -635,11 +643,11 @@ export class ViceblockRuntime3D {
     const root = MeshBuilder.CreateBox(`${name}-root`, { width: 0.4, depth: 0.4, height: 0.4 }, this.scene);
     root.isVisible = false;
     const body = MeshBuilder.CreateBox(`${name}-b`, { width: 30, depth: 15, height: 7 }, this.scene);
-    body.material = this.material(hex);
+    body.material = this.surface("carPaint", hex);
     body.position.y = 6.2;
     body.parent = root;
     const cabin = MeshBuilder.CreateBox(`${name}-c`, { width: 13, depth: 13, height: 6 }, this.scene);
-    cabin.material = this.material(isPolice ? "#d8e4f0" : "#14181c");
+    cabin.material = this.surface("glass", isPolice ? "#4a6a88" : "#1c2630");
     cabin.position = new Vector3(-3, 12.2, 0);
     cabin.parent = root;
     if (isPolice) {
@@ -656,7 +664,7 @@ export class ViceblockRuntime3D {
     lightR.material = this.material("#c43020", 0.75);
     lightR.position = new Vector3(-15, 5.4, 0);
     lightR.parent = root;
-    const wheelMat = this.material("#1a1614");
+    const wheelMat = this.surface("rubber", "#1a1614");
     const wheels: Mesh[] = [];
     for (const [wx, wz] of [
       [10, 7.2],
@@ -785,9 +793,9 @@ export class ViceblockRuntime3D {
     const half = 96;
     this.martRoom = { cx, cz, half };
     const floor = MeshBuilder.CreateBox("mart-floor", { width: half * 2, depth: half * 2, height: 2 }, this.scene);
-    floor.material = this.material("#c8bca4");
+    floor.material = this.surface("concrete", "#c8bca4");
     floor.position = new Vector3(cx, INTERIOR_Y - 1, cz);
-    const wallMat = this.material("#7a4a38");
+    const wallMat = this.surface("plaster", "#7a4a38");
     const walls: Array<[number, number, number, number]> = [
       [cx, cz - half, half * 2, 6],
       [cx, cz + half, half * 2, 6],
@@ -800,17 +808,17 @@ export class ViceblockRuntime3D {
       wall.position = new Vector3(x, INTERIOR_Y + 20, z);
     });
     const counter = MeshBuilder.CreateBox("mart-counter", { width: 90, depth: 18, height: 14 }, this.scene);
-    counter.material = this.material("#4a5a68");
+    counter.material = this.surface("metal", "#4a5a68");
     counter.position = new Vector3(cx, INTERIOR_Y + 7, cz - half + 34);
     for (let i = 0; i < 3; i++) {
       const shelf = MeshBuilder.CreateBox(`mart-shelf-${i}`, { width: 16, depth: 90, height: 22 }, this.scene);
-      shelf.material = this.material(i % 2 ? "#8a6a4a" : "#6a8a5a");
+      shelf.material = this.surface("wood", i % 2 ? "#8a6a4a" : "#6a8a5a");
       shelf.position = new Vector3(cx - 50 + i * 50, INTERIOR_Y + 11, cz + 24);
     }
     const clerk = this.makeHumanoid("mart-clerk", "#3a6a4a", "#e6c39a");
     clerk.position = new Vector3(cx, INTERIOR_Y, cz - half + 16);
     const till = MeshBuilder.CreateBox("mart-till", { width: 14, depth: 10, height: 8 }, this.scene);
-    till.material = this.material("#2a2c30", 0.2);
+    till.material = this.surface("metal", "#2a2c30", 0.2);
     till.position = new Vector3(cx + 34, INTERIOR_Y + 18, cz - half + 34);
     this.martSpots().forEach((spot, i) => {
       const disc = MeshBuilder.CreateCylinder(`mart-spot-${i}`, { diameter: 34, height: 1.6, tessellation: 14 }, this.scene);
@@ -2092,7 +2100,7 @@ export class ViceblockRuntime3D {
     for (let i = 0; i < 22; i++) {
       this.spawnPuff(car.rt.x, 8 + Math.random() * 14, car.rt.y, i % 2 ? "#f0b040" : "#d84020");
     }
-    const wreck = this.material("#2a1c14");
+    const wreck = this.surface("metal", "#2a1c14");
     car.mesh.material = wreck;
     for (const child of car.mesh.getChildMeshes()) child.material = wreck;
     if (this.player.vehicleId === car.rt.id) {
