@@ -1,5 +1,5 @@
 import { WebSocketServer, type WebSocket } from "ws";
-import { sanitizeText, type PresencePlayer } from "@viceblock/shared";
+import { GAME_NAME, sanitizeText, type PresencePlayer } from "@viceblock/shared";
 
 const port = Number(process.env.GAME_SERVER_PORT ?? 4050);
 const wss = new WebSocketServer({ port });
@@ -51,4 +51,4 @@ setInterval(() => {
   }
 }, Number(process.env.GAME_SERVER_TICK_MS ?? 80));
 
-console.log(`VICEBLOCK presence server :${port}`);
+console.log(`${GAME_NAME} presence server :${port}`);

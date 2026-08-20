@@ -1,6 +1,6 @@
 export { sanitizeText, looksLikeMarkup } from "./sanitize";
 
-export const GAME_NAME = "VICEBLOCK";
+export const GAME_NAME = "GTA6 Yarrak 6";
 export const CITY_NAME = "Nova City";
 export const DISTRICT_NAME = "Southside";
 export const STARTER_CASH = 500;

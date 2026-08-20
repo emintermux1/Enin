@@ -2,7 +2,7 @@
   "name": "viceblock",
   "version": "0.1.0",
   "private": true,
-  "description": "VICEBLOCK — Nova City Southside playable vertical slice",
+  "description": "GTA6 Yarrak 6 — Nova City Southside playable vertical slice",
   "scripts": {
     "dev": "pnpm --parallel --filter @viceblock/web --filter @viceblock/game-server dev",
     "dev:web": "pnpm --filter @viceblock/web dev",

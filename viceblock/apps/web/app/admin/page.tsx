@@ -1,3 +1,4 @@
+import { GAME_NAME } from "@viceblock/shared";
 import { adminSnapshot } from "../../lib/store";
 
 export default function AdminPage({
@@ -21,7 +22,7 @@ async function AdminGate({ searchParams }: { searchParams: Promise<{ k?: string 
   const snap = adminSnapshot();
   return (
     <main style={{ padding: 40, fontFamily: "monospace", color: "#f3e6d2", background: "#1a1410", minHeight: "100vh" }}>
-      <h1>VICEBLOCK OPS</h1>
+      <h1>{GAME_NAME} OPS</h1>
       <p>Players {snap.players}</p>
       <p>Sessions {snap.sessions}</p>
       <p>Cash in world ${snap.cash}</p>

@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { DEFAULT_SETTINGS, STARTER_CASH, type PlayerSave, type PresencePlayer, type WalletNonce } from "@viceblock/shared";
+import { DEFAULT_SETTINGS, GAME_NAME, STARTER_CASH, type PlayerSave, type PresencePlayer, type WalletNonce } from "@viceblock/shared";
 
 export interface AuditEntry {
   ts: number;
@@ -135,7 +135,7 @@ export function putSave(token: string, patch: Partial<PlayerSave>): PlayerSave |
 
 export function issueNonce(address: string): WalletNonce {
   const db = load();
-  const nonce = `VICEBLOCK login ${randomBytes(16).toString("hex")}`;
+  const nonce = `${GAME_NAME} login ${randomBytes(16).toString("hex")}`;
   const rec: WalletNonce = { address, nonce, expiresAt: Date.now() + 120_000, used: false };
   db.nonces[address] = rec;
   persist();

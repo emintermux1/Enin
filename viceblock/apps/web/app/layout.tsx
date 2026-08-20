@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Figtree, Teko } from "next/font/google";
+import { CITY_NAME, DISTRICT_NAME, GAME_NAME } from "@viceblock/shared";
 import "./globals.css";
 
 const display = Teko({
@@ -15,7 +16,7 @@ const body = Figtree({
 });
 
 export const metadata: Metadata = {
-  title: "VICEBLOCK — Nova City Southside",
+  title: `${GAME_NAME} — ${CITY_NAME} ${DISTRICT_NAME}`,
   description: "Playable pixel crime slice. Guest in. Drive. Rob. Lose the cops. Wallet optional.",
 };
 

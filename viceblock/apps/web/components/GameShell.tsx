@@ -1,6 +1,6 @@
 "use client";
 
-import { sanitizeText } from "@viceblock/shared";
+import { GAME_NAME, sanitizeText } from "@viceblock/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { HudSnapshot } from "../game/hud";
 import { ViceblockRuntime3D } from "../game3d/runtime3d";
@@ -268,7 +268,7 @@ export function GameShell() {
       {!started && (
         <div className="gate">
           <p className="kicker">SEASON 1 — SOUTHSIDE</p>
-          <h1>VICEBLOCK</h1>
+          <h1>{GAME_NAME}</h1>
           <p className="lede">
             Follow the gold pillar to Rico. Steal the unlocked Sparrow on the curb. Coral Mart is the red awning.
             Cops are slow. Wallet later.

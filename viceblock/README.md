@@ -1,4 +1,4 @@
-# VICEBLOCK
+# GTA6 Yarrak 6
 
 Playable 3D Southside slice of a browser crime sandbox (Babylon.js). Guest first. Wallet optional. Music is generated in the browser — it is not a missing file.
 
