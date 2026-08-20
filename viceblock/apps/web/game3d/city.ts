@@ -25,16 +25,35 @@ function mat(scene: Scene, name: string, hex: string, emissive = 0): StandardMat
   return m;
 }
 
+function canvas2d(ctx: ReturnType<DynamicTexture["getContext"]>): CanvasRenderingContext2D {
+  return ctx as unknown as CanvasRenderingContext2D;
+}
+
 function windowTexture(scene: Scene, name: string, wall: string, lit: string): DynamicTexture {
   const tex = new DynamicTexture(name, { width: 256, height: 512 }, scene, false);
-  const ctx = tex.getContext();
+  const ctx = canvas2d(tex.getContext());
   ctx.fillStyle = wall;
   ctx.fillRect(0, 0, 256, 512);
-  // Recessed bands so the wall doesn't read as a flat cube.
-  ctx.fillStyle = "rgba(0,0,0,0.18)";
-  for (let y = 0; y < 512; y += 64) ctx.fillRect(0, y + 52, 256, 6);
+  // Brick courses so the wall is not a flat vice-box.
+  for (let y = 0; y < 512; y += 8) {
+    ctx.fillStyle = y % 16 === 0 ? "rgba(0,0,0,0.16)" : "rgba(255,220,180,0.05)";
+    ctx.fillRect(0, y, 256, 1);
+  }
+  // Ground-floor shop band — every face reads as a street.
+  ctx.fillStyle = "#1a1410";
+  ctx.fillRect(0, 400, 256, 112);
+  ctx.fillStyle = lit;
+  ctx.fillRect(12, 416, 70, 80);
+  ctx.fillRect(94, 416, 70, 80);
+  ctx.fillRect(176, 416, 68, 80);
+  ctx.fillStyle = "rgba(255,230,180,0.22)";
+  ctx.fillRect(12, 416, 70, 22);
+  ctx.fillRect(94, 416, 70, 22);
+  ctx.fillRect(176, 416, 68, 22);
+  ctx.fillStyle = "#c45a32";
+  ctx.fillRect(0, 396, 256, 8);
   const cols = 4;
-  const rows = 8;
+  const rows = 6;
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       const on = ((c * 7 + r * 13) % 5) !== 1;
@@ -48,13 +67,9 @@ function windowTexture(scene: Scene, name: string, wall: string, lit: string): D
   }
   tex.hasAlpha = false;
   tex.update();
-  tex.wrapU = 0;
-  tex.wrapV = 0;
+  tex.wrapU = 1;
+  tex.wrapV = 1;
   return tex;
-}
-
-function canvas2d(ctx: ReturnType<DynamicTexture["getContext"]>): CanvasRenderingContext2D {
-  return ctx as unknown as CanvasRenderingContext2D;
 }
 
 function asphaltTexture(scene: Scene): DynamicTexture {
@@ -154,6 +169,65 @@ function skyTexture(scene: Scene): DynamicTexture {
   ctx.fill();
   tex.update();
   return tex;
+}
+
+function shopMat(scene: Scene, name: string, tex: DynamicTexture, glow: Color3): StandardMaterial {
+  const m = mat(scene, name, "#2a4050", 0.18);
+  m.diffuseTexture = tex;
+  m.emissiveTexture = tex;
+  m.emissiveColor = glow;
+  return m;
+}
+
+function dressBuildingKit(
+  scene: Scene,
+  disposables: Mesh[],
+  id: string,
+  cx: number,
+  cz: number,
+  bw: number,
+  bd: number,
+  height: number,
+  shop: StandardMaterial,
+  awning: StandardMaterial,
+  rail: StandardMaterial,
+  neon: StandardMaterial,
+): void {
+  const faces: Array<{ x: number; z: number; rot: number; w: number }> = [
+    { x: cx, z: cz + bd / 2 + 1.3, rot: 0, w: Math.max(12, bw - 8) },
+    { x: cx, z: cz - bd / 2 - 1.3, rot: Math.PI, w: Math.max(12, bw - 8) },
+    { x: cx + bw / 2 + 1.3, z: cz, rot: Math.PI / 2, w: Math.max(12, bd - 8) },
+    { x: cx - bw / 2 - 1.3, z: cz, rot: -Math.PI / 2, w: Math.max(12, bd - 8) },
+  ];
+  faces.forEach((f, i) => {
+    const glass = MeshBuilder.CreateBox(`${id}-g${i}`, { width: f.w, depth: 1.6, height: 12 }, scene);
+    glass.position = new Vector3(f.x, 6.2, f.z);
+    glass.rotation.y = f.rot;
+    glass.material = shop;
+    glass.freezeWorldMatrix();
+    disposables.push(glass);
+    const awn = MeshBuilder.CreateBox(`${id}-a${i}`, { width: f.w * 0.92, depth: 7, height: 1.2 }, scene);
+    const ox = Math.sin(f.rot) * 4;
+    const oz = Math.cos(f.rot) * 4;
+    awn.position = new Vector3(f.x + ox, 13.4, f.z + oz);
+    awn.rotation.y = f.rot;
+    awn.material = awning;
+    awn.freezeWorldMatrix();
+    disposables.push(awn);
+  });
+  const stories = Math.max(1, Math.floor((height - 20) / 16));
+  for (let s = 0; s < stories; s++) {
+    const plat = MeshBuilder.CreateBox(`${id}-fe${s}`, { width: 7, depth: 3.2, height: 0.7 }, scene);
+    plat.position = new Vector3(cx + bw / 2 + 2.2, 20 + s * 16, cz);
+    plat.material = rail;
+    plat.freezeWorldMatrix();
+    disposables.push(plat);
+  }
+  const sign = MeshBuilder.CreateBox(`${id}-neon`, { width: Math.min(28, bw * 0.45), depth: 1.2, height: 5 }, scene);
+  sign.position = new Vector3(cx, Math.min(height - 8, 36), cz + bd / 2 + 1.6);
+  sign.material = neon;
+  sign.freezeWorldMatrix();
+  disposables.push(sign);
 }
 
 function shopTexture(scene: Scene, glass: string): DynamicTexture {
@@ -297,12 +371,21 @@ export function buildCity(scene: Scene, world: WorldData): CityMeshes {
   }
 
   const acMat = mat(scene, "m-ac", "#5a5854");
-  const shopTex = shopTexture(scene, "#3a6078");
-  textures.push(shopTex);
-  const shopGlass = mat(scene, "m-shop", "#2a4050", 0.18);
-  shopGlass.diffuseTexture = shopTex;
-  shopGlass.emissiveTexture = shopTex;
-  shopGlass.emissiveColor = new Color3(0.2, 0.28, 0.32);
+  const shopTexA = shopTexture(scene, "#3a6078");
+  const shopTexB = shopTexture(scene, "#784838");
+  const shopTexC = shopTexture(scene, "#2a5a48");
+  textures.push(shopTexA, shopTexB, shopTexC);
+  const shopGlassA = shopMat(scene, "m-shop-a", shopTexA, new Color3(0.2, 0.28, 0.32));
+  const shopGlassB = shopMat(scene, "m-shop-b", shopTexB, new Color3(0.32, 0.18, 0.14));
+  const shopGlassC = shopMat(scene, "m-shop-c", shopTexC, new Color3(0.16, 0.3, 0.22));
+  const shopMats = [shopGlassA, shopGlassB, shopGlassC];
+  const awningCols = [mat(scene, "m-awn-a", "#c45a32", 0.12), mat(scene, "m-awn-b", "#2a6a78", 0.12), mat(scene, "m-awn-c", "#d8a030", 0.12)];
+  const railMat = mat(scene, "m-rail", "#2a2622");
+  const neonMats = [
+    mat(scene, "m-neon-a", "#e07040", 0.7),
+    mat(scene, "m-neon-b", "#40c0d0", 0.7),
+    mat(scene, "m-neon-c", "#e8c050", 0.7),
+  ];
   for (let y = 0; y < MAP_H; y++) {
     for (let x = 0; x < MAP_W; x++) {
       const idx = y * MAP_W + x;
@@ -323,20 +406,20 @@ export function buildCity(scene: Scene, world: WorldData): CityMeshes {
       }
       for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) seen[(y + j) * MAP_W + x + i] = 1;
       const height = 48 + ((x * 7 + y * 13) % 5) * 24;
-      const box = MeshBuilder.CreateBox(`b-${x}-${y}`, { width: w * TILE - 4, depth: h * TILE - 4, height }, scene);
-      box.position = new Vector3(x * TILE + (w * TILE) / 2, height / 2, y * TILE + (h * TILE) / 2);
+      const bw = w * TILE - 4;
+      const bd = h * TILE - 4;
+      const cx = x * TILE + (w * TILE) / 2;
+      const cz = y * TILE + (h * TILE) / 2;
+      const box = MeshBuilder.CreateBox(`b-${x}-${y}`, { width: bw, depth: bd, height }, scene);
+      box.position = new Vector3(cx, height / 2, cz);
       box.material = (x + y) % 2 ? buildingMat : buildingMat2;
       box.freezeWorldMatrix();
       disposables.push(box);
-      const shop = MeshBuilder.CreateBox(`shop-${x}-${y}`, { width: Math.max(10, w * TILE - 10), depth: 2.4, height: 13 }, scene);
-      shop.position = new Vector3(box.position.x, 6.6, box.position.z + (h * TILE - 4) / 2 + 0.2);
-      shop.material = shopGlass;
-      shop.freezeWorldMatrix();
-      disposables.push(shop);
-      // Rooftop junk so the skyline isn't a flat lid.
+      const kit = (x + y) % 3;
+      dressBuildingKit(scene, disposables, `b-${x}-${y}`, cx, cz, bw, bd, height, shopMats[kit] ?? shopGlassA, awningCols[kit] ?? awningCols[0], railMat, neonMats[kit] ?? neonMats[0]);
       if (((x + y) & 3) === 0) {
         const ac = MeshBuilder.CreateBox(`ac-${x}-${y}`, { width: 10, depth: 14, height: 6 }, scene);
-        ac.position = new Vector3(box.position.x + 8, height + 3, box.position.z);
+        ac.position = new Vector3(cx + 8, height + 3, cz);
         ac.material = acMat;
         ac.freezeWorldMatrix();
         disposables.push(ac);
@@ -394,6 +477,21 @@ export function buildCity(scene: Scene, world: WorldData): CityMeshes {
     sign.rotation.y = 0;
     sign.freezeWorldMatrix();
     disposables.push(sign);
+
+    dressBuildingKit(
+      scene,
+      disposables,
+      `lmkit-${lm.id}`,
+      box.position.x,
+      box.position.z,
+      lm.w * TILE - 6,
+      lm.h * TILE - 6,
+      height,
+      shopGlassA,
+      awningMat,
+      railMat,
+      neonMats[0] ?? shopGlassA,
+    );
   }
 
   const lampMat = mat(scene, "m-lamp", "#2a2622");
@@ -418,7 +516,19 @@ export function buildCity(scene: Scene, world: WorldData): CityMeshes {
   const frondMat = mat(scene, "m-frond", "#2f6a48", 0.08);
   const palmSpots: Array<[number, number]> = [];
   for (let x = 4; x < MAP_W; x += 7) palmSpots.push([x * TILE, 4.2 * TILE]);
-  palmSpots.push([28 * TILE, 30 * TILE], [78 * TILE, 58 * TILE], [16 * TILE, 60 * TILE], [46 * TILE, 12 * TILE]);
+  palmSpots.push(
+    [28 * TILE, 30 * TILE],
+    [78 * TILE, 58 * TILE],
+    [16 * TILE, 60 * TILE],
+    [46 * TILE, 12 * TILE],
+    [14 * TILE, 62.4 * TILE],
+    [20 * TILE, 67.2 * TILE],
+    [32 * TILE, 62.4 * TILE],
+    [48 * TILE, 67.2 * TILE],
+    [10 * TILE, 48 * TILE],
+    [34 * TILE, 48 * TILE],
+    [60 * TILE, 62 * TILE],
+  );
   for (let i = 0; i < palmSpots.length; i++) {
     const [px, pz] = palmSpots[i] ?? [0, 0];
     const trunk = MeshBuilder.CreateCylinder(`pt-${i}`, { height: 28, diameterTop: 2.2, diameterBottom: 3.6, tessellation: 6 }, scene);
@@ -490,6 +600,7 @@ export function buildCity(scene: Scene, world: WorldData): CityMeshes {
   }
 
   dressSpawnStreet(scene, disposables, textures, lampMat, trunkMat, frondMat);
+  dressCityStreets(scene, world, disposables, lampMat, lampHead, binMat, hydrantMat, benchMat, curbMat);
 
   const boardMat = mat(scene, "m-board", "#c45a32", 0.2);
   const boards: Array<[number, number, number]> = [
@@ -534,6 +645,145 @@ export function buildCity(scene: Scene, world: WorldData): CityMeshes {
       for (const t of textures) t.dispose();
     },
   };
+}
+
+function parkedCar(
+  scene: Scene,
+  disposables: Mesh[],
+  id: string,
+  x: number,
+  z: number,
+  rot: number,
+  body: StandardMaterial,
+  tire: StandardMaterial,
+): void {
+  const root = MeshBuilder.CreateBox(`${id}-b`, { width: 22, depth: 10, height: 5.4 }, scene);
+  root.position = new Vector3(x, 4.2, z);
+  root.rotation.y = rot;
+  root.material = body;
+  root.freezeWorldMatrix();
+  disposables.push(root);
+  const cabin = MeshBuilder.CreateBox(`${id}-c`, { width: 10, depth: 8.6, height: 4.2 }, scene);
+  const ox = Math.cos(rot) * -3;
+  const oz = -Math.sin(rot) * -3;
+  cabin.position = new Vector3(x + ox, 8.4, z + oz);
+  cabin.rotation.y = rot;
+  cabin.material = tire;
+  cabin.freezeWorldMatrix();
+  disposables.push(cabin);
+}
+
+function dressCityStreets(
+  scene: Scene,
+  world: WorldData,
+  disposables: Mesh[],
+  lampMat: StandardMaterial,
+  lampHead: StandardMaterial,
+  binMat: StandardMaterial,
+  hydrantMat: StandardMaterial,
+  benchMat: StandardMaterial,
+  curbMat: StandardMaterial,
+): void {
+  const carCols = [
+    mat(scene, "m-park-a", "#c45a32"),
+    mat(scene, "m-park-b", "#2a4a68"),
+    mat(scene, "m-park-c", "#d8c4a0"),
+    mat(scene, "m-park-d", "#3a2a28"),
+    mat(scene, "m-park-e", "#6a8a48"),
+  ];
+  const tire = mat(scene, "m-park-tire", "#1a1614");
+  const lightRed = mat(scene, "m-tl-r", "#c43020", 0.85);
+  const lightGo = mat(scene, "m-tl-g", "#2a8a50", 0.35);
+  let n = 0;
+  for (let y = 2; y < MAP_H; y += 3) {
+    for (let x = 2; x < MAP_W; x += 4) {
+      if ((world.cells[y * MAP_W + x] as Cell) !== Cell.Walk) continue;
+      const px = x * TILE + 16;
+      const pz = y * TILE + 16;
+      const kind = (x * 5 + y * 3) % 5;
+      if (kind === 0) {
+        const bin = MeshBuilder.CreateBox(`st-bin-${n}`, { width: 5, depth: 4, height: 7 }, scene);
+        bin.position = new Vector3(px, 3.6, pz);
+        bin.material = binMat;
+        bin.freezeWorldMatrix();
+        disposables.push(bin);
+      } else if (kind === 1) {
+        const hyd = MeshBuilder.CreateCylinder(`st-hyd-${n}`, { height: 5, diameter: 2.2, tessellation: 6 }, scene);
+        hyd.position = new Vector3(px, 2.6, pz);
+        hyd.material = hydrantMat;
+        hyd.freezeWorldMatrix();
+        disposables.push(hyd);
+      } else if (kind === 2) {
+        const bench = MeshBuilder.CreateBox(`st-bench-${n}`, { width: 11, depth: 3, height: 3 }, scene);
+        bench.position = new Vector3(px, 1.6, pz);
+        bench.material = benchMat;
+        bench.freezeWorldMatrix();
+        disposables.push(bench);
+      } else if (kind === 3) {
+        const box = MeshBuilder.CreateBox(`st-news-${n}`, { width: 3.4, depth: 3.4, height: 6 }, scene);
+        box.position = new Vector3(px, 3.1, pz);
+        box.material = curbMat;
+        box.freezeWorldMatrix();
+        disposables.push(box);
+      } else {
+        const pot = MeshBuilder.CreateCylinder(`st-pot-${n}`, { height: 4, diameter: 4.4, tessellation: 6 }, scene);
+        pot.position = new Vector3(px, 2.1, pz);
+        pot.material = binMat;
+        pot.freezeWorldMatrix();
+        disposables.push(pot);
+        const pole = MeshBuilder.CreateBox(`st-lp-${n}`, { width: 1.4, depth: 1.4, height: 20 }, scene);
+        pole.position = new Vector3(px + 8, 10, pz);
+        pole.material = lampMat;
+        pole.freezeWorldMatrix();
+        disposables.push(pole);
+        const head = MeshBuilder.CreateBox(`st-lh-${n}`, { width: 4.4, depth: 4.4, height: 1.8 }, scene);
+        head.position = new Vector3(px + 8, 20, pz);
+        head.material = lampHead;
+        head.freezeWorldMatrix();
+        disposables.push(head);
+      }
+      n++;
+    }
+  }
+  const arterials = [10, 22, 36, 50, 64];
+  let c = 0;
+  for (const yTile of arterials) {
+    for (let x = 4; x < MAP_W - 4; x += 7) {
+      if (x % 14 < 3) continue;
+      parkedCar(scene, disposables, `pk-${c}`, x * TILE, (yTile + 0.32) * TILE, 0, carCols[c % carCols.length] ?? tire, tire);
+      c++;
+    }
+  }
+  for (const xTile of [8, 22, 36, 50, 64, 80]) {
+    for (let y = 6; y < MAP_H - 4; y += 8) {
+      if (arterials.some((r) => Math.abs(y - r) < 3)) continue;
+      parkedCar(scene, disposables, `pkv-${c}`, (xTile + 0.32) * TILE, y * TILE, Math.PI / 2, carCols[c % carCols.length] ?? tire, tire);
+      c++;
+    }
+  }
+  let t = 0;
+  for (const yTile of arterials) {
+    for (const xTile of [8, 22, 36, 50, 64, 80]) {
+      const px = (xTile - 0.55) * TILE;
+      const pz = (yTile - 0.55) * TILE;
+      const pole = MeshBuilder.CreateBox(`tl-${t}`, { width: 1.4, depth: 1.4, height: 26 }, scene);
+      pole.position = new Vector3(px, 13, pz);
+      pole.material = lampMat;
+      pole.freezeWorldMatrix();
+      disposables.push(pole);
+      const head = MeshBuilder.CreateBox(`tlh-${t}`, { width: 3.2, depth: 2.2, height: 8 }, scene);
+      head.position = new Vector3(px, 24, pz);
+      head.material = lampMat;
+      head.freezeWorldMatrix();
+      disposables.push(head);
+      const lens = MeshBuilder.CreateBox(`tll-${t}`, { width: 2.2, depth: 1.2, height: 2.2 }, scene);
+      lens.position = new Vector3(px, 25.4, pz + 1.4);
+      lens.material = t % 3 === 0 ? lightRed : lightGo;
+      lens.freezeWorldMatrix();
+      disposables.push(lens);
+      t++;
+    }
+  }
 }
 
 /** First 10 seconds of play happen here — pack the sidewalk so it isn't a tan void. */

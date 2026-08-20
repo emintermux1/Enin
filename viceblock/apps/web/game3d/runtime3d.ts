@@ -244,6 +244,7 @@ export class ViceblockRuntime3D {
     this.camera = new FreeCamera("cam", new Vector3(0, 40, -40), this.scene);
     this.camera.minZ = 2;
     this.camera.maxZ = 4200;
+    this.camera.fov = 1.08;
 
     this.player.x = this.world.spawnX;
     this.player.z = this.world.spawnY;
@@ -267,7 +268,7 @@ export class ViceblockRuntime3D {
     const move = (e: PointerEvent): void => {
       if (!this.dragYaw.active || e.pointerId !== this.dragYaw.id) return;
       this.player.camYaw += (e.clientX - this.dragYaw.lastX) * 0.005;
-      this.player.camPitch = Math.max(0.32, Math.min(0.92, this.player.camPitch + (e.clientY - this.dragYaw.lastY) * 0.003));
+      this.player.camPitch = Math.max(0.22, Math.min(0.85, this.player.camPitch + (e.clientY - this.dragYaw.lastY) * 0.003));
       this.dragYaw.lastX = e.clientX;
       this.dragYaw.lastY = e.clientY;
     };
@@ -329,7 +330,7 @@ export class ViceblockRuntime3D {
   async start(): Promise<void> {
     await this.audio.unlock();
     this.audio.setLevels(this.settings);
-    if (this.quality === "auto") this.quality = this.input.mobile ? "low" : "high";
+    if (this.quality === "auto") this.quality = this.input.mobile ? "medium" : "high";
     this.applyQuality();
     this.time = 15.4;
     // Face Rico so the first shot is a street, a hideout trim, and a 3/4 face.
@@ -337,7 +338,7 @@ export class ViceblockRuntime3D {
     const ricoZ = 49.2 * TILE;
     this.player.heading = Math.atan2(ricoZ - this.player.z, ricoX - this.player.x);
     this.player.camYaw = this.player.heading - Math.PI / 2 + 0.42;
-    this.player.camPitch = 0.38;
+    this.player.camPitch = 0.28;
     this.playerMesh.rotation.y = -this.player.heading;
     this.evictCrowd(110);
     this.snapCamera();
@@ -701,6 +702,11 @@ export class ViceblockRuntime3D {
       [23.5 * TILE, 20 * TILE, Math.PI / 2],
       [51.5 * TILE, 40 * TILE, -Math.PI / 2],
       [81.5 * TILE, 30 * TILE, Math.PI / 2],
+      [28 * TILE, 65.4 * TILE, 0],
+      [44 * TILE, 65.4 * TILE, Math.PI],
+      [70 * TILE, 65.4 * TILE, 0],
+      [9.4 * TILE, 58 * TILE, Math.PI / 2],
+      [23.4 * TILE, 48 * TILE, -Math.PI / 2],
     ];
     roads.forEach(([x, z, h], i) => {
       const rt = createVehicleRuntime(i % 2 ? "ironback" : "sparrow", x, z, h, i % 2 ? "#4a3a32" : "#7a5a40");
@@ -750,7 +756,7 @@ export class ViceblockRuntime3D {
     this.buildMartInterior();
 
     const colors = ["#c4a07a", "#8a6a54", "#d8c8b0", "#6a4a3a", "#b08870"];
-    const count = 36;
+    const count = 52;
     for (let i = 0; i < count; i++) {
       const x = (8 + (i * 17) % 80) * TILE + 10;
       const z = (12 + (i * 11) % 60) * TILE + 10;
@@ -1084,13 +1090,13 @@ export class ViceblockRuntime3D {
     const t = this.time;
     const day = t > 6.5 && t < 19;
     const dusk = (t > 5 && t <= 6.5) || (t >= 19 && t < 21);
-    this.hemi.intensity = this.blackout ? 0.28 : day ? 1.15 : dusk ? 0.82 : 0.58;
-    this.sun.intensity = this.blackout ? 0.08 : day ? 1.05 : dusk ? 0.55 : 0.22;
+    this.hemi.intensity = this.blackout ? 0.28 : day ? 1.28 : dusk ? 0.9 : 0.58;
+    this.sun.intensity = this.blackout ? 0.08 : day ? 1.2 : dusk ? 0.62 : 0.22;
     const sky = this.blackout
       ? new Color4(0.05, 0.05, 0.08, 1)
-      : day ? new Color4(0.55, 0.7, 0.8, 1) : dusk ? new Color4(0.72, 0.48, 0.36, 1) : new Color4(0.12, 0.11, 0.18, 1);
+      : day ? new Color4(0.48, 0.68, 0.86, 1) : dusk ? new Color4(0.72, 0.48, 0.36, 1) : new Color4(0.12, 0.11, 0.18, 1);
     this.scene.clearColor = sky;
-    const fog = this.weather === "fog" ? 0.00055 : this.weather === "rain" ? 0.00035 : 0.00018;
+    const fog = this.weather === "fog" ? 0.00028 : this.weather === "rain" ? 0.00016 : 0.00007;
     this.scene.fogMode = Scene.FOGMODE_EXP2;
     this.scene.fogDensity = fog;
     this.scene.fogColor = new Color3(sky.r, sky.g, sky.b);
@@ -1227,7 +1233,7 @@ export class ViceblockRuntime3D {
   }
 
   private snapCamera(): void {
-    const p = this.cameraPlace(this.player.vehicleId ? 140 : 125);
+    const p = this.cameraPlace(this.player.vehicleId ? 165 : 175);
     this.camera.position.set(p.x, p.y, p.z);
     const elev = this.interiorMode ? INTERIOR_Y : 0;
     this.camera.setTarget(new Vector3(this.player.x, elev + 20 + this.player.y, this.player.z));
@@ -1236,8 +1242,8 @@ export class ViceblockRuntime3D {
   private updateCamera(dt: number): void {
     const car = this.cars.find((c) => c.rt.id === this.player.vehicleId);
     const speed = car ? Math.hypot(car.rt.vx, car.rt.vy) : 0;
-    let dist = car ? 140 + Math.min(50, speed * 0.25) : 125;
-    this.player.camPitch = Math.max(0.32, Math.min(0.85, this.player.camPitch));
+    let dist = car ? 165 + Math.min(50, speed * 0.25) : 175;
+    this.player.camPitch = Math.max(0.22, Math.min(0.78, this.player.camPitch));
     if (car && speed > 30 && !this.dragYaw.active) {
       const desired = Math.atan2(car.rt.vx, car.rt.vy);
       this.player.camYaw += normalizeAngle(desired - this.player.camYaw) * Math.min(1, dt * 3);

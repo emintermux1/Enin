@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { TILE } from "@viceblock/shared";
-import { blocked, buildSouthside } from "../game/world";
+import { blocked, buildSouthside, Cell } from "../game/world";
 
 describe("world spawn points", () => {
   it("the post-arrest release spot outside the precinct is walkable", () => {
@@ -24,6 +24,13 @@ describe("world spawn points", () => {
   it("player spawn is walkable", () => {
     const world = buildSouthside();
     expect(blocked(world, world.spawnX, world.spawnY, 7)).toBe(false);
+  });
+
+  it("Southside is a built district, not empty dirt lots", () => {
+    const world = buildSouthside();
+    let buildings = 0;
+    for (const c of world.cells) if (c === Cell.Building) buildings++;
+    expect(buildings).toBeGreaterThan(1800);
   });
 
   it("Rico stands well clear of spawn so he cannot clip into the player", () => {
