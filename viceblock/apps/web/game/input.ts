@@ -25,8 +25,10 @@ export class GameInput {
   aimStick: StickState = idleStick();
   mobile = false;
   gamepadOn = false;
+  resetViewQueued = false;
   private padFire = false;
   private padButtons = new Set<number>();
+  private padLook = { x: 0, y: 0 };
 
   attach(canvas: HTMLCanvasElement): () => void {
     this.mobile = matchMedia("(pointer: coarse)").matches || window.innerWidth < 820;
@@ -41,6 +43,7 @@ export class GameInput {
       if (e.code === "KeyR") this.radioQueued = true;
       if (e.code === "KeyH") this.assistQueued = true;
       if (e.code === "KeyG") this.surrenderQueued = true;
+      if (e.code === "KeyV") this.resetViewQueued = true;
       if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"].includes(e.code)) e.preventDefault();
     };
     const up = (e: KeyboardEvent): void => {
@@ -119,6 +122,7 @@ export class GameInput {
       if (this.gamepadOn) {
         this.gamepadOn = false;
         this.padFire = false;
+        this.padLook = { x: 0, y: 0 };
       }
       return null;
     }
@@ -126,6 +130,7 @@ export class GameInput {
     const dead = (v: number): number => (Math.abs(v) < 0.14 ? 0 : v);
     const x = dead(pad.axes[0] ?? 0);
     const y = dead(pad.axes[1] ?? 0);
+    this.padLook = { x: dead(pad.axes[2] ?? 0), y: dead(pad.axes[3] ?? 0) };
     this.padFire = (pad.buttons[7]?.value ?? 0) > 0.5;
     const edge = (idx: number): boolean => {
       const pressed = Boolean(pad.buttons[idx]?.pressed);
@@ -170,6 +175,18 @@ export class GameInput {
 
   firing(): boolean {
     return this.fire || this.padFire;
+  }
+
+  /** Right stick free-look, so a pad is not stuck with whatever the car decides. */
+  look(): { x: number; y: number } {
+    this.pollGamepad();
+    return this.padLook;
+  }
+
+  consumeResetView(): boolean {
+    if (!this.resetViewQueued) return false;
+    this.resetViewQueued = false;
+    return true;
   }
 
   consumeInteract(): boolean {

@@ -136,6 +136,28 @@ interface Tracer {
   life: number;
 }
 
+/**
+ * How far the camera can be swung and how close it can be pulled. The old
+ * limits let the view move through about thirty degrees, which is why looking
+ * up at a building or down at the street was impossible.
+ */
+const CAMERA = {
+  /** Slightly below level: enough to look up at rooftops and sky. */
+  minPitch: -0.32,
+  /** Near enough to straight down for a tactical view of a junction. */
+  maxPitch: 1.45,
+  minZoom: 0.45,
+  maxZoom: 2.2,
+  /** Never let the lens drop under the pavement at low angles. */
+  minHeight: 16,
+  /** Seconds a manual look is respected before a moving car recentres the view. */
+  manualLookHold: 3,
+};
+
+function clampPitch(p: number): number {
+  return Math.max(CAMERA.minPitch, Math.min(CAMERA.maxPitch, p));
+}
+
 interface MissionRuntime {
   id: string;
   step: number;
@@ -276,6 +298,13 @@ export class ViceblockRuntime3D {
 
   private unbind: (() => void) | null = null;
   private dragYaw = { active: false, id: -1, lastX: 0, lastY: 0 };
+  /** Live pointers, so a second finger can pinch instead of fighting the orbit. */
+  private pointers = new Map<number, { x: number; y: number }>();
+  private pinchGap = 0;
+  /** Boom-length multiplier: wheel on desktop, pinch on mobile. */
+  camZoom = 1;
+  /** Clock time of the last manual look, so driving does not snatch the view back. */
+  private lookedAt = -99;
   private matCache = new Map<string, StandardMaterial>();
 
   constructor(canvas: HTMLCanvasElement) {
@@ -310,27 +339,51 @@ export class ViceblockRuntime3D {
   attach(): void {
     this.unbind = this.input.attach(this.canvas);
     const down = (e: PointerEvent): void => {
-      // Mobile: any direct canvas touch orbits the camera (sticks are separate elements).
-      // Desktop: right-drag orbits.
+      // Mobile: any direct canvas touch orbits the camera (sticks are separate
+      // elements) and a second finger turns the gesture into a pinch zoom.
+      // Desktop: either button drags to orbit, wheel zooms.
+      this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (this.pointers.size > 1) {
+        this.dragYaw.active = false;
+        this.pinchGap = this.pointerGap();
+        return;
+      }
       if (this.input.mobile || e.button === 2 || e.button === 0) {
         this.dragYaw = { active: true, id: e.pointerId, lastX: e.clientX, lastY: e.clientY };
       }
     };
     const move = (e: PointerEvent): void => {
+      if (this.pointers.has(e.pointerId)) this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (this.pointers.size > 1) {
+        const gap = this.pointerGap();
+        if (this.pinchGap > 0 && gap > 0) this.zoomBy((this.pinchGap - gap) * 0.006);
+        this.pinchGap = gap;
+        return;
+      }
       if (!this.dragYaw.active || e.pointerId !== this.dragYaw.id) return;
-      this.player.camYaw += (e.clientX - this.dragYaw.lastX) * 0.005;
-      this.player.camPitch = Math.max(0.22, Math.min(0.85, this.player.camPitch + (e.clientY - this.dragYaw.lastY) * 0.003));
+      const sens = this.settings.lookSensitivity;
+      this.player.camYaw += (e.clientX - this.dragYaw.lastX) * 0.005 * sens;
+      const dy = (e.clientY - this.dragYaw.lastY) * 0.005 * sens * (this.settings.invertLook ? -1 : 1);
+      this.player.camPitch = clampPitch(this.player.camPitch + dy);
+      this.lookedAt = this.clock;
       this.dragYaw.lastX = e.clientX;
       this.dragYaw.lastY = e.clientY;
     };
     const up = (e: PointerEvent): void => {
+      this.pointers.delete(e.pointerId);
+      this.pinchGap = 0;
       if (e.pointerId === this.dragYaw.id) this.dragYaw.active = false;
+    };
+    const wheel = (e: WheelEvent): void => {
+      e.preventDefault();
+      this.zoomBy(e.deltaY * 0.0012);
     };
     const ctx = (e: Event): void => e.preventDefault();
     this.canvas.addEventListener("pointerdown", down);
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
     window.addEventListener("pointercancel", up);
+    this.canvas.addEventListener("wheel", wheel, { passive: false });
     this.canvas.addEventListener("contextmenu", ctx);
     const onResize = (): void => this.engine.resize();
     window.addEventListener("resize", onResize);
@@ -341,6 +394,7 @@ export class ViceblockRuntime3D {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
       window.removeEventListener("pointercancel", up);
+      this.canvas.removeEventListener("wheel", wheel);
       this.canvas.removeEventListener("contextmenu", ctx);
       window.removeEventListener("resize", onResize);
     };
@@ -1326,12 +1380,31 @@ export class ViceblockRuntime3D {
     }
   }
 
+  private pointerGap(): number {
+    const [a, b] = [...this.pointers.values()];
+    return a && b ? Math.hypot(a.x - b.x, a.y - b.y) : 0;
+  }
+
+  /** Positive pulls the camera out, negative pushes it in. */
+  zoomBy(delta: number): void {
+    this.camZoom = Math.max(CAMERA.minZoom, Math.min(CAMERA.maxZoom, this.camZoom + delta));
+    this.lookedAt = this.clock;
+  }
+
+  /** Back to the default shoulder view, for when the player has tied it in knots. */
+  resetCamera(): void {
+    this.camZoom = 1;
+    this.player.camPitch = 0.5;
+    this.player.camYaw = this.player.heading - Math.PI / 2;
+    this.lookedAt = -99;
+  }
+
   /**
    * The furthest the camera can sit behind the player with nothing solid in
    * between. Walks the boom in from the requested length in short steps.
    */
   private clearCameraDistance(want: number): number {
-    const min = 52;
+    const min = Math.min(40, want);
     let last = min;
     for (let d = min; d <= want; d += 12) {
       const p = this.cameraPlace(d);
@@ -1347,19 +1420,30 @@ export class ViceblockRuntime3D {
     const yaw = this.player.camYaw;
     const backX = -Math.sin(yaw) * dist * Math.cos(pitch);
     const backZ = -Math.cos(yaw) * dist * Math.cos(pitch);
-    const side = 34;
+    // The shoulder offset closes up as the view goes overhead, where an
+    // off-centre camera just looks like a mistake.
+    const side = 34 * Math.max(0, 1 - Math.max(0, pitch - 0.8) / 0.65);
     return {
       x: this.player.x + backX + Math.cos(yaw) * side,
       z: this.player.z + backZ - Math.sin(yaw) * side,
-      y: elev + 26 + Math.sin(pitch) * dist,
+      y: Math.max(elev + CAMERA.minHeight, elev + 26 + Math.sin(pitch) * dist),
     };
   }
 
+  /**
+   * What the lens looks at. Below the normal shoulder angle the aim point
+   * climbs instead of the camera sinking into the tarmac, so dragging down
+   * tilts the view up the face of the towers rather than into the kerb.
+   */
+  private cameraTarget(elev: number): Vector3 {
+    const lift = Math.max(0, 0.3 - this.player.camPitch) * 120;
+    return new Vector3(this.player.x, elev + 20 + this.player.y + lift, this.player.z);
+  }
+
   private snapCamera(): void {
-    const p = this.cameraPlace(this.player.vehicleId ? 165 : 175);
+    const p = this.cameraPlace((this.player.vehicleId ? 165 : 175) * this.camZoom);
     this.camera.position.set(p.x, p.y, p.z);
-    const elev = this.interiorMode ? INTERIOR_Y : 0;
-    this.camera.setTarget(new Vector3(this.player.x, elev + 20 + this.player.y, this.player.z));
+    this.camera.setTarget(this.cameraTarget(this.interiorMode ? INTERIOR_Y : 0));
   }
 
   /**
@@ -1421,12 +1505,23 @@ export class ViceblockRuntime3D {
     const topSpeed = def
       ? Math.max(1, maxSpeedFor({ acceleration: def.acceleration, topSpeed: def.topSpeed, handling: def.handling, braking: def.braking, grip: 1, power: 1 }))
       : 1;
-    let dist = car ? speedCameraDistance(165, speed, topSpeed) : 175;
+    let dist = (car ? speedCameraDistance(165, speed, topSpeed) : 175) * this.camZoom;
     // The lens opens as you wind the car out, so speed reads on screen.
     const wantFov = car ? speedFov(this.baseFov, speed, topSpeed) : this.baseFov;
     this.camera.fov += (wantFov - this.camera.fov) * Math.min(1, dt * 2.5);
-    this.player.camPitch = Math.max(0.22, Math.min(0.78, this.player.camPitch));
-    if (car && speed > 30 && !this.dragYaw.active) {
+    if (this.input.consumeResetView()) this.resetCamera();
+    const stick = this.input.look();
+    if (stick.x !== 0 || stick.y !== 0) {
+      const sens = this.settings.lookSensitivity * dt * 2.6;
+      this.player.camYaw += stick.x * sens;
+      this.player.camPitch += stick.y * sens * (this.settings.invertLook ? -1 : 1);
+      this.lookedAt = this.clock;
+    }
+    this.player.camPitch = clampPitch(this.player.camPitch);
+    // A car swings the view back behind it, but only once the player has
+    // stopped looking around — it used to snatch the camera back instantly.
+    const looking = this.dragYaw.active || this.clock - this.lookedAt < CAMERA.manualLookHold;
+    if (car && speed > 30 && !looking) {
       const desired = Math.atan2(car.rt.vx, car.rt.vy);
       this.player.camYaw += normalizeAngle(desired - this.player.camYaw) * Math.min(1, dt * 3);
     }
@@ -1443,7 +1538,7 @@ export class ViceblockRuntime3D {
     }
     const desired = new Vector3(p.x, p.y, p.z);
     this.camera.position = Vector3.Lerp(this.camera.position, desired, 1 - Math.pow(0.00008, dt));
-    this.camera.setTarget(new Vector3(this.player.x, elev + 20 + this.player.y, this.player.z));
+    this.camera.setTarget(this.cameraTarget(elev));
     const camD = Vector3.Distance(this.camera.position, new Vector3(this.player.x, elev + 20, this.player.z));
     this.playerMesh.setEnabled(!this.player.vehicleId && camD > 26);
   }

@@ -123,6 +123,10 @@ export interface PlayerSettings {
   reduceFlashes: boolean;
   showNames: "all" | "friends" | "crew" | "hide";
   uiScale: number;
+  /** Multiplier on how far the camera swings per pixel of drag. */
+  lookSensitivity: number;
+  /** Drag down to look up, for players who fly planes. */
+  invertLook: boolean;
 }
 
 export interface WalletNonce {
@@ -165,6 +169,8 @@ export const DEFAULT_SETTINGS: PlayerSettings = {
   reduceFlashes: false,
   showNames: "all",
   uiScale: 1,
+  lookSensitivity: 1.4,
+  invertLook: false,
 };
 
 export function levelFromXp(xp: number): number {

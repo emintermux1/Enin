@@ -1,6 +1,6 @@
 "use client";
 
-import { GAME_NAME, sanitizeText, type PlayerSave } from "@viceblock/shared";
+import { DEFAULT_SETTINGS, GAME_NAME, sanitizeText, type PlayerSave } from "@viceblock/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { HudSnapshot } from "../game/hud";
 import { ViceblockRuntime3D } from "../game3d/runtime3d";
@@ -75,6 +75,8 @@ export function GameShell() {
   const [phoneTab, setPhoneTab] = useState<"map" | "jobs" | "crew" | "bank" | "profile">("jobs");
   const [walletOpen, setWalletOpen] = useState(false);
   const [debugOpen, setDebugOpen] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [camera, setCamera] = useState({ sensitivity: DEFAULT_SETTINGS.lookSensitivity, zoom: 1, invert: DEFAULT_SETTINGS.invertLook });
   const [menuOpen, setMenuOpen] = useState(false);
   const [session, setSession] = useState<string>("");
   const [wallet, setWallet] = useState<{ address: string; sol: number; nfts: number; live: boolean } | null>(null);
@@ -95,6 +97,7 @@ export function GameShell() {
     const onKey = (e: KeyboardEvent): void => {
       if (e.code !== "Escape") return;
       setDebugOpen(false);
+      setCameraOpen(false);
       setMenuOpen(false);
       setWalletOpen(false);
       const g = gameRef.current;
@@ -254,7 +257,10 @@ export function GameShell() {
       await g.start();
       // After start(): the world has to exist before a saved position can be
       // checked against it.
-      if (save) g.applySave({ ...save, username: g.username });
+      if (save) {
+        g.applySave({ ...save, username: g.username });
+        setCamera({ sensitivity: g.settings.lookSensitivity, zoom: g.camZoom, invert: g.settings.invertLook });
+      }
       if (!g.audio.playing) {
         setBootError("Music blocked — tap the radio chip.");
       }
@@ -348,7 +354,7 @@ export function GameShell() {
             ENTER SOUTHSIDE
           </button>
           <p className="hint">
-            WASD walk · Shift sprint · Space jump/handbrake · E interact · G surrender · click shoot · right-drag camera · R radio · F phone · H assist
+            WASD walk · Shift sprint · Space jump/handbrake · E interact · G surrender · click shoot · drag camera · wheel zoom · V recentre · R radio · F phone · H assist
             <br />
             Touch: left stick walks (push far to sprint) · right stick aims &amp; fires · drag screen for camera · E/G button acts
           </p>
@@ -522,10 +528,87 @@ export function GameShell() {
             >
               QUALITY
             </button>
+            <button
+              type="button"
+              onClick={() => {
+                const g = gameRef.current;
+                if (g) setCamera({ sensitivity: g.settings.lookSensitivity, zoom: g.camZoom, invert: g.settings.invertLook });
+                setCameraOpen((v) => !v);
+              }}
+            >
+              CAMERA
+            </button>
             <button type="button" onClick={() => setDebugOpen((v) => !v)}>
               HELP
             </button>
           </div>
+
+          {cameraOpen && (
+            <div className="camera-panel">
+              <strong>CAMERA</strong>
+              <button type="button" className="close" onClick={() => setCameraOpen(false)}>
+                close
+              </button>
+              <label>
+                <span>Look sensitivity · {camera.sensitivity.toFixed(1)}x</span>
+                <input
+                  type="range"
+                  min={0.4}
+                  max={3}
+                  step={0.1}
+                  value={camera.sensitivity}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    setCamera((c) => ({ ...c, sensitivity: v }));
+                    const g = gameRef.current;
+                    if (g) g.settings = { ...g.settings, lookSensitivity: v };
+                  }}
+                />
+              </label>
+              <label>
+                <span>Zoom · {camera.zoom.toFixed(2)}x</span>
+                <input
+                  type="range"
+                  min={0.45}
+                  max={2.2}
+                  step={0.05}
+                  value={camera.zoom}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    setCamera((c) => ({ ...c, zoom: v }));
+                    const g = gameRef.current;
+                    if (g) g.camZoom = v;
+                  }}
+                />
+              </label>
+              <label className="row">
+                <span>Invert vertical look</span>
+                <input
+                  type="checkbox"
+                  checked={camera.invert}
+                  onChange={(e) => {
+                    const v = e.target.checked;
+                    setCamera((c) => ({ ...c, invert: v }));
+                    const g = gameRef.current;
+                    if (g) g.settings = { ...g.settings, invertLook: v };
+                  }}
+                />
+              </label>
+              <button
+                type="button"
+                onClick={() => {
+                  const g = gameRef.current;
+                  if (!g) return;
+                  g.resetCamera();
+                  setCamera((c) => ({ ...c, zoom: g.camZoom }));
+                  g.audio.uiClick();
+                }}
+              >
+                RESET VIEW
+              </button>
+              <p>Drag to look — floor to sky, all the way round. Wheel or pinch to zoom, right stick on a pad, V to recentre.</p>
+            </div>
+          )}
 
           {debugOpen && (
             <div className="debug">
@@ -1293,6 +1376,58 @@ export function GameShell() {
           margin: 2px;
           padding: 3px 6px;
           font-size: 10px;
+        }
+        .camera-panel {
+          position: absolute;
+          left: 16px;
+          top: 86px;
+          width: min(260px, 82vw);
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          background: rgba(16, 10, 8, 0.94);
+          border: 1px solid #6a4a38;
+          padding: 10px 12px;
+          font-size: 11px;
+          letter-spacing: 0.08em;
+          z-index: 6;
+        }
+        .camera-panel label {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+          color: #d8c8b0;
+        }
+        .camera-panel label.row {
+          flex-direction: row;
+          align-items: center;
+          justify-content: space-between;
+        }
+        .camera-panel input[type="range"] {
+          width: 100%;
+          accent-color: #e8703c;
+        }
+        .camera-panel button {
+          background: #2a2018;
+          color: #f3e6d2;
+          border: 1px solid #6a4a38;
+          padding: 5px 8px;
+          font-size: 10px;
+          letter-spacing: 0.12em;
+        }
+        .camera-panel .close {
+          position: absolute;
+          right: 8px;
+          top: 8px;
+          border: none;
+          background: none;
+          color: #8a7564;
+        }
+        .camera-panel p {
+          margin: 0;
+          color: #8a7564;
+          line-height: 1.5;
+          letter-spacing: 0.04em;
         }
         .phone {
           position: absolute;
