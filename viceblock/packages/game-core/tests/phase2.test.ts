@@ -15,6 +15,8 @@ import {
   recognitionRange,
   createVehicleRuntime,
   applyVehicleDamage,
+  collisionDamage,
+  VEHICLE_CONFIG,
   shootTire,
   damageStage,
   performanceMultipliers,
@@ -179,6 +181,21 @@ describe("vehicle components", () => {
     const after = performanceMultipliers(v);
     expect(after.accel).toBeLessThan(before.accel);
     expect(after.grip).toBeLessThan(before.grip);
+  });
+
+  it("scrapes cost paint, crashes cost the car", () => {
+    const scrape = collisionDamage(VEHICLE_CONFIG.crashSpeedThreshold - 40);
+    const crash = collisionDamage(VEHICLE_CONFIG.crashSpeedThreshold + 90);
+    expect(scrape).toBeLessThan(6);
+    expect(crash).toBeGreaterThan(scrape * 4);
+  });
+
+  it("a healthy car survives repeated crashes instead of instantly exploding", () => {
+    let v = createVehicleRuntime("sparrow", 0, 0, 0, "#fff");
+    const fast = VEHICLE_CONFIG.crashSpeedThreshold + 60;
+    for (let i = 0; i < 3; i++) v = applyVehicleDamage(v, collisionDamage(fast), true);
+    expect(v.health).toBeGreaterThan(0);
+    expect(v.explodeIn).toBe(0);
   });
 
   it("wet asphalt grips less than dry", () => {

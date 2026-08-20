@@ -30,6 +30,8 @@ export const VEHICLE_CONFIG = {
   fireBelow: 0.15,
   explodeChanceOnHeavyCrash: 0.18,
   crashSpeedThreshold: 70,
+  /** One wall is one hit: collision damage cannot land again within this window. */
+  bumpCooldownSeconds: 0.5,
   explosionFuseSeconds: 0.35,
   explosionDamageNear: 18,
   explosionDamageDriver: 28,

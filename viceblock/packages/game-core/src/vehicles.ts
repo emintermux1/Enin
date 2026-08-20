@@ -1,4 +1,5 @@
 import type { VehicleStats } from "@viceblock/shared";
+import { VEHICLE_CONFIG } from "./config";
 
 export const VEHICLES: VehicleStats[] = [
   {
@@ -123,12 +124,27 @@ export function applyVehicleDamage(v: VehicleRuntime, amount: number, highSpeedC
   next.burning = next.health < nextHealthBurn(next);
   if (next.health <= 0) {
     next.explodeIn = next.explodeIn > 0 ? next.explodeIn : 0.35;
-  } else if (highSpeedCrash && Math.random() < 0.18) {
+  } else if (highSpeedCrash && next.health < durabilityOf(next.defId) * 0.3 && Math.random() < VEHICLE_CONFIG.explodeChanceOnHeavyCrash) {
+    // A big hit only ends the car outright once it is already falling apart.
     next.health = 0;
     next.burning = true;
     next.explodeIn = 0.15;
   }
   return next;
+}
+
+function durabilityOf(defId: string): number {
+  return vehicleById(defId).durability;
+}
+
+/**
+ * Damage from driving into geometry. Scraping a wall at parking speed should
+ * cost paint, not the car; only a real crash bites. Callers must rate-limit
+ * this with `VEHICLE_CONFIG.bumpCooldownSeconds` so one wall is one hit.
+ */
+export function collisionDamage(speed: number): number {
+  if (speed <= VEHICLE_CONFIG.crashSpeedThreshold) return Math.max(1, Math.round(speed * 0.04));
+  return Math.round(10 + (speed - VEHICLE_CONFIG.crashSpeedThreshold) * 0.22);
 }
 
 /** Bullets can pop tires without needing to wreck the whole car. */

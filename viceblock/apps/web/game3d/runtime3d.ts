@@ -13,6 +13,7 @@ import {
   AIM_ASSIST_CONFIG,
   applyReward,
   applyVehicleDamage,
+  collisionDamage,
   assistAim,
   assistHint,
   attemptPick,
@@ -109,6 +110,8 @@ interface CarEntity {
   rt: VehicleRuntime;
   mesh: Mesh;
   smoke: number;
+  /** Seconds until this car can take collision damage again. */
+  bump: number;
 }
 
 interface Tracer {
@@ -736,7 +739,7 @@ export class ViceblockRuntime3D {
     for (const [defId, x, z, h, color, id] of spots) {
       const rt = createVehicleRuntime(defId, x, z, h, color, id === "sparrow-job");
       if (id) rt.id = id;
-      this.cars.push({ rt, mesh: this.makeCarMesh(rt.id, color, false), smoke: 0 });
+      this.cars.push({ rt, mesh: this.makeCarMesh(rt.id, color, false), smoke: 0, bump: 0 });
     }
     // Traffic
     const roads: Array<[number, number, number]> = [
@@ -755,7 +758,7 @@ export class ViceblockRuntime3D {
     roads.forEach(([x, z, h], i) => {
       const rt = createVehicleRuntime(i % 2 ? "ironback" : "sparrow", x, z, h, i % 2 ? "#4a3a32" : "#7a5a40");
       rt.id = `traffic-${i}`;
-      this.cars.push({ rt, mesh: this.makeCarMesh(rt.id, i % 2 ? "#4a3a32" : "#7a5a40", false), smoke: 0 });
+      this.cars.push({ rt, mesh: this.makeCarMesh(rt.id, i % 2 ? "#4a3a32" : "#7a5a40", false), smoke: 0, bump: 0 });
     });
 
     const named: Array<[string, string, number, number, string, string[]]> = [
@@ -1378,6 +1381,7 @@ export class ViceblockRuntime3D {
     const wet = this.weather === "rain" ? 0.86 : 1;
     for (const car of this.cars) {
       let v = car.rt;
+      if (car.bump > 0) car.bump = Math.max(0, car.bump - dt);
       if (v.exploded) {
         car.mesh.position.y = 0.4;
         continue;
@@ -1427,17 +1431,22 @@ export class ViceblockRuntime3D {
         const nx = v.x + v.vx * dt;
         const nz = v.y + v.vy * dt;
         if (blocked(this.world, nx, nz, 12)) {
-          const crash = s > VEHICLE_CONFIG.crashSpeedThreshold;
-          v = applyVehicleDamage(v, crash ? 18 + s * 0.08 : 6, crash);
+          // Cooldown gate: without it a car pinned against a wall takes damage
+          // every frame and burns out in about a second.
+          if (car.bump <= 0) {
+            const crash = s > VEHICLE_CONFIG.crashSpeedThreshold;
+            car.bump = VEHICLE_CONFIG.bumpCooldownSeconds;
+            v = applyVehicleDamage(v, collisionDamage(s), crash);
+            if (crash) {
+              this.impact("crash");
+              this.driftTime = 0;
+            } else if (this.settings.shake) {
+              this.shake = Math.max(this.shake, 2);
+            }
+            if (v.health <= 0) this.flash("ENGINE  ·  she's gonna go");
+          }
           v.vx *= -0.2;
           v.vy *= -0.2;
-          if (crash) {
-            this.impact("crash");
-            this.driftTime = 0;
-          } else if (this.settings.shake) {
-            this.shake = Math.max(this.shake, 3);
-          }
-          if (v.health <= 0) this.flash("ENGINE  ·  she's gonna go");
         } else {
           v.x = nx;
           v.y = nz;
@@ -2147,14 +2156,14 @@ export class ViceblockRuntime3D {
         rt.id = `event-truck-${Math.random().toString(36).slice(2, 6)}`;
         rt.health = 420;
         this.eventCarIds.add(rt.id);
-        this.cars.push({ rt, mesh: this.makeCarMesh(rt.id, "#22303e", false), smoke: 0 });
+        this.cars.push({ rt, mesh: this.makeCarMesh(rt.id, "#22303e", false), smoke: 0, bump: 0 });
         break;
       }
       case "rare-car": {
         const rt = createVehicleRuntime("mirage", 68 * TILE, 11.5 * TILE, 0, "#c8a028");
         rt.id = `event-rare-${Math.random().toString(36).slice(2, 6)}`;
         this.eventCarIds.add(rt.id);
-        this.cars.push({ rt, mesh: this.makeCarMesh(rt.id, "#c8a028", false), smoke: 0 });
+        this.cars.push({ rt, mesh: this.makeCarMesh(rt.id, "#c8a028", false), smoke: 0, bump: 0 });
         this.flash("RUMOR  ·  gold Mirage left near Ansem's mural  ·  Maya pays cash");
         break;
       }
@@ -2173,7 +2182,7 @@ export class ViceblockRuntime3D {
       case "street-race": {
         const rt = createVehicleRuntime("needle", 50 * TILE, 63 * TILE, 0, "#b03a28");
         rt.id = `event-race-${Math.random().toString(36).slice(2, 6)}`;
-        this.cars.push({ rt, mesh: this.makeCarMesh(rt.id, "#b03a28", false), smoke: 0 });
+        this.cars.push({ rt, mesh: this.makeCarMesh(rt.id, "#b03a28", false), smoke: 0, bump: 0 });
         this.flash("RACE NIGHT  ·  a Needle is waiting at the Midnight Line");
         break;
       }
@@ -2263,7 +2272,7 @@ export class ViceblockRuntime3D {
       const rt = createVehicleRuntime("mirage", 15 * TILE, 65.5 * TILE, 0, "#d8b430", true);
       rt.id = "chainline-mirage";
       rt.registered = true;
-      this.cars.push({ rt, mesh: this.makeCarMesh(rt.id, "#d8b430", false), smoke: 0 });
+      this.cars.push({ rt, mesh: this.makeCarMesh(rt.id, "#d8b430", false), smoke: 0, bump: 0 });
       this.flash("CHAINLINE MIRAGE  ·  your collector ride is parked by the walk-up");
       this.pushNews("A verified collector just rolled into Southside.");
     }
@@ -2523,7 +2532,7 @@ export class ViceblockRuntime3D {
     const color = this.debugSpawnToggle ? "#a05a2c" : "#2f6f78";
     const rt = createVehicleRuntime(defId, this.player.x + 40, this.player.z, 0, color);
     rt.id = `debug-${Math.random().toString(36).slice(2, 6)}`;
-    this.cars.push({ rt, mesh: this.makeCarMesh(rt.id, color, false), smoke: 0 });
+    this.cars.push({ rt, mesh: this.makeCarMesh(rt.id, color, false), smoke: 0, bump: 0 });
   }
 
   debugSetHeat(level: number): void {
