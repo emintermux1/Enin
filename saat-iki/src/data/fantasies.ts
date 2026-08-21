@@ -20,15 +20,15 @@ export const FANTASIES: Fantasy[] = [
     id: "window",
     label: "Cam",
     prompt: "camın önünde arkadan",
-    detect: /cam|balkon|perde/,
-    setting: ["cam açık şehir ışığı sırtımda", "perde yok bakıyorlar farketmez"],
+    detect: /camın|camda|pencere|balkon/,
+    setting: ["camın önündeyiz ya", "perdeyi çekmedim"],
   },
   {
     id: "shower",
     label: "Duş",
     prompt: "duşta duvara yapıştır",
     detect: /duş|dus|küvet/,
-    setting: ["su akıyo sırılsıklamız", "cam buğu offf"],
+    setting: ["su akıyo sırılsıklamız", "duvar soğuk sırtım sıcak"],
   },
   {
     id: "morning",
@@ -42,7 +42,7 @@ export const FANTASIES: Fantasy[] = [
     label: "Araba",
     prompt: "arabada üstüne geçeyim",
     detect: /araba|koltuk|otopark/,
-    setting: ["koltuk yatık ya", "camlar buğu kimse yok"],
+    setting: ["koltuk yatık ya", "kemer sende ben üstündeyim"],
   },
   {
     id: "jealous",

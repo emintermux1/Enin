@@ -1,10 +1,10 @@
 import { getCharacter } from "../data/characters";
 import { getFantasy } from "../data/fantasies";
 import type { Choice, FantasyId, Message, PlayOpts } from "../types";
-import { memoryLine } from "./memory";
+import { echoReply } from "./echo";
 import { choicesForMove, playMove } from "./moves";
 import { AFTERCARE, nightPhase, PHASE_TALK } from "./night";
-import { fillName, pickUnused, usedThem } from "./pool";
+import { dropRepeats, fillName, isRepeat, pickUnused, usedThem } from "./pool";
 import { normalizeSlang } from "./slang";
 import { applyVoice, voiceMoan } from "./voice";
 
@@ -34,7 +34,7 @@ const ACT_PATTERNS: Array<{ act: Act; pattern: RegExp }> = [
   {
     act: "sex",
     pattern:
-      /sik|sok|içine|icine|içinde|icinde|üstüm|ustum|üstün|ustun|arkadan|sikiş|sikis|boşal|bosal|sert|göt|got|parmak/i,
+      /sik|sok|içine|icine|içinde|icinde|üstüm|ustum|üstün|ustun|arkadan|sikiş|sikis|boşal|bosal|sert|göt|got|parmak|yata[gğ]|yataga/i,
   },
   {
     act: "kiss",
@@ -116,7 +116,7 @@ const ANSWERS: Array<{ pattern: RegExp; lines: string[] }> = [
 const HOOKS: Record<Exclude<Act, "ask" | "complaint">, string[]> = {
   oralHer: ["yüzüme oturayım mı", "parmak da sokayım mı", "boşalayım diline mi"],
   oralHim: ["boğazıma kadar mı", "yüzüne mi boşal", "yutayım mı offf"],
-  sex: ["içime mi bırakıyon", "camın önünde mi", "üstüne binip ezeyim mi"],
+  sex: ["içime mi bırakıyon", "daha sert mi", "üstüne binip ezeyim mi"],
   kiss: ["külotumu kaydırayım mı", "amımı yalatayım mı", "boynuna mı iz bırakayım"],
   body: ["memelerimi emeyim mi", "amımı göstereyim mi", "kalçama tokat mı"],
   talk: ["kirli fantezi mi kuralım", "amımı mı yalatayım", "içine mi alayım seni"],
@@ -298,6 +298,7 @@ function finish(
   history: Message[],
   salt: number,
   opts: PlayOpts,
+  input: string,
 ): string[] {
   const named = fillName(raw, opts.name).map((line) =>
     line
@@ -306,41 +307,32 @@ function finish(
   );
   const hooked = withHook(named, key, history, salt);
   const moaned = withMoan(hooked, salt, opts);
-  const recalled = withMemory(moaned, opts.recentMoves, salt);
-  const tinted = tintFantasy(recalled, opts.fantasy, salt);
-  return applyVoice(tinted, opts.characterId, salt, opts.name);
+  const tinted = tintFantasy(moaned, opts.fantasy, history, input);
+  const unique = dropRepeats(tinted, history);
+  const voiced = applyVoice(unique.length > 0 ? unique : echoReply(input, opts.name, history, salt), opts.characterId, salt, opts.name);
+  const clean = dropRepeats(voiced, history);
+  return clean.length > 0 ? clean : echoReply(input, opts.name, history, salt + 1);
 }
 
-function withMemory(lines: string[], moves: string[], salt: number): string[] {
-  const extra = memoryLine(moves, salt);
-  if (!extra) {
-    return lines;
-  }
-  if (lines.some((line) => normalizeSlang(line) === normalizeSlang(extra))) {
-    return lines;
-  }
-  if (lines.length < 3) {
-    return [...lines, extra];
-  }
-  return [...lines.slice(0, 2), extra];
-}
-
-function tintFantasy(lines: string[], fantasy: FantasyId, salt: number): string[] {
+function tintFantasy(
+  lines: string[],
+  fantasy: FantasyId,
+  history: Message[],
+  input: string,
+): string[] {
   if (fantasy === "free") {
     return lines;
   }
-  const setting = getFantasy(fantasy).setting;
-  if (setting.length === 0) {
+  const item = getFantasy(fantasy);
+  const locking = input === item.prompt || item.detect.test(input);
+  if (!locking) {
     return lines;
   }
-  const line = setting[Math.abs(salt) % setting.length] ?? setting[0];
-  if (!line || lines.some((item) => normalizeSlang(item) === normalizeSlang(line))) {
+  const line = item.setting.find((entry) => !isRepeat(entry, history));
+  if (!line) {
     return lines;
   }
-  if (salt % 2 === 0) {
-    return [line, ...lines].slice(0, 3);
-  }
-  return [...lines.slice(0, Math.min(2, lines.length)), line].slice(0, 3);
+  return dropRepeats([line, ...lines], history).slice(0, 3);
 }
 
 function withMoan(lines: string[], salt: number, opts: PlayOpts): string[] {
@@ -360,16 +352,16 @@ export function playScene(input: string, history: Message[], opts: PlayOpts): st
   const phase = nightPhase(opts.heat, opts.climaxCount);
 
   if (act === "complaint") {
-    return finish(pickUnused(COMPLAINTS, history, salt), "talk", history, salt, opts);
+    return finish(pickUnused(COMPLAINTS, history, salt) ?? echoReply(input, opts.name, history, salt), "talk", history, salt, opts, input);
   }
 
   if (phase === "after" && /boşal|bosal|bir daha|yanımda kal/.test(input)) {
-    return finish(pickUnused(AFTERCARE, history, salt), key, history, salt, opts);
+    return finish(pickUnused(AFTERCARE, history, salt) ?? echoReply(input, opts.name, history, salt), key, history, salt, opts, input);
   }
 
   const moved = playMove(input, history, salt);
   if (moved) {
-    return finish(moved, key, history, salt, opts);
+    return finish(moved, key, history, salt, opts, input);
   }
 
   if (act === "ask") {
@@ -380,7 +372,7 @@ export function playScene(input: string, history: Message[], opts: PlayOpts): st
         (item) => item.role === "them" && normalizeSlang(item.text) === normalizeSlang(hit.lines[0]),
       )
     ) {
-      return finish(hit.lines, "talk", history, salt, opts);
+      return finish(hit.lines, "talk", history, salt, opts, input);
     }
   }
 
@@ -390,7 +382,7 @@ export function playScene(input: string, history: Message[], opts: PlayOpts): st
       pair.every((line) => !used.has(normalizeSlang(line))),
     );
     if (freshPhase) {
-      return finish(freshPhase, "talk", history, salt, opts);
+      return finish(freshPhase, "talk", history, salt, opts, input);
     }
   }
 
@@ -404,5 +396,5 @@ export function playScene(input: string, history: Message[], opts: PlayOpts): st
     preferred && preferred.every((line) => !used.has(normalizeSlang(line)))
       ? preferred
       : pickUnused(pairs, history, salt);
-  return finish(raw, key, history, salt, opts);
+  return finish(raw ?? echoReply(input, opts.name, history, salt), key, history, salt, opts, input);
 }

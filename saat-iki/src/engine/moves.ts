@@ -20,7 +20,9 @@ export type MoveId =
   | "fantasy"
   | "clothes"
   | "tease"
-  | "shower";
+  | "shower"
+  | "bed"
+  | "again";
 
 type Move = {
   id: MoveId;
@@ -30,6 +32,33 @@ type Move = {
 };
 
 const MOVES: Move[] = [
+  {
+    id: "bed",
+    pattern: /yata[gğ]|yataga|yatak/i,
+    lines: [
+      ["yatağa çekiyom seni", "çarşaf soğuk tenim sıcak", "üstüme gel"],
+      ["yatağa geçtik ya", "bacaklarım açık", "duş bitti burası yatak"],
+      ["yastığa gömüldüm", "odadasın artık", "sok {name}"],
+    ],
+    choices: [
+      { label: "Sok", text: "içine sok" },
+      { label: "Yala", text: "amini yiyim" },
+      { label: "Üstüne geç", text: "üstüme geç" },
+    ],
+  },
+  {
+    id: "again",
+    pattern: /sonra|devam|ileri/i,
+    lines: [
+      ["şimdi devam", "çekmedim", "daha derine"],
+      ["bekletmem ya", "amım açık duruyo", "gel üstüme"],
+    ],
+    choices: [
+      { label: "Sok", text: "içine sok" },
+      { label: "Daha hızlı", text: "daha hızlı" },
+      { label: "Yala", text: "amini yiyim" },
+    ],
+  },
   {
     id: "finger",
     pattern: /parmak/,
@@ -219,7 +248,7 @@ const MOVES: Move[] = [
   },
   {
     id: "come",
-    pattern: /\bgel\b|buraya|yanına|yatağa/,
+    pattern: /\bgel\b|buraya|yanına/,
     lines: [
       ["gelsene offf", "bacaklarım açık seni bekliyo", "kapı kilitli değil"],
       ["yatağa girer girmez ağzına alırım", "sonra üstüne binerim {name}", "sabaha kadar inmem"],
@@ -232,7 +261,7 @@ const MOVES: Move[] = [
   },
   {
     id: "fantasy",
-    pattern: /fantezi|hayal|anlat|kirli|rol|otel|cam|balkon/,
+    pattern: /fantezi kur|hayal et|otel camı|camın önünde|balkon/,
     lines: [
       ["fantezim: otel camı", "sen arkadan ben şehre bakıyom", "ellerin boğazımda offf"],
       ["duşta duvara yapıştır", "bacağımı kaldır sik", "su aktıkça sesim çoğalır"],
@@ -274,8 +303,8 @@ const MOVES: Move[] = [
     id: "shower",
     pattern: /duş|dus|ıslak ten/,
     lines: [
-      ["duşta sırılsıklamım", "cam buğu offf", "arkamdan gir suyun altında"],
-      ["sabah uyanır uyanmaz istiyom", "ağzım yarı açık {name}", "önce sik sonra kahve"],
+      ["duşta sırılsıklamım", "su kayıyo sırtımdan", "arkamdan gir duvarın dibinde"],
+      ["duş başı açık", "ellerin ıslak tenimde", "kaydır beni {name}"],
     ],
     choices: [
       { label: "Arkadan", text: "duşta arkadan sik" },

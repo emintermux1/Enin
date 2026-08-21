@@ -65,14 +65,6 @@ function swapForVoice(line: string, id: CharacterId): string {
   }
 }
 
-const STAMP: Record<CharacterId, string[]> = {
-  leyla: [],
-  elif: ["hadi dilini çekme", "geç kalma of"],
-  defne: ["bu sahneyi kirli yazıyom", "sansürsüz kal"],
-  yasemin: ["konuşma hemen", "terim soğumasın"],
-  melis: ["emrettim çekme", "itaat güzel duruyo"],
-};
-
 export function applyVoice(
   lines: string[],
   id: CharacterId,
@@ -84,20 +76,8 @@ export function applyVoice(
   let next = lines.map((line) =>
     swapForVoice(line, id).replaceAll("{name}", name).replaceAll("leyla", person.name.toLocaleLowerCase("tr-TR")),
   );
-  const stamps = STAMP[id];
-  if (stamps.length > 0 && salt % 2 === 0) {
-    const stamp = stamps[Math.abs(salt) % stamps.length] ?? stamps[0];
-    if (stamp) {
-      next = [...next.slice(0, Math.max(0, voice.maxBubbles - 1)), stamp];
-    }
-  }
   if (next.length > voice.maxBubbles) {
     next = next.slice(0, voice.maxBubbles);
-  }
-  const last = next[next.length - 1] ?? "";
-  const ending = voice.endings[Math.abs(salt) % voice.endings.length];
-  if (id !== "leyla" && ending && last && !last.includes(ending)) {
-    next[next.length - 1] = `${last} ${ending}`;
   }
   return humanize(next, salt, voice.stretch);
 }

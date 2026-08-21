@@ -120,7 +120,7 @@ export function nextReply(args: {
 }): EngineResult {
   const act = detectAct(args.input);
   const nextHeat = Math.min(100, args.heat + (act === "talk" || act === "ask" ? 8 : 16));
-  const locked = detectFantasy(args.input) ?? args.fantasy;
+  const locked = resolveFantasy(args.input, args.fantasy);
   const moves = recentMoveIds(args.history);
   return {
     bubbles: playScene(args.input, args.history, {
@@ -138,6 +138,17 @@ export function nextReply(args: {
     climax: isClimax(args.input),
     fantasy: locked,
   };
+}
+
+function resolveFantasy(input: string, current: FantasyId): FantasyId {
+  const hit = detectFantasy(input);
+  if (hit) {
+    return hit;
+  }
+  if (/yata[gğ]|yataga|yatak\b|serbest|oda\b/i.test(input)) {
+    return "free";
+  }
+  return current;
 }
 
 export function openingChoices(_characterId?: CharacterId, _heat = 0): Choice[] {
