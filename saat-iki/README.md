@@ -6,7 +6,7 @@ Görsel seks sahnesi, porno model veya seks sesi yok.
 
 ## Canlı
 
-https://snowy-firefly-2099.zerodeploy.app
+https://aged-glade-9737.zerodeploy.app
 
 Geçici yayın (yaklaşık 72 saat). Yerelde:
 

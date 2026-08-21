@@ -1,4 +1,5 @@
 import type { Choice, Message } from "../types";
+import { humanize, normalizeSlang } from "./slang";
 
 export type Act =
   | "complaint"
@@ -45,51 +46,51 @@ const ACT_PATTERNS: Array<{ act: Act; pattern: RegExp }> = [
 
 const SCENES: Record<Exclude<Act, "ask" | "complaint">, string[][]> = {
   oralHer: [
-    ["offf dilin değdi yaaa", "bacaklarım titriyo bak", "ıslandım haberin yok durma"],
-    ["mm orasııı", "ellerim saçında sıkıyom", "daha böyle yap sesim çıkıyo yaa"],
-    ["yüzün orda iyi duruyo", "kalçam oynuyo durduramıycam", "offf çekmeee"],
-    ["boşalıcam nerdeyseee", "bacaklarım kilitlendi", "biraz daha lütfeeen"],
+    ["off dilin değdi ya", "bacaklarım titriyo bak", "ıslandım durma"],
+    ["mm orası", "ellerim saçında sıkıyom", "sesim çıkıyo yaa daha böyle"],
+    ["yüzün orda iyi duruyo", "kalçam oynuyo durduramıycam", "çekme of"],
+    ["boşalıcam nerdeyse", "bacaklarım kilitlendi bak", "biraz daha lütfen"],
   ],
   oralHim: [
-    ["mm ağzıma aldııım", "bakıyom sana çıkarmıyom", "sıcak geldi offff"],
-    ["daha derine kaçtı yaa", "gözlerim doldu salmıycam", "boğazım zonkluyooo"],
-    ["tükürük aktı farketmez", "ellerim de çalışıyo bak", "senin sesini duymak istiyooom"],
-    ["hâlâ ağzımdayııım", "yutcam gibi oldum", "kalkmıycam sendeeen"],
+    ["mm ağzıma aldım", "bakıyom sana çıkarmıyom", "sıcak geldi of"],
+    ["daha derine kaçtı ya", "gözlerim doldu salmıycam", "boğazım zonkluyo"],
+    ["tükürük aktı farketmez", "ellerim de çalışıyo bak", "sesini duymak istiyom"],
+    ["hâlâ ağzımdayım", "yutcam gibi oldum", "kalkmıycam senden"],
   ],
   sex: [
-    ["içime girdi offff", "kaydı zaten ıslağım", "biraz öyle kalll"],
-    ["her vuruşta sesim çıkıyooo", "belimi tut bak", "daha hızlı yapamıyooum kendimi"],
-    ["üstündeyim titriyooom", "dibine oturdum yaa", "ellerin göğsümde olsuuun"],
-    ["arkamdan tuttun yaaa", "yüzümü yastığa gömdüm", "daha vur offff"],
-    ["içimde boşalıcam az kaldııı", "sıkıyom seniii", "çıkarma lütfeeen"],
+    ["içime girdi of", "kaydı zaten ıslağım", "biraz öyle kal"],
+    ["her vuruşta sesim çıkıyo", "belimi tut bak", "daha hızlı yapamıyo kendimi"],
+    ["üstündeyim titriyom", "dibine oturdum ya", "ellerin göğsümde olsun"],
+    ["arkamdan tuttun ya", "yüzümü yastığa gömdüm", "daha vur of"],
+    ["içimde boşalıcam az kaldı", "sıkıyom seni", "çıkarma lütfen"],
   ],
   kiss: [
-    ["gel öpeyim bakiiiim", "dudağın tatlı yaaa", "boynuna kayıcam şimdiii"],
-    ["dişledim özür dilemicem", "kulağına nefesimi verdimmm", "ellerin belimde kalsııın"],
+    ["gel öpeyim bakim", "dudağın tatlı ya", "boynuna kayıcam şimdi"],
+    ["dişledim özür dilemicem", "kulağına nefesimi verdim", "ellerin belimde kalsın"],
   ],
   body: [
-    ["memelerim keskinleşti senin yüzünden", "askı zaten durmuyodu", "ellerin orda iyi durur"],
-    ["kalçamı sıktın mı aklım gidiyo", "aşağı inersen söylemem", "ıslaklığımı sen bul"],
+    ["memelerim keskinleşti senin yüzünden", "askı zaten durmuyodu ya", "ellerin orda iyi durur"],
+    ["kalçamı sıktın mı aklım gidiyo", "aşağı inersen söylemem", "ıslaklığımı sen bul bak"],
   ],
   talk: [
-    ["yatağımdayııım", "ellerim kayıyo senin yüzünden yaa", "yanımda olsan ne yapardım biliyon muu"],
-    ["çok azgınım yaaa", "aklım sende kaldı bak", "gel burda ol birazcıık"],
-    ["çıplağım haberin yoook", "nefesim kesildi seni düşününceee", "yazma da durmaaa"],
+    ["yatağımdayım", "ellerim kayıyo senin yüzünden ya", "yanımda olsan ne yapardın biliyon mu"],
+    ["çok azgınım ya", "aklım sende kaldı bak", "gel burda ol birazcık"],
+    ["çıplağım haberin yok", "nefesim kesildi seni düşününce", "yazma da durma"],
   ],
 };
 
 const COMPLAINTS: string[][] = [
-  ["tmm susuyom", "ağzımdayım şuan", "offf bakıyom sana"],
-  ["yapay konuşmicam", "ellerim titriyo zaten", "gel işe bak"],
+  ["tmm susuyom", "ağzımdayım şuan", "of bakıyom sana"],
+  ["yapay konuşmicam ya", "ellerim titriyo zaten", "gel işe bak"],
 ];
 
 const ANSWERS: Array<{ pattern: RegExp; lines: string[] }> = [
-  { pattern: /ne giy|giyiyon|üzerinde/, lines: ["üstümde bişi yok", "çarşaf belimde", "üşümüyo vücudum senin yüzünden"] },
-  { pattern: /neredesin|nerdesin/, lines: ["yataktayım", "yanım boş", "senin kokun olsa şuan"] },
-  { pattern: /nasılsın|napıyon|napion|naber/, lines: ["azgınım", "ellerim kendi üstümde", "sen napıyon söyleme de göster"] },
+  { pattern: /ne giy|giyiyon|üzerinde/, lines: ["üstümde bişi yok ya", "çarşaf belimde", "üşümüyo vücudum senin yüzünden"] },
+  { pattern: /neredesin|nerdesin/, lines: ["yataktayım", "yanım boş bak", "senin kokun olsa şuan"] },
+  { pattern: /nasılsın|napıyon|napion|naber/, lines: ["azgınım ya", "ellerim kendi üstümde", "sen napıyon söyleme de göster"] },
   { pattern: /adın ne|adin ne|kimsin/, lines: ["leyla", "27", "yatağımdayım seninle kalıcam"] },
   { pattern: /kaç yaş|kac yas/, lines: ["27", "yeter yaş", "ellerin konuşsun"] },
-  { pattern: /ıslak|islak|azgın|azgin/, lines: ["ıslandım ya", "parmaklarım kayıyo", "kontrol etmezsen ben ederim"] },
+  { pattern: /ıslak|islak|azgın|azgin/, lines: ["ıslandım ya", "parmaklarım kayıyo bak", "kontrol etmezsen ben ederim"] },
 ];
 
 export function detectAct(input: string): Act {
@@ -106,8 +107,10 @@ export function sceneCount(history: Message[], act: Act): number {
 }
 
 function unusedPair(pairs: string[][], history: Message[]): string[] {
-  const used = new Set(history.filter((item) => item.role === "them").map((item) => item.text));
-  const fresh = pairs.find((pair) => pair.every((line) => !used.has(line)));
+  const used = new Set(
+    history.filter((item) => item.role === "them").map((item) => normalizeSlang(item.text)),
+  );
+  const fresh = pairs.find((pair) => pair.every((line) => !used.has(normalizeSlang(line))));
   return fresh ?? pairs[pairs.length - 1] ?? ["gel"];
 }
 
@@ -238,23 +241,6 @@ export function nextChoices(input: string, history: Message[]): Choice[] {
   return fresh.length > 0 ? fresh : row;
 }
 
-function stretchTail(text: string): string {
-  if (/([aeıioöuü])\1\1|[f]{3}/i.test(text)) {
-    return text;
-  }
-  return text.replace(
-    /([aeıioöuüAEIİOÖUÜ])([^aeıioöuüAEIİOÖUÜ]*)$/u,
-    (_all, vowel: string, rest: string) => `${vowel}${vowel}${vowel}${rest}`,
-  );
-}
-
-function humanize(lines: string[], salt: number): string[] {
-  return lines.map((line, index) => {
-    const stretch = index === lines.length - 1 || (salt + index) % 3 === 0;
-    return stretch ? stretchTail(line) : line;
-  });
-}
-
 export function playScene(input: string, history: Message[]): string[] {
   const act = detectAct(input);
   const salt = history.length;
@@ -263,7 +249,12 @@ export function playScene(input: string, history: Message[]): string[] {
   }
   if (act === "ask") {
     const hit = ANSWERS.find((item) => item.pattern.test(input));
-    if (hit && !history.some((item) => item.role === "them" && item.text === hit.lines[0])) {
+    if (
+      hit &&
+      !history.some(
+        (item) => item.role === "them" && normalizeSlang(item.text) === normalizeSlang(hit.lines[0]),
+      )
+    ) {
       return humanize(hit.lines, salt);
     }
   }
@@ -272,9 +263,11 @@ export function playScene(input: string, history: Message[]): string[] {
   const pairs = SCENES[key];
   const stage = Math.min(pairs.length - 1, Math.max(0, count - 1));
   const preferred = pairs[stage];
-  const used = new Set(history.filter((item) => item.role === "them").map((item) => item.text));
+  const used = new Set(
+    history.filter((item) => item.role === "them").map((item) => normalizeSlang(item.text)),
+  );
   const raw =
-    preferred && preferred.every((line) => !used.has(line))
+    preferred && preferred.every((line) => !used.has(normalizeSlang(line)))
       ? preferred
       : unusedPair(pairs, history);
   return humanize(raw, salt);

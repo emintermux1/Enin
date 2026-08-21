@@ -15,7 +15,7 @@ export const CHARACTERS: Character[] = [
     opening: [
       "yatağımdayııım",
       "üstüm yok ellerim kayıyooo",
-      "seni düşününce ıslandım haberin yoook",
+      "ıslandım haberin yoook anlarsın ya",
     ],
     accent: "#b33a4a",
   },
