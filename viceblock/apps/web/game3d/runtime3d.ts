@@ -249,6 +249,16 @@ const SIM = {
   maxFrameSeconds: 0.25,
 };
 
+/** When the game gives up on the machine holding a full-resolution picture. */
+const PERF = {
+  /** Below this, in frames per second, the picture is judged to be struggling. */
+  lowFps: 42,
+  /** Sustained real seconds under that mark before anything is given up. */
+  lowSeconds: 6,
+  /** Ignored entirely at first: startup is slow everywhere. */
+  graceSeconds: 8,
+};
+
 interface MissionRuntime {
   id: string;
   step: number;
@@ -503,7 +513,8 @@ export class ViceblockRuntime3D {
   private lookedAt = -99;
   /** Real time owed to the simulation, paid off in fixed steps. */
   private simDebt = 0;
-  private perf = { low: 0, dropped: false };
+  /** Watchdog on the frame rate, in `performance.now()` milliseconds. */
+  private perf = { startedAt: 0, lowSince: 0, dropped: false };
   /** Upward camera kick from firing, worked off over the next moments. */
   private recoil = 0;
   /** Pitch to apply on the next camera update, cleared once consumed. */
@@ -636,6 +647,11 @@ export class ViceblockRuntime3D {
       const frame = Math.min(SIM.maxFrameSeconds, (now - last) / 1000);
       last = now;
       if (this.running) {
+        // Once a frame, off the wall clock. Judging the frame rate from inside
+        // the fixed step counted eight times over on exactly the machines it is
+        // meant to help, so a slow second looked like eight and the drop fired
+        // before the player had finished reading the loading screen.
+        this.updatePerf(now);
         this.updateEffects(frame);
         this.stepSim(frame);
         this.scene.render();
@@ -701,7 +717,7 @@ export class ViceblockRuntime3D {
     this.quality = q === "auto" ? defaultQuality(this.input.mobile) : q;
     this.applyQuality();
     // A manual choice ends the automatic one, in both directions.
-    this.perf = { low: 0, dropped: true };
+    this.perf = { startedAt: 0, lowSince: 0, dropped: true };
   }
 
   /**
@@ -709,12 +725,26 @@ export class ViceblockRuntime3D {
    * frame rate. Cars stay just as quick either way now that the simulation runs
    * on its own clock, but a stuttering picture still reads as a slow car.
    */
-  private updatePerf(dt: number): void {
+  private updatePerf(now: number): void {
     if (this.perf.dropped) return;
+    // A wall clock, not the frame delta: that delta is capped so a stalled tab
+    // cannot lurch the world forward, which on a machine drawing three frames
+    // a second also made this watchdog run at a third of real speed — slowest
+    // exactly where it is supposed to step in soonest.
+    if (this.perf.startedAt === 0) this.perf.startedAt = now;
+    // The first seconds on the street are shader compiles, texture uploads and
+    // a cold cache, and they are slow on hardware that then runs the game
+    // perfectly well. Judging the machine on them condemned it for the whole
+    // session on the strength of its worst moment.
+    if (now - this.perf.startedAt < PERF.graceSeconds * 1000) return;
     const fps = this.engine.getFps();
     if (!Number.isFinite(fps) || fps <= 0) return;
-    this.perf.low = fps < 42 ? this.perf.low + dt : 0;
-    if (this.perf.low < 4) return;
+    if (fps >= PERF.lowFps) {
+      this.perf.lowSince = 0;
+      return;
+    }
+    if (this.perf.lowSince === 0) this.perf.lowSince = now;
+    if (now - this.perf.lowSince < PERF.lowSeconds * 1000) return;
     this.perf.dropped = true;
     // Already at the bottom: there is nothing left to give up, and announcing
     // a drop that did not happen just tells the player their machine is the
@@ -2350,7 +2380,6 @@ export class ViceblockRuntime3D {
     }
     if (this.storm) this.weather = "rain";
     this.updateDayNight();
-    this.updatePerf(dt);
 
     if (this.newsT > 0) this.newsT -= dt;
     else this.news = "";
