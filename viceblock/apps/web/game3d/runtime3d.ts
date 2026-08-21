@@ -2849,7 +2849,14 @@ export class ViceblockRuntime3D {
       this.webMesh.setEnabled(false);
       return;
     }
-    const hand = new Vector3(this.player.x, this.player.y + 26, this.player.z);
+    // The raised right hand, not the middle of the chest. A line leaving the
+    // body between the shoulders is the clearest tell that nobody is holding it.
+    const h = this.player.heading;
+    const hand = new Vector3(
+      this.player.x + Math.cos(h) - Math.sin(h) * -3.8,
+      this.player.y + 22,
+      this.player.z + Math.sin(h) + Math.cos(h) * -3.8,
+    );
     const anchor = new Vector3(line.x, line.y, line.z);
     const span = Vector3.Distance(hand, anchor);
     this.webMesh.setEnabled(true);
@@ -3128,15 +3135,17 @@ export class ViceblockRuntime3D {
     const topSpeed = def
       ? Math.max(1, maxSpeedFor({ acceleration: def.acceleration, topSpeed: def.topSpeed, handling: def.handling, braking: def.braking, grip: 1, power: 1 }))
       : 1;
-    // Sighting up pulls the camera in over the shoulder.
-    // A swing reads as fast only if the lens gives it room, so the boom opens
-    // out with airspeed the same way it does with a car.
-    const air = this.player.grounded || this.player.vehicleId ? 0 : Math.min(150, Math.hypot(this.flight.vx, this.flight.vz) * 0.32);
-    let dist = (car ? speedCameraDistance(165, speed, topSpeed) : 175 + air) * this.camZoom * (this.aiming ? AIM_CONFIG.zoomScale : 1);
+    // Sighting up pulls the camera in over the shoulder. Off the ground the
+    // boom comes in instead of opening out: a swing is worth watching, and at
+    // walking distance the body doing it is a thumbnail against a whole city.
+    // Speed reads through the lens widening rather than the camera retreating.
+    const airborne = !this.player.grounded && !this.player.vehicleId;
+    const air = airborne ? Math.min(60, Math.hypot(this.flight.vx, this.flight.vz) * 0.14) : 0;
+    let dist = (car ? speedCameraDistance(165, speed, topSpeed) : (airborne ? 132 : 175) + air) * this.camZoom * (this.aiming ? AIM_CONFIG.zoomScale : 1);
     // The lens opens as you wind the car out, so speed reads on screen, and
     // closes down over the sights, which is what selling "aiming" takes when
     // the shoulder camera has a wall behind it and cannot pull in.
-    const wantFov = car ? speedFov(this.baseFov, speed, topSpeed) : this.baseFov * (this.aiming ? 0.76 : 1);
+    const wantFov = car ? speedFov(this.baseFov, speed, topSpeed) : this.baseFov * (this.aiming ? 0.76 : 1 + air / 900);
     this.camera.fov += (wantFov - this.camera.fov) * Math.min(1, dt * 2.5);
     if (this.input.consumeResetView()) this.resetCamera();
     const stick = this.input.look();
