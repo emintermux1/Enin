@@ -2446,7 +2446,15 @@ export class ViceblockRuntime3D {
     if (!this.director.active) {
       this.blackout = false;
       this.crackdown = false;
-      this.storm = false;
+      // A storm pins the weather to rain while it runs. Clearing the flag alone
+      // left the rain to run until the next turn of the weather cycle, which is
+      // four minutes against the storm's ninety seconds — so the roads stayed
+      // slick long after the event that made them so had been announced over.
+      if (this.storm) {
+        this.storm = false;
+        this.weather = "clear";
+        this.weatherT = 0;
+      }
     }
 
     if (this.fenceOfferT > 0) this.fenceOfferT -= dt;
@@ -4904,10 +4912,19 @@ export class ViceblockRuntime3D {
     }
     if (report.delay <= 0) {
       this.raiseHeat(report.heatAdd);
-    } else if (this.pendingReports.length < 2) {
-      this.pendingReports.push({ t: report.delay, heatAdd: report.heatAdd });
-      this.flash("WITNESS  ·  someone's dialing 911  ·  move");
+      return;
     }
+    // Two calls can be in flight at once. A third witness used to be dropped on
+    // the floor — no heat, no warning, nothing — so a fast enough spree stopped
+    // being reported at all, and the more crimes you committed in a row the
+    // less the city noticed. Fold it into the call already on its way instead.
+    if (this.pendingReports.length >= 2) {
+      const soonest = this.pendingReports.reduce((a, b) => (a.t <= b.t ? a : b));
+      soonest.heatAdd += report.heatAdd;
+      return;
+    }
+    this.pendingReports.push({ t: report.delay, heatAdd: report.heatAdd });
+    this.flash("WITNESS  ·  someone's dialing 911  ·  move");
   }
 
   private exitVehicle(): void {
