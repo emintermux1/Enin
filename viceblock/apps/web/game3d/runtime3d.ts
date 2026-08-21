@@ -1308,6 +1308,17 @@ export class ViceblockRuntime3D {
     return m;
   }
 
+  /**
+   * A light beam, not a lump of coloured plastic: additive blending means the
+   * cone only ever brightens what is behind it, which is how light behaves.
+   */
+  private beam(name: string, hex: string, alpha: number): StandardMaterial {
+    const m = this.glow(name, hex, alpha);
+    m.alphaMode = Engine.ALPHA_ADD;
+    m.backFaceCulling = false;
+    return m;
+  }
+
   /** The club's name in neon, painted straight onto the stage's back wall. */
   private signWall(name: string): StandardMaterial {
     const tex = new DynamicTexture(`${name}-tex`, { width: 512, height: 192 }, this.scene, false);
@@ -1381,7 +1392,19 @@ export class ViceblockRuntime3D {
     const cz = 59 * TILE;
     const half = 168;
     const P = "club-";
-    this.buildRoomShell(P, cx, cz, half, "#1a1220", "#2a1830", "#120a18", 108);
+    this.buildRoomShell(P, cx, cz, half, "#1a1220", "#3a2242", "#160c1e", 108);
+    // Neon coving on the side walls: a dark club still needs walls you can see,
+    // otherwise the room reads as a black void with furniture floating in it.
+    for (const side of [-1, 1]) {
+      for (const [i, y] of [30, 70].entries()) {
+        const cove = MeshBuilder.CreateBox(`${P}cove-${side}-${i}`, { width: 4, depth: half * 1.8, height: 3 }, this.scene);
+        cove.material = this.glow(`${P}m-cove-${side}-${i}`, i ? "#8a4aff" : "#4ad8c8", 0.9);
+        cove.position = new Vector3(cx + side * (half - 5), INTERIOR_Y + y, cz);
+      }
+    }
+    const rearCove = MeshBuilder.CreateBox(`${P}cove-rear`, { width: half * 1.9, depth: 4, height: 3 }, this.scene);
+    rearCove.material = this.glow(`${P}m-cove-rear`, "#ff2f9a", 0.9);
+    rearCove.position = new Vector3(cx, INTERIOR_Y + 84, cz + half - 5);
 
     // Stage: raised deck at the back, two poles, three dancers on it.
     const stageZ = cz - half + 54;
@@ -1410,7 +1433,7 @@ export class ViceblockRuntime3D {
         { height: 64, diameterTop: 8, diameterBottom: 40, tessellation: 10 },
         this.scene,
       );
-      spot.material = this.glow(`${P}m-stage-spot-${i}`, "#ffe6f4", 0.2);
+      spot.material = this.beam(`${P}m-stage-spot-${i}`, "#ffd8ec", 0.14);
       spot.isPickable = false;
       spot.position = new Vector3(cx + (i === 0 ? -52 : 52), INTERIOR_Y + 60, stageZ);
     }
@@ -1456,7 +1479,7 @@ export class ViceblockRuntime3D {
         { height: 76, diameterTop: 6, diameterBottom: 54, tessellation: 10 },
         this.scene,
       );
-      const m = this.glow(`${P}wash-mat-${i}`, hex, 0.16);
+      const m = this.beam(`${P}wash-mat-${i}`, hex, 0.1);
       beam.material = m;
       beam.isPickable = false;
       beam.position = new Vector3(cx + Math.cos(ang) * 74, INTERIOR_Y + 62, cz + Math.sin(ang) * 60);
@@ -1580,7 +1603,7 @@ export class ViceblockRuntime3D {
         { height: 22, diameterTop: 16, diameterBottom: 4, tessellation: 8 },
         this.scene,
       );
-      wash.material = this.glow(`clubdoor-wash-mat-${side}`, "#ff2f9a", 0.22);
+      wash.material = this.beam(`clubdoor-wash-mat-${side}`, "#ff2f9a", 0.16);
       wash.isPickable = false;
       wash.position = new Vector3(dx + side * 15, 11, dz + 2);
     }
@@ -1789,16 +1812,19 @@ export class ViceblockRuntime3D {
     if (this.interiorMode?.id !== "malibu-club") return;
     const t = this.clock;
     for (const d of this.clubDancers) this.poseDance(d, t);
-    // The floor runs a four-colour chase locked to the same beat the dancers use.
+    // The floor runs a four-colour chase locked to the same beat the dancers
+    // use, and every few bars the whole grid slams to one colour — a chase
+    // alone just permutes the same palette and reads as a static floor.
     const beat = Math.floor(t * 2.2);
     const palette = ["#ff2f9a", "#4ad8c8", "#f0c040", "#8a4aff"];
+    const unison = Math.floor(beat / 6) % 3 === 2;
     for (const tile of this.clubTiles) {
-      const hex = palette[(beat + tile.phase) % palette.length] ?? "#ff2f9a";
-      const lift = 0.55 + 0.45 * Math.abs(Math.sin(t * 4.4 + tile.phase));
+      const hex = palette[(beat + (unison ? 0 : tile.phase)) % palette.length] ?? "#ff2f9a";
+      const lift = unison ? 0.5 + 0.85 * Math.abs(Math.sin(t * 6.6)) : 0.55 + 0.45 * Math.abs(Math.sin(t * 4.4 + tile.phase));
       tile.mat.emissiveColor = Color3.FromHexString(hex).scale(lift);
     }
     for (const w of this.clubWashes) {
-      w.mat.alpha = 0.1 + 0.14 * Math.abs(Math.sin(t * 2.6 + w.phase));
+      w.mat.alpha = 0.07 + 0.09 * Math.abs(Math.sin(t * 2.6 + w.phase));
       w.mesh.rotation.y += dt * 0.9;
     }
     if (this.clubBall) this.clubBall.rotation.y += dt * 1.4;
@@ -1852,8 +1878,19 @@ export class ViceblockRuntime3D {
   private exitInterior(): void {
     if (!this.interiorMode) return;
     const club = this.interiorMode.id === "malibu-club";
-    this.player.x = this.interiorMode.returnX;
-    this.player.z = this.interiorMode.returnZ;
+    // Step out a clear stride onto the pavement with the camera left in the
+    // street looking back at the frontage. Landing flush against the door with
+    // the boom behind the player buries the lens in the building.
+    const door = this.landmarkDoor(this.interiorMode.id);
+    if (door) {
+      this.player.x = door.x;
+      this.player.z = door.z + TILE * 1.15;
+      this.player.heading = -Math.PI / 2;
+      this.player.camYaw = Math.PI;
+    } else {
+      this.player.x = this.interiorMode.returnX;
+      this.player.z = this.interiorMode.returnZ;
+    }
     this.clearInterior();
     if (club) this.flash("MALIBU CLUB  ·  back out on the strip");
     this.audio.uiClick();
