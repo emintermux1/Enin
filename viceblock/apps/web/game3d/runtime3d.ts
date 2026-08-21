@@ -2390,6 +2390,17 @@ export class ViceblockRuntime3D {
     return this.city.tops[tz * MAP_W + tx] ?? 0;
   }
 
+  /** The four corners and the middle of the player's footprint. */
+  private footprint(x: number, z: number, rad: number): Array<[number, number]> {
+    return [
+      [x - rad, z - rad],
+      [x + rad, z - rad],
+      [x - rad, z + rad],
+      [x + rad, z + rad],
+      [x, z],
+    ];
+  }
+
   /**
    * Whether a body of the player's size is inside something at this height.
    * At street level the old 2D answer still stands, which keeps water, kerbs
@@ -2398,38 +2409,29 @@ export class ViceblockRuntime3D {
    */
   private airSolid(x: number, z: number, y: number, rad = PLAYER_CONFIG.radius): boolean {
     if (y <= LEDGE_STEP) return blocked(this.world, x, z, rad);
-    const pts: Array<[number, number]> = [
-      [x - rad, z - rad],
-      [x + rad, z - rad],
-      [x - rad, z + rad],
-      [x + rad, z + rad],
-      [x, z],
-    ];
-    for (const [px, pz] of pts) if (y < this.topAt(px, pz) - LEDGE_STEP) return true;
+    for (const [px, pz] of this.footprint(x, z, rad)) if (y < this.topAt(px, pz) - LEDGE_STEP) return true;
     return false;
   }
 
   /**
-   * Whether a face is a building you can hold onto. Off the map every column
-   * reads as infinitely solid, and a wall with no top is a wall you climb
-   * forever, so the boundary has to stay a limit rather than a route.
+   * Whether the thing in the way here is a building you can hold onto. Off the
+   * map every column reads as infinitely solid, and a wall with no top is a
+   * wall you climb forever, so the boundary stays a limit rather than a route.
+   * A shoulder clips the corner of a tower more often than the chest hits it
+   * square on, so this asks the whole footprint, same as the collision did.
    */
-  private climbable(x: number, z: number): boolean {
-    const top = this.topAt(x, z);
-    return Number.isFinite(top) && top > 0;
+  private climbable(x: number, z: number, y: number, rad = PLAYER_CONFIG.radius): boolean {
+    for (const [px, pz] of this.footprint(x, z, rad)) {
+      const top = this.topAt(px, pz);
+      if (Number.isFinite(top) && y < top - LEDGE_STEP) return true;
+    }
+    return false;
   }
 
   /** The surface under the player's feet: a rooftop if they are over one. */
   private supportY(x: number, z: number, y: number, rad = PLAYER_CONFIG.radius): number {
     let best = 0;
-    const pts: Array<[number, number]> = [
-      [x - rad, z - rad],
-      [x + rad, z - rad],
-      [x - rad, z + rad],
-      [x + rad, z + rad],
-      [x, z],
-    ];
-    for (const [px, pz] of pts) {
+    for (const [px, pz] of this.footprint(x, z, rad)) {
       const top = this.topAt(px, pz);
       if (!Number.isFinite(top) || top <= 0) continue;
       if (top <= y + LEDGE_STEP && top > best) best = top;
@@ -2635,7 +2637,7 @@ export class ViceblockRuntime3D {
     if (Math.hypot(next.vx, next.vz) > 30) this.player.heading = Math.atan2(next.vz, next.vx);
     // Hit a wall with air under you: stick to it. That is the difference
     // between a building being an obstacle and a building being a route.
-    if (hitDir !== null && hitFace && this.climbable(hitFace[0], hitFace[1]) && !this.web && this.player.y > 14) {
+    if (hitDir !== null && hitFace && this.climbable(hitFace[0], hitFace[1], y) && !this.web && this.player.y > 14) {
       this.cling = { dir: hitDir, t: 0 };
       this.flight = { vx: 0, vy: 0, vz: 0 };
       this.audio.foot(false, "concrete");
@@ -2697,7 +2699,7 @@ export class ViceblockRuntime3D {
     }
     // Sidled off the end of the wall, or onto the edge of the map: nothing
     // left to hold either way.
-    if ((!this.airSolid(fx, fz, this.player.y) || !this.climbable(fx, fz)) && this.player.y > 4) {
+    if ((!this.airSolid(fx, fz, this.player.y) || !this.climbable(fx, fz, this.player.y)) && this.player.y > 4) {
       this.cling = null;
       this.player.grounded = false;
     }
