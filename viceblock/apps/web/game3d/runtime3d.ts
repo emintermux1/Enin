@@ -2,7 +2,7 @@ import { Engine } from "@babylonjs/core/Engines/engine";
 import { HemisphericLight } from "@babylonjs/core/Lights/hemisphericLight";
 import { DirectionalLight } from "@babylonjs/core/Lights/directionalLight";
 import { Color3, Color4 } from "@babylonjs/core/Maths/math.color";
-import { Vector3 } from "@babylonjs/core/Maths/math.vector";
+import { Quaternion, Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { FreeCamera } from "@babylonjs/core/Cameras/freeCamera";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import type { Mesh } from "@babylonjs/core/Meshes/mesh";
@@ -980,7 +980,7 @@ export class ViceblockRuntime3D {
     smg.parent = armR;
     smg.position.set(2.2, -4.6, 0);
     smg.setEnabled(false);
-    root.metadata = { armL, armR, legL, legR, pistol, smg };
+    root.metadata = { armL, armR, legL, legR, pistol, smg, shadow };
     return root;
   }
 
@@ -2341,8 +2341,25 @@ export class ViceblockRuntime3D {
     if (!this.interiorMode) this.tryFire(dt);
     const elev = this.interiorMode ? INTERIOR_Y : 0;
     const bob = mag > 0.05 && this.player.grounded ? Math.abs(Math.sin(this.clock * (axis.sprint ? 14 : 9))) * 1.1 : 0;
-    this.playerMesh.position.set(this.player.x, elev + this.player.y + bob, this.player.z);
-    this.playerMesh.rotation.y = -this.player.heading;
+    // Stand off the brickwork a little, or the tilted body sinks half of
+    // itself into the facade it is holding.
+    const hug = this.cling ? -6 : 0;
+    this.playerMesh.position.set(
+      this.player.x + Math.cos(this.cling?.dir ?? 0) * hug,
+      elev + this.player.y + bob,
+      this.player.z + Math.sin(this.cling?.dir ?? 0) * hug,
+    );
+    // A contact shadow makes no sense on a body in mid-air.
+    const shadow = (this.playerMesh.metadata as { shadow?: Mesh } | undefined)?.shadow;
+    shadow?.setEnabled(this.player.grounded && !this.cling);
+    if (this.cling) {
+      // Belly to the brickwork. Standing bolt upright while sliding up a wall
+      // read as levitating, not climbing.
+      this.playerMesh.rotationQuaternion = Quaternion.RotationYawPitchRoll(-this.player.heading, -0.62, 0);
+    } else {
+      this.playerMesh.rotationQuaternion = null;
+      this.playerMesh.rotation.y = -this.player.heading;
+    }
     if (mag > 0.05) this.danceT = 0;
     if (airborne) {
       this.poseSling(this.playerMesh);
@@ -2446,12 +2463,12 @@ export class ViceblockRuntime3D {
   private fireWeb(): void {
     const a = this.findAnchor();
     if (!a) {
-      // Say it once. Held down, this used to reprint the same complaint three
-      // times a second and bury every other message on screen.
+      // The reticle and the readout already say there is nothing to catch, so
+      // a toast in the middle of the screen only covers the city up.
       this.webCooldown = 0.3;
       if (!this.webWarned) {
         this.webWarned = true;
-        this.flash("NO ANCHOR  ·  aim at something tall");
+        this.audio.uiClick();
       }
       return;
     }
@@ -2488,7 +2505,7 @@ export class ViceblockRuntime3D {
     if (this.interiorMode || this.player.vehicleId) return;
     const a = this.findAnchor(24);
     if (!a) {
-      this.flash("NO ANCHOR  ·  aim at something tall");
+      this.audio.uiClick();
       return;
     }
     const v = zipVelocity(this.player.x, this.player.y, this.player.z, a.x, a.y, a.z);
@@ -2700,14 +2717,17 @@ export class ViceblockRuntime3D {
   private showSplat(a: { x: number; y: number; z: number }): void {
     this.splatT = 1.1;
     if (!this.webSplat) {
-      const m = MeshBuilder.CreateBox("web-splat", { width: 9, height: 9, depth: 9 }, this.scene);
-      m.material = this.material("#ffffff", 0.5);
+      // A patch of web stuck to the brickwork, not the white sugar cube this
+      // used to be: flat, turned to face the shooter, and only lightly lit.
+      const m = MeshBuilder.CreateBox("web-splat", { width: 8, height: 8, depth: 1.4 }, this.scene);
+      m.material = this.material("#e8e8ea", 0.3);
       m.isPickable = false;
       m.applyFog = false;
       this.webSplat = m;
     }
     this.webSplat.setEnabled(true);
     this.webSplat.position.set(a.x, a.y, a.z);
+    this.webSplat.lookAt(new Vector3(this.player.x, this.player.y + 20, this.player.z));
   }
 
   /** Drop everything: used by interiors, arrest and death. */
@@ -2835,7 +2855,10 @@ export class ViceblockRuntime3D {
    * between. Walks the boom in from the requested length in short steps.
    */
   private clearCameraDistance(want: number): number {
-    const min = Math.min(40, want);
+    // Start close. Beginning the walk at 40 meant that when the only clear air
+    // was nearer than that — flat against a wall, say — the boom gave up and
+    // parked inside the building anyway.
+    const min = Math.min(18, want);
     let last = min;
     for (let d = min; d <= want; d += 12) {
       const p = this.cameraPlace(d);
@@ -2983,6 +3006,13 @@ export class ViceblockRuntime3D {
     if (car && speed > 30 && !looking) {
       const desired = Math.atan2(car.rt.vx, car.rt.vy);
       this.player.camYaw += normalizeAngle(desired - this.player.camYaw) * Math.min(1, dt * 3);
+    }
+    // On a wall the boom has to end up out over the street. Left alone it
+    // pointed straight into the brickwork the player was holding, and the
+    // whole screen filled with the inside of the building.
+    if (this.cling && !looking) {
+      const want = normalizeAngle(Math.PI / 2 - this.cling.dir);
+      this.player.camYaw += normalizeAngle(want - this.player.camYaw) * Math.min(1, dt * 2.6);
     }
     const elev = this.interiorMode ? INTERIOR_Y : 0;
     // Pull the camera in until the line back from the player is clear. Lifting

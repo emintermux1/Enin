@@ -1,7 +1,7 @@
 import { Color3, Color4 } from "@babylonjs/core/Maths/math.color";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
-import type { Mesh } from "@babylonjs/core/Meshes/mesh";
+import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
 import type { Texture } from "@babylonjs/core/Materials/Textures/texture";
@@ -39,7 +39,10 @@ function canvas2d(ctx: ReturnType<DynamicTexture["getContext"]>): CanvasRenderin
 }
 
 function windowTexture(scene: Scene, name: string, wall: string, lit: string): DynamicTexture {
-  const tex = new DynamicTexture(name, { width: 256, height: 512 }, scene, false);
+  // Mipmapped: a facade texture repeated up a tower and then viewed from three
+  // streets away samples the full-size image for every pixel without them,
+  // which both shimmers and costs fill rate on weak hardware.
+  const tex = new DynamicTexture(name, { width: 256, height: 512 }, scene, true);
   const ctx = canvas2d(tex.getContext());
   ctx.fillStyle = wall;
   ctx.fillRect(0, 0, 256, 512);
@@ -262,16 +265,68 @@ function roofDeck(
   const root = MeshBuilder.CreateBox(`${id}-deck`, { width: w, depth: d, height: 2.4 }, scene);
   root.position = new Vector3(cx, height + 1.2, cz);
   root.material = deck;
-  const box = MeshBuilder.CreateBox(`${id}-vent`, { width: Math.min(16, w * 0.3), depth: Math.min(11, d * 0.3), height: 7 }, scene);
-  box.position = new Vector3(cx - w * 0.2, height + 5.4, cz + d * 0.16);
-  box.material = vent;
-  box.parent = root;
-  const stack = MeshBuilder.CreateCylinder(`${id}-stack`, { height: 12, diameter: 4.4, tessellation: 8 }, scene);
-  stack.position = new Vector3(cx + w * 0.24, height + 8, cz - d * 0.2);
+  // A block-wide roof with one vent on it still reads as an empty grey sheet,
+  // so the clutter scales with the deck: stair huts, plant and water tanks.
+  const cols = Math.max(1, Math.min(3, Math.floor(w / 120)));
+  const rows = Math.max(1, Math.min(3, Math.floor(d / 120)));
+  let n = 0;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const ox = cols === 1 ? -w * 0.16 : -w / 2 + (w / (cols + 1)) * (c + 1);
+      const oz = rows === 1 ? d * 0.14 : -d / 2 + (d / (rows + 1)) * (r + 1);
+      const pick = (c + r + Math.floor(cx / TILE) + Math.floor(cz / TILE)) % 3;
+      // Local to the deck: parenting these at world coordinates threw them a
+      // thousand units off the building and left specks hanging in the sky.
+      if (pick === 0) {
+        const hut = MeshBuilder.CreateBox(`${id}-hut${n}`, { width: Math.min(26, w * 0.3), depth: Math.min(20, d * 0.3), height: 16 }, scene);
+        hut.position = new Vector3(ox, 9.2, oz);
+        hut.material = deck;
+        hut.parent = root;
+      } else if (pick === 1) {
+        const box = MeshBuilder.CreateBox(`${id}-vent${n}`, { width: Math.min(22, w * 0.3), depth: Math.min(16, d * 0.3), height: 9 }, scene);
+        box.position = new Vector3(ox, 5.7, oz);
+        box.material = vent;
+        box.parent = root;
+      } else {
+        const tank = MeshBuilder.CreateCylinder(`${id}-tank${n}`, { height: 18, diameter: Math.min(22, w * 0.26), tessellation: 10 }, scene);
+        tank.position = new Vector3(ox, 10.2, oz);
+        tank.material = vent;
+        tank.parent = root;
+      }
+      n++;
+    }
+  }
+  const stack = MeshBuilder.CreateCylinder(`${id}-stack`, { height: 16, diameter: 5.2, tessellation: 8 }, scene);
+  stack.position = new Vector3(w * 0.3, 9.2, -d * 0.3);
   stack.material = vent;
   stack.parent = root;
   root.freezeWorldMatrix();
   return root;
+}
+
+/**
+ * A lip round the edge of a roof, so you can see where one ends before you
+ * walk off it. Merged into a single mesh: four boxes per building across the
+ * whole city is a thousand extra draws for one low wall.
+ */
+function parapetRing(scene: Scene, id: string, cx: number, cz: number, bw: number, bd: number, height: number, material: StandardMaterial): Mesh | null {
+  const bars: Mesh[] = [];
+  const spec: Array<[number, number, number, number]> = [
+    [bw, 2.6, 0, bd / 2 - 1.3],
+    [bw, 2.6, 0, -bd / 2 + 1.3],
+    [2.6, bd, bw / 2 - 1.3, 0],
+    [2.6, bd, -bw / 2 + 1.3, 0],
+  ];
+  spec.forEach(([w, d, ox, oz], i) => {
+    const bar = MeshBuilder.CreateBox(`${id}-${i}`, { width: w, depth: d, height: 4 }, scene);
+    bar.position = new Vector3(cx + ox, height + 2, cz + oz);
+    bars.push(bar);
+  });
+  const ring = Mesh.MergeMeshes(bars, true, true);
+  if (!ring) return null;
+  ring.material = material;
+  ring.freezeWorldMatrix();
+  return ring;
 }
 
 function shopTexture(scene: Scene, glass: string): DynamicTexture {
@@ -408,9 +463,21 @@ export function buildCity(scene: Scene, world: WorldData, kit: TextureKit): City
   (winB as Texture).uScale = 2.2;
   (winB as Texture).vScale = 8.8;
 
-  const roofMat = kit.material("concrete", "#3b3733");
-  const ventMat = mat(scene, "m-vent", "#6d6a63");
-  const parapetMat = mat(scene, "m-parapet", "#2e2724");
+  // Two deck tones so a skyline of roofs is not one flat sheet of grey. The
+  // texture has to repeat, or one block-wide roof stretches a single tile of
+  // concrete across four hundred units and reads as painted card.
+  const roofMats = [kit.material("concrete", "#454039"), kit.material("concrete", "#585049")];
+  for (const m of roofMats) {
+    const tex = m.diffuseTexture as Texture | null;
+    if (tex) {
+      tex.uScale = 7;
+      tex.vScale = 7;
+      tex.wrapU = 1;
+      tex.wrapV = 1;
+    }
+  }
+  const ventMat = mat(scene, "m-vent", "#67615a");
+  const parapetMat = mat(scene, "m-parapet", "#6c645a");
 
   const seen = new Uint8Array(MAP_W * MAP_H);
   const landmarkArea = new Set<number>();
@@ -458,6 +525,9 @@ export function buildCity(scene: Scene, world: WorldData, kit: TextureKit): City
       // A skyline you can swing through. At the old 48-144 the tallest roof was
       // barely five times the player's height, so a line fired from the street
       // hung almost level and every arc scraped the pavement.
+      // A skyline you can swing through. At the old 48-144 the tallest roof was
+      // barely five times the player's height, so a line fired from the street
+      // hung almost level and every arc scraped the pavement.
       const height = 84 + ((x * 7 + y * 13) % 5) * 52;
       for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) tops[(y + j) * MAP_W + x + i] = height;
       const bw = w * TILE - 4;
@@ -469,20 +539,9 @@ export function buildCity(scene: Scene, world: WorldData, kit: TextureKit): City
       box.material = (x + y) % 2 ? buildingMat : buildingMat2;
       box.freezeWorldMatrix();
       disposables.push(box);
-      disposables.push(roofDeck(scene, `b-${x}-${y}`, cx, cz, bw - 3, bd - 3, height, roofMat, ventMat));
-      // A parapet you can see over the edge of, and land against.
-      for (const [pw, pd, ox, oz] of [
-        [bw, 2.6, 0, bd / 2 - 1.3],
-        [bw, 2.6, 0, -bd / 2 + 1.3],
-        [2.6, bd, bw / 2 - 1.3, 0],
-        [2.6, bd, -bw / 2 + 1.3, 0],
-      ] as Array<[number, number, number, number]>) {
-        const wallTop = MeshBuilder.CreateBox(`bp-${x}-${y}-${ox}-${oz}`, { width: pw, depth: pd, height: 4 }, scene);
-        wallTop.position = new Vector3(cx + ox, height + 2, cz + oz);
-        wallTop.material = parapetMat;
-        wallTop.freezeWorldMatrix();
-        disposables.push(wallTop);
-      }
+      disposables.push(roofDeck(scene, `b-${x}-${y}`, cx, cz, bw - 3, bd - 3, height, roofMats[(x + y) % 2] ?? roofMats[0], ventMat));
+      const parapet = parapetRing(scene, `bp-${x}-${y}`, cx, cz, bw, bd, height, parapetMat);
+      if (parapet) disposables.push(parapet);
       const kit = (x + y) % 3;
       dressBuildingKit(scene, disposables, `b-${x}-${y}`, cx, cz, bw, bd, height, shopMats[kit] ?? shopGlassA, awningCols[kit] ?? awningCols[0], railMat, neonMats[kit] ?? neonMats[0]);
       if (((x + y) & 3) === 0) {
@@ -538,7 +597,7 @@ export function buildCity(scene: Scene, world: WorldData, kit: TextureKit): City
       bar.freezeWorldMatrix();
       disposables.push(bar);
     });
-    disposables.push(roofDeck(scene, `lr-${lm.id}`, box.position.x, box.position.z, lw - 6, ld - 6, height, roofMat, ventMat));
+    disposables.push(roofDeck(scene, `lr-${lm.id}`, box.position.x, box.position.z, lw - 6, ld - 6, height, roofMats[0], ventMat));
 
     // Recessed door on the south face — the street the player actually walks.
     const door = MeshBuilder.CreateBox(`ld-${lm.id}`, { width: 16, depth: 4, height: 20 }, scene);
