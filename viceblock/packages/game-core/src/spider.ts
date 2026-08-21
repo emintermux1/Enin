@@ -43,8 +43,8 @@ export const SPIDER_CONFIG = {
   releaseBoost: 120,
   /** A zip winches you toward the anchor at this speed. */
   zipSpeed: 560,
-  /** How close to the anchor counts as having arrived. */
-  zipArrive: 20,
+  /** How close to the target counts as having arrived. */
+  zipArrive: 6,
   /**
    * Ceiling on swing speed. Roughly three times what a car does, which is the
    * point of the web, but slow enough that a district still takes a few arcs

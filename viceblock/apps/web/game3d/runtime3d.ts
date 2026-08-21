@@ -2597,7 +2597,11 @@ export class ViceblockRuntime3D {
       this.audio.uiClick();
       return;
     }
-    this.zipTo = a;
+    // The line catches on the lip, but the point of a zip is to end up on the
+    // roof, so the winch aims at the deck above it. Stopping level with the
+    // parapet leaves you hanging in the air just short of the building.
+    const top = this.topAt(a.x, a.z);
+    this.zipTo = Number.isFinite(top) && top > 0 ? { x: a.x, y: top + 14, z: a.z } : a;
     this.web = null;
     this.cling = null;
     this.player.grounded = false;
@@ -2665,7 +2669,14 @@ export class ViceblockRuntime3D {
     let next: SwingState;
     if (this.zipTo) {
       const out = stepZip(state, this.zipTo, dt);
-      if (out.arrived) this.zipTo = null;
+      if (out.arrived) {
+        this.zipTo = null;
+        // Arriving is the end of the pull. Carrying the winch speed through it
+        // throws you clean over the parapet you just climbed to.
+        out.state.vx = 0;
+        out.state.vy = 0;
+        out.state.vz = 0;
+      }
       this.airT += dt;
       this.settleFlight(out.state);
       // Hitting the wall or topping out ends the pull; otherwise you would be
