@@ -908,6 +908,16 @@ export class ViceblockRuntime3D {
     }
   }
 
+  /** A fist thrown and pulled back, so bare-handed hits are readable too. */
+  private posePunch(mesh: Mesh, since: number): void {
+    if (since > 0.3) return;
+    const meta = mesh.metadata as { armR?: Mesh } | undefined;
+    if (!meta?.armR) return;
+    // Out fast, back slower: a jab rather than a wave.
+    const t = since < 0.1 ? since / 0.1 : 1 - (since - 0.1) / 0.2;
+    meta.armR.rotation.x = -1.7 * t;
+  }
+
   private poseWalk(mesh: Mesh, moving: boolean, sprint: boolean): void {
     const meta = mesh.metadata as { armL?: Mesh; armR?: Mesh; legL?: Mesh; legR?: Mesh } | undefined;
     if (!meta?.armL || !meta.armR || !meta.legL || !meta.legR) return;
@@ -1625,7 +1635,8 @@ export class ViceblockRuntime3D {
     this.playerMesh.position.set(this.player.x, elev + this.player.y + bob, this.player.z);
     this.playerMesh.rotation.y = -this.player.heading;
     this.poseWalk(this.playerMesh, mag > 0.05, axis.sprint);
-    this.poseAim(this.playerMesh, this.armed() && (this.aiming || this.clock - this.lastFired < 0.7), this.recoil * 3);
+    if (this.armed()) this.poseAim(this.playerMesh, this.aiming || this.clock - this.lastFired < 0.7, this.recoil * 3);
+    else this.posePunch(this.playerMesh, this.clock - this.lastFired);
     this.separateFromBodies();
   }
 
@@ -2641,6 +2652,7 @@ export class ViceblockRuntime3D {
     // Fists: a silent close-range swing.
     if (weapon.id === "fists") {
       this.lastShot = 0;
+      this.lastFired = this.clock;
       this.shake = this.settings.shake ? 2 : 0;
       this.audio.foot(true, "metal");
       const cop = this.cops.find((c) => Math.hypot(c.x - this.player.x, c.z - this.player.z) < weapon.range);
