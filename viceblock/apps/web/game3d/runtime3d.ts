@@ -393,8 +393,11 @@ export class ViceblockRuntime3D {
   private webSplat: Mesh | null = null;
   /** Velocity while off the ground: swinging, falling or thrown. */
   private flight = { vx: 0, vy: 0, vz: 0 };
-  /** Stuck to a wall: which way the wall lies, and how long you have hung there. */
-  private cling: { dir: number; t: number } | null = null;
+  /**
+   * Stuck to a wall: which way the wall lies, how long you have hung there,
+   * and how hard you are currently climbing it.
+   */
+  private cling: { dir: number; t: number; move: number } | null = null;
   /** The anchor currently being winched toward, while a zip is in flight. */
   private zipTo: { x: number; y: number; z: number } | null = null;
   private swingT = 0;
@@ -1038,6 +1041,11 @@ export class ViceblockRuntime3D {
     shoeR.material = bootMat;
     shoeR.position.set(0.6, bootH / 2, -1.7);
     shoeR.parent = root;
+    // Limbs turn at the shoulder and the hip, not around their own middle.
+    // Spun about the centre a raised arm is a stick through the torso, which
+    // is why every pose here read as a figure standing still.
+    for (const arm of [armL, armR]) arm.setPivotPoint(new Vector3(0, 4.3, 0));
+    for (const leg of [legL, legR]) leg.setPivotPoint(new Vector3(0, 4, 0));
     const shadow = MeshBuilder.CreateCylinder(`${name}-sh`, { diameter: 11, height: 0.35, tessellation: 10 }, this.scene);
     shadow.material = this.material("#0c0a08", 0);
     shadow.position.y = 0.16;
@@ -1125,17 +1133,21 @@ export class ViceblockRuntime3D {
     if (!meta?.armR) return;
     // Out fast, back slower: a jab rather than a wave.
     const t = since < 0.1 ? since / 0.1 : 1 - (since - 0.1) / 0.2;
-    meta.armR.rotation.x = -1.7 * t;
+    meta.armR.rotation.set(0, 0, 1.9 * t);
   }
 
-  private poseWalk(mesh: Mesh, moving: boolean, sprint: boolean): void {
+  /** `holdArms` leaves the arms to whatever is aiming or punching with them. */
+  private poseWalk(mesh: Mesh, moving: boolean, sprint: boolean, holdArms = false): void {
     const meta = mesh.metadata as { armL?: Mesh; armR?: Mesh; legL?: Mesh; legR?: Mesh } | undefined;
     if (!meta?.armL || !meta.armR || !meta.legL || !meta.legR) return;
     const swing = moving ? Math.sin(this.clock * (sprint ? 14 : 9)) * 0.7 : 0;
-    meta.armL.rotation.x = swing;
-    meta.armR.rotation.x = -swing;
-    meta.legL.rotation.x = -swing * 0.65;
-    meta.legR.rotation.x = swing * 0.65;
+    // Limbs swing front to back, which is a turn about z: the body faces +x.
+    if (!holdArms) {
+      meta.armL.rotation.set(0, 0, swing);
+      meta.armR.rotation.set(0, 0, -swing);
+    }
+    meta.legL.rotation.set(0, 0, -swing * 0.65);
+    meta.legR.rotation.set(0, 0, swing * 0.65);
   }
 
   /**
@@ -1147,20 +1159,32 @@ export class ViceblockRuntime3D {
     const meta = mesh.metadata as { armL?: Mesh; armR?: Mesh; legL?: Mesh; legR?: Mesh } | undefined;
     if (!meta?.armL || !meta.armR || !meta.legL || !meta.legR) return;
     if (this.cling) {
-      // Spread on the wall, one hand reaching up the brickwork.
-      const reach = Math.sin(this.clock * 6) * 0.3;
-      meta.armR.rotation.x = -2.4 + reach;
-      meta.armL.rotation.x = -2.4 - reach;
-      meta.legL.rotation.x = 0.5 - reach;
-      meta.legR.rotation.x = 0.5 + reach;
+      // Spread on the brickwork and hand over hand while you are moving on it.
+      // Held still the limbs settle, so hanging and climbing look different.
+      const reach = Math.sin(this.clock * 5) * 0.5 * this.cling.move;
+      meta.armR.rotation.set(0.55, 0, 2.5 + reach);
+      meta.armL.rotation.set(-0.55, 0, 2.5 - reach);
+      meta.legR.rotation.set(0.4, 0, -0.45 + reach);
+      meta.legL.rotation.set(-0.4, 0, -0.45 - reach);
       return;
     }
-    const rising = this.flight.vy > 0;
-    const tuck = rising ? 1 : 0.25;
-    meta.armR.rotation.x = this.web ? -2.6 : -1.5;
-    meta.armL.rotation.x = this.web ? -0.5 : -1.2;
-    meta.legL.rotation.x = -tuck + Math.sin(this.clock * 3) * 0.12;
-    meta.legR.rotation.x = -tuck * 0.4 - Math.sin(this.clock * 3) * 0.12;
+    if (this.web || this.zipTo) {
+      // One arm straight up the line it is holding, the other counterweighted
+      // behind, knees pulled up through the bottom of the arc.
+      const tuck = this.flight.vy > 0 ? 1.15 : 0.4;
+      const kick = Math.sin(this.clock * 3) * 0.14;
+      meta.armR.rotation.set(0, 0, 2.9);
+      meta.armL.rotation.set(0.3, 0, -0.8);
+      meta.legR.rotation.set(0, 0, tuck + kick);
+      meta.legL.rotation.set(0, 0, tuck * 0.55 - kick);
+      return;
+    }
+    // Free fall: arms and legs thrown wide, the shape that says no line.
+    const flail = Math.sin(this.clock * 4) * 0.2;
+    meta.armR.rotation.set(0.9, 0, 2.1 + flail);
+    meta.armL.rotation.set(-0.9, 0, 2.1 - flail);
+    meta.legR.rotation.set(0.5, 0, 0.35 - flail);
+    meta.legL.rotation.set(-0.5, 0, 0.15 + flail);
   }
 
   /**
@@ -2427,7 +2451,7 @@ export class ViceblockRuntime3D {
     if (this.cling) {
       // Belly to the brickwork. Standing bolt upright while sliding up a wall
       // read as levitating, not climbing.
-      this.playerMesh.rotationQuaternion = Quaternion.RotationYawPitchRoll(-this.player.heading, -0.62, 0);
+      this.playerMesh.rotationQuaternion = Quaternion.RotationYawPitchRoll(-this.player.heading, -0.85, 0);
     } else {
       this.playerMesh.rotationQuaternion = null;
       this.playerMesh.rotation.y = -this.player.heading;
@@ -2439,7 +2463,7 @@ export class ViceblockRuntime3D {
       // Standing still on the club floor after hitting E: dance, don't idle.
       this.poseDance({ mesh: this.playerMesh, style: 1, phase: 0, baseY: elev, baseRotY: -this.player.heading }, this.clock);
     } else {
-      this.poseWalk(this.playerMesh, mag > 0.05, axis.sprint);
+      this.poseWalk(this.playerMesh, mag > 0.05, axis.sprint, this.armed());
       if (this.armed()) this.poseAim(this.playerMesh, this.aiming || this.clock - this.lastFired < 0.7, this.recoil * 3);
       else this.posePunch(this.playerMesh, this.clock - this.lastFired);
     }
@@ -2741,7 +2765,7 @@ export class ViceblockRuntime3D {
         this.webCooldown = 0.12;
         this.webSplat?.setEnabled(false);
       }
-      this.cling = { dir: hitDir, t: 0 };
+      this.cling = { dir: hitDir, t: 0, move: 0 };
       this.flight = { vx: 0, vy: 0, vz: 0 };
       this.audio.foot(false, "concrete");
     }
@@ -2769,6 +2793,7 @@ export class ViceblockRuntime3D {
   private updateCling(dt: number, axis: { x: number; y: number; sprint: boolean }): void {
     if (!this.cling) return;
     this.cling.t += dt;
+    this.cling.move = Math.min(1, Math.hypot(axis.x, axis.y));
     const climb = SPIDER_CONFIG.climbSpeed * (axis.sprint ? 1.5 : 1);
     this.player.y = Math.max(0, this.player.y + -axis.y * climb * dt);
     const side = this.cling.dir + Math.PI / 2;
@@ -3698,7 +3723,7 @@ export class ViceblockRuntime3D {
       }
       c.mesh.position.set(c.x, 0, c.z);
       c.mesh.rotation.y = -ang;
-      this.poseWalk(c.mesh, true, this.heat.level >= 2);
+      this.poseWalk(c.mesh, true, this.heat.level >= 2, true);
       const d = Math.hypot(c.x - this.player.x, c.z - this.player.z);
       if (!c.quit) nearest = Math.min(nearest, d);
       const drawn = !c.quit && this.heat.level >= POLICE_CONFIG.copShootMinHeat && d < 260;
