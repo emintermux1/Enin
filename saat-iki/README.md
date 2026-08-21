@@ -6,7 +6,7 @@ Görsel seks sahnesi, porno model veya seks sesi yok.
 
 ## Canlı
 
-https://wispy-smoke-1364.zerodeploy.app
+https://small-dawn-3698.zerodeploy.app
 
 Geçici yayın (yaklaşık 72 saat). Yerelde:
 
