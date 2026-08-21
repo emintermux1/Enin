@@ -1067,6 +1067,12 @@ export function buildCity(scene: Scene, world: WorldData, kit: TextureKit): City
     [Cell.Dock]: kit.material("wood", "#5a4c3c"),
   };
 
+  // One mesh per surface, not one per run of tiles. Laying each row's runs as
+  // its own four-vertex quad came to sixteen hundred meshes for the ground
+  // alone, and around twelve hundred of them were in view at any moment: over
+  // a third of the frame's draw calls spent on flat floor. The UVs are baked
+  // per run before the merge, so each surface still tiles at its own density.
+  const surfaces = new Map<Cell, Mesh[]>();
   for (let y = 0; y < MAP_H; y++) {
     let runStart = -1;
     let runCell: Cell = Cell.Dirt;
@@ -1080,14 +1086,23 @@ export function buildCity(scene: Scene, world: WorldData, kit: TextureKit): City
         const w = (x - runStart) * TILE;
         const strip = MeshBuilder.CreateGround(`s-${y}-${runStart}`, { width: w, height: TILE }, scene);
         strip.position = new Vector3(runStart * TILE + w / 2, GROUND_Y + 0.08, y * TILE + TILE / 2);
-        strip.material = stripMats[runCell] ?? stripMats[Cell.Road];
         stripUV(strip, w, TILE, stripScale[runCell] ?? TILE);
-        strip.freezeWorldMatrix();
-        disposables.push(strip);
+        const bucket = surfaces.get(runCell);
+        if (bucket) bucket.push(strip);
+        else surfaces.set(runCell, [strip]);
         runStart = isStrip ? x : -1;
         runCell = c;
       }
     }
+  }
+  for (const [cell, strips] of surfaces) {
+    const merged = strips.length === 1 ? strips[0] : Mesh.MergeMeshes(strips, true, true);
+    if (!merged) continue;
+    merged.name = `surface-${cell}`;
+    merged.material = stripMats[cell] ?? stripMats[Cell.Road];
+    merged.isPickable = false;
+    merged.freezeWorldMatrix();
+    disposables.push(merged);
   }
 
   // Road markings. A single hairline down the middle of a black strip was the

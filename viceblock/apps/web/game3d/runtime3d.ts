@@ -5,7 +5,7 @@ import { Color3, Color4 } from "@babylonjs/core/Maths/math.color";
 import { Quaternion, Vector3, Vector4 } from "@babylonjs/core/Maths/math.vector";
 import { FreeCamera } from "@babylonjs/core/Cameras/freeCamera";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
-import type { Mesh } from "@babylonjs/core/Meshes/mesh";
+import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
@@ -184,6 +184,12 @@ const CLING_LEAN = 0.55;
  * for that on top of the depth of the chest.
  */
 const CLING_STANDOFF = 13;
+
+/**
+ * Distance at which a pedestrian's eyes, nose, ears and mouth stop being drawn.
+ * Comfortably beyond the third-person boom so the player keeps his own.
+ */
+const FACE_LOD_RANGE = 230;
 
 /** What the man at the Red Pump wants for the piece he keeps under the till. */
 const UNDER_COUNTER_PISTOL = 120;
@@ -950,6 +956,22 @@ export class ViceblockRuntime3D {
    * `masked` swaps the face, hair and bare hands for a hood with lenses and
    * gloves — the same body, wearing a suit rather than a shirt.
    */
+  /**
+   * Fuses parts that share a material and never move apart into one mesh, then
+   * hangs it off the body. Babylon draws per mesh, not per triangle, so a
+   * character built out of two dozen little boxes costs two dozen draw calls
+   * however small the boxes are.
+   */
+  private weld(name: string, parts: Mesh[], material: StandardMaterial, parent: Mesh): Mesh | null {
+    const merged = parts.length === 1 ? parts[0] : Mesh.MergeMeshes(parts, true, true);
+    if (!merged) return null;
+    merged.name = name;
+    merged.material = material;
+    merged.isPickable = false;
+    merged.parent = parent;
+    return merged;
+  }
+
   private makeHumanoid(name: string, shirtHex: string, skinHex: string, pantsHex = "#2a2420", masked = false): Mesh {
     const root = MeshBuilder.CreateBox(`${name}-root`, { width: 0.4, depth: 0.4, height: 0.4 }, this.scene);
     root.isVisible = false;
@@ -972,17 +994,17 @@ export class ViceblockRuntime3D {
     if (masked) {
       // Two big lenses and a spider on the chest: the whole silhouette of the
       // costume at this scale is the mask, so it has to read from behind.
+      const lenses: Mesh[] = [];
+      const black: Mesh[] = [];
       for (const s of [1, -1]) {
         const lens = MeshBuilder.CreateBox(`${name}-lens${s}`, { width: 0.5, depth: 2.3, height: 1.7 }, this.scene);
-        lens.material = this.material("#f2f4f8", 0.42);
         lens.position.set(2.62, 21.8, 1.25 * s);
         lens.rotation.x = 0.22 * s;
-        lens.parent = root;
+        lenses.push(lens);
         const rim = MeshBuilder.CreateBox(`${name}-rim${s}`, { width: 0.42, depth: 2.7, height: 2.1 }, this.scene);
-        rim.material = this.material("#14161c", 0.05);
         rim.position.set(2.56, 21.8, 1.25 * s);
         rim.rotation.x = 0.22 * s;
-        rim.parent = root;
+        black.push(rim);
       }
       // A spider on the chest and a bigger one across the back, because from
       // behind is how you see this character for most of a swing.
@@ -993,16 +1015,16 @@ export class ViceblockRuntime3D {
         [-3.72, 4.2, -1],
       ] as const) {
         const body = MeshBuilder.CreateBox(`${name}-emblem${s}`, { width: 0.4, depth: w * 0.42, height: w }, this.scene);
-        body.material = this.material("#14161c", 0.05);
         body.position.set(x, 14.4, 0);
-        body.parent = root;
+        black.push(body);
         for (const side of [1, -1]) {
           const legs = MeshBuilder.CreateBox(`${name}-emblem-leg${s}${side}`, { width: 0.38, depth: w * 0.86, height: 0.36 }, this.scene);
-          legs.material = this.material("#14161c", 0.05);
           legs.position.set(x, 14.4 + w * 0.26 * side, 0);
-          legs.parent = root;
+          black.push(legs);
         }
       }
+      this.weld(`${name}-lenses`, lenses, this.material("#f2f4f8", 0.42), root);
+      this.weld(`${name}-mask-trim`, black, this.material("#14161c", 0.05), root);
       const belt = MeshBuilder.CreateBox(`${name}-belt`, { width: 7.4, depth: 4.8, height: 1.1 }, this.scene);
       belt.material = this.surface("cloth", pantsHex);
       belt.position.y = 9;
@@ -1013,50 +1035,51 @@ export class ViceblockRuntime3D {
       face.position.set(2.65, 21.4, 0);
       face.rotation.y = Math.PI / 2;
       face.parent = root;
-      const brow = MeshBuilder.CreateBox(`${name}-brow`, { width: 1.1, depth: 3.8, height: 0.55 }, this.scene);
-      brow.material = this.surface("hair", "#1a1410");
-      brow.position.set(2.5, 22.7, 0);
-      brow.parent = root;
-      const eyeWhiteL = MeshBuilder.CreateSphere(`${name}-ewl`, { diameter: 1.35, segments: 8 }, this.scene);
-      eyeWhiteL.material = this.material("#f4efe6", 0.18);
-      eyeWhiteL.position.set(2.55, 21.65, 1.2);
-      eyeWhiteL.parent = root;
-      const eyeWhiteR = MeshBuilder.CreateSphere(`${name}-ewr`, { diameter: 1.35, segments: 8 }, this.scene);
-      eyeWhiteR.material = this.material("#f4efe6", 0.18);
-      eyeWhiteR.position.set(2.55, 21.65, -1.2);
-      eyeWhiteR.parent = root;
-      const pupilL = MeshBuilder.CreateSphere(`${name}-pl`, { diameter: 0.72, segments: 6 }, this.scene);
-      pupilL.material = this.material("#14110e", 0.08);
-      pupilL.position.set(3.15, 21.6, 1.2);
-      pupilL.parent = root;
-      const pupilR = MeshBuilder.CreateSphere(`${name}-pr`, { diameter: 0.72, segments: 6 }, this.scene);
-      pupilR.material = this.material("#14110e", 0.08);
-      pupilR.position.set(3.15, 21.6, -1.2);
-      pupilR.parent = root;
-      const nose = MeshBuilder.CreateBox(`${name}-nose`, { width: 1.1, depth: 1.15, height: 1.35 }, this.scene);
-      nose.material = this.surface("skin", skinHex);
-      nose.position.set(2.85, 20.85, 0);
-      nose.parent = root;
       const mouth = MeshBuilder.CreateBox(`${name}-mouth`, { width: 0.55, depth: 2.1, height: 0.45 }, this.scene);
       mouth.material = this.material("#6a3028", 0.06);
       mouth.position.set(2.7, 19.85, 0);
       mouth.parent = root;
+      // Nothing above the shoulders moves relative to anything else above the
+      // shoulders, so each of these groups is one mesh rather than three or
+      // five. A face used to cost a dozen draw calls, and with thirty people
+      // on screen that was most of the frame spent on ears and eyelids.
+      const brow = MeshBuilder.CreateBox(`${name}-brow`, { width: 1.1, depth: 3.8, height: 0.55 }, this.scene);
+      brow.position.set(2.5, 22.7, 0);
       const hair = MeshBuilder.CreateBox(`${name}-hair`, { width: 5.5, depth: 5.5, height: 2 }, this.scene);
-      hair.material = this.surface("hair", "#1a1410");
       hair.position.y = 24.4;
-      hair.parent = root;
       const hairBack = MeshBuilder.CreateBox(`${name}-hb`, { width: 1.2, depth: 5.3, height: 3.4 }, this.scene);
-      hairBack.material = this.surface("hair", "#1a1410");
       hairBack.position.set(-2.2, 22.6, 0);
-      hairBack.parent = root;
+      this.weld(`${name}-hair`, [brow, hair, hairBack], this.surface("hair", "#1a1410"), root);
+
+      const nose = MeshBuilder.CreateBox(`${name}-nose`, { width: 1.1, depth: 1.15, height: 1.35 }, this.scene);
+      nose.position.set(2.85, 20.85, 0);
       const earL = MeshBuilder.CreateBox(`${name}-el`, { width: 1.1, depth: 1.4, height: 2 }, this.scene);
-      earL.material = this.surface("skin", skinHex);
       earL.position.set(0, 21.4, 2.9);
-      earL.parent = root;
       const earR = MeshBuilder.CreateBox(`${name}-er`, { width: 1.1, depth: 1.4, height: 2 }, this.scene);
-      earR.material = this.surface("skin", skinHex);
       earR.position.set(0, 21.4, -2.9);
-      earR.parent = root;
+      const feat = this.weld(`${name}-feat`, [nose, earL, earR], this.surface("skin", skinHex), root);
+
+      // Four segments, not eight. At a diameter of 1.35 on a figure two dozen
+      // units tall an eyeball is a couple of pixels across, and the round one
+      // was costing more vertices than the entire rest of the body.
+      const eyes = [1, -1].map((s) => {
+        const m = MeshBuilder.CreateSphere(`${name}-ew${s}`, { diameter: 1.35, segments: 4 }, this.scene);
+        m.position.set(2.55, 21.65, 1.2 * s);
+        return m;
+      });
+      const white = this.weld(`${name}-eyes`, eyes, this.material("#f4efe6", 0.18), root);
+      const pupils = [1, -1].map((s) => {
+        const m = MeshBuilder.CreateBox(`${name}-p${s}`, { width: 0.4, depth: 0.72, height: 0.72 }, this.scene);
+        m.position.set(3.1, 21.6, 1.2 * s);
+        return m;
+      });
+      const detail = this.weld(`${name}-pupils`, pupils, this.material("#14110e", 0.08), root);
+      // Past a couple of blocks a face is a few pixels wide and none of this
+      // survives the trip to the screen, so Babylon drops it for us rather
+      // than us paying a draw call per eyeball across the whole crowd. The
+      // cut-off clears the third-person boom, or the player would lose his
+      // own face.
+      for (const m of [face, mouth, feat, white, detail]) m?.addLODLevel(FACE_LOD_RANGE, null);
     }
     const armL = MeshBuilder.CreateBox(`${name}-al`, { width: 2.1, depth: 2.2, height: 8.6 }, this.scene);
     armL.material = blue;
@@ -1066,14 +1089,18 @@ export class ViceblockRuntime3D {
     armR.material = blue;
     armR.position.set(0, 13.4, -3.8);
     armR.parent = root;
+    // Hands hang off the arms and boots off the legs, so they swing with them.
+    // Hung off the body instead, as they were, an arm would rise into a punch
+    // and leave its own hand floating at hip height beside the gun it was
+    // supposed to be holding.
     const handL = MeshBuilder.CreateBox(`${name}-hl`, { width: 1.8, depth: 1.8, height: 1.8 }, this.scene);
     handL.material = masked ? red : this.surface("skin", skinHex);
-    handL.position.set(0, 8.6, 3.8);
-    handL.parent = root;
+    handL.position.set(0, -4.8, 0);
+    handL.parent = armL;
     const handR = MeshBuilder.CreateBox(`${name}-hr`, { width: 1.8, depth: 1.8, height: 1.8 }, this.scene);
     handR.material = masked ? red : this.surface("skin", skinHex);
-    handR.position.set(0, 8.6, -3.8);
-    handR.parent = root;
+    handR.position.set(0, -4.8, 0);
+    handR.parent = armR;
     const legL = MeshBuilder.CreateBox(`${name}-ll`, { width: 2.8, depth: 2.6, height: 8 }, this.scene);
     legL.material = this.surface("denim", pantsHex);
     legL.position.set(0, 4.1, 1.7);
@@ -1088,12 +1115,12 @@ export class ViceblockRuntime3D {
     const bootMat = masked ? red : this.surface("leather", "#1a1410");
     const shoeL = MeshBuilder.CreateBox(`${name}-sl`, { width: 3.6, depth: 2.7, height: bootH }, this.scene);
     shoeL.material = bootMat;
-    shoeL.position.set(0.6, bootH / 2, 1.7);
-    shoeL.parent = root;
+    shoeL.position.set(0.6, bootH / 2 - 4.1, 0);
+    shoeL.parent = legL;
     const shoeR = MeshBuilder.CreateBox(`${name}-sr`, { width: 3.6, depth: 2.7, height: bootH }, this.scene);
     shoeR.material = bootMat;
-    shoeR.position.set(0.6, bootH / 2, -1.7);
-    shoeR.parent = root;
+    shoeR.position.set(0.6, bootH / 2 - 4.1, 0);
+    shoeR.parent = legR;
     // Limbs turn at the shoulder and the hip, not around their own middle.
     // Spun about the centre a raised arm is a stick through the torso, which
     // is why every pose here read as a figure standing still.
@@ -1103,17 +1130,10 @@ export class ViceblockRuntime3D {
     shadow.material = this.material("#0c0a08", 0);
     shadow.position.y = 0.16;
     shadow.parent = root;
-    // Hands hold something: the guns hang off the right arm so they follow the
-    // aim pose instead of floating beside the body.
-    const pistol = this.makeGunMesh(`${name}-gun-pistol`, "pistol");
-    pistol.parent = armR;
-    pistol.position.set(1.6, -4.6, 0);
-    pistol.setEnabled(false);
-    const smg = this.makeGunMesh(`${name}-gun-smg`, "smg");
-    smg.parent = armR;
-    smg.position.set(2.2, -4.6, 0);
-    smg.setEnabled(false);
-    root.metadata = { armL, armR, legL, legR, pistol, smg, shadow };
+    // Guns are built the first time someone actually draws one. Handing every
+    // pedestrian in the city a pistol and an SMG up front, both switched off,
+    // put several hundred meshes in the scene that nobody ever saw.
+    root.metadata = { armL, armR, legL, legR, shadow };
     return root;
   }
 
@@ -1126,36 +1146,47 @@ export class ViceblockRuntime3D {
   private makeGunMesh(name: string, kind: "pistol" | "smg"): Mesh {
     const root = MeshBuilder.CreateBox(`${name}-r`, { size: 0.3 }, this.scene);
     root.isVisible = false;
-    const steel = this.surface("metal", "#2a2e34", 0.05);
-    const grip = this.surface("plastic", "#17141a");
+    const steelParts: Mesh[] = [];
+    const gripParts: Mesh[] = [];
     let n = 0;
-    const part = (w: number, d: number, h: number, x: number, y: number, z: number, mat: StandardMaterial): void => {
+    const part = (w: number, d: number, h: number, x: number, y: number, z: number, into: Mesh[]): void => {
       const m = MeshBuilder.CreateBox(`${name}-${n++}`, { width: w, depth: d, height: h }, this.scene);
-      m.material = mat;
       m.position.set(x, y, z);
-      m.parent = root;
+      into.push(m);
     };
     if (kind === "pistol") {
-      part(4.6, 1.1, 1.5, 0.6, 0.9, 0, steel);
-      part(1.4, 1, 2.4, -0.9, -0.5, 0, grip);
-      part(1.2, 0.9, 0.7, 2.6, 0.4, 0, steel);
-      part(0.5, 0.5, 0.6, 2.2, 1.8, 0, steel);
+      part(4.6, 1.1, 1.5, 0.6, 0.9, 0, steelParts);
+      part(1.4, 1, 2.4, -0.9, -0.5, 0, gripParts);
+      part(1.2, 0.9, 0.7, 2.6, 0.4, 0, steelParts);
+      part(0.5, 0.5, 0.6, 2.2, 1.8, 0, steelParts);
     } else {
-      part(6.4, 1.3, 1.8, 1.2, 0.9, 0, steel);
-      part(1.5, 1.1, 2.6, -0.4, -0.7, 0, grip);
-      part(1.2, 1, 2.8, 1.4, -0.8, 0, grip);
-      part(2.6, 0.8, 0.8, 4.6, 0.9, 0, steel);
-      part(2.4, 1, 1.2, -2.4, 1.1, 0, grip);
-      part(0.7, 0.5, 0.8, 3.4, 2, 0, steel);
+      part(6.4, 1.3, 1.8, 1.2, 0.9, 0, steelParts);
+      part(1.5, 1.1, 2.6, -0.4, -0.7, 0, gripParts);
+      part(1.2, 1, 2.8, 1.4, -0.8, 0, gripParts);
+      part(2.6, 0.8, 0.8, 4.6, 0.9, 0, steelParts);
+      part(2.4, 1, 1.2, -2.4, 1.1, 0, gripParts);
+      part(0.7, 0.5, 0.8, 3.4, 2, 0, steelParts);
     }
+    this.weld(`${name}-steel`, steelParts, this.surface("metal", "#2a2e34", 0.05), root);
+    this.weld(`${name}-grip`, gripParts, this.surface("plastic", "#17141a"), root);
     return root;
   }
 
   /** Shows the weapon the actor is actually carrying, or empties their hands. */
   private showWeapon(mesh: Mesh, weapon: WeaponId): void {
-    const meta = mesh.metadata as { pistol?: Mesh; smg?: Mesh } | undefined;
-    meta?.pistol?.setEnabled(weapon === "pistol");
-    meta?.smg?.setEnabled(weapon === "smg");
+    const meta = mesh.metadata as { armR?: Mesh; pistol?: Mesh; smg?: Mesh } | undefined;
+    if (!meta) return;
+    const kind = weapon === "smg" ? "smg" : "pistol";
+    if (weapon !== "fists" && !meta[kind] && meta.armR) {
+      // The guns hang off the right arm so they follow the aim pose instead of
+      // floating beside the body.
+      const gun = this.makeGunMesh(`${mesh.name}-gun-${kind}`, kind);
+      gun.parent = meta.armR;
+      gun.position.set(kind === "smg" ? 2.2 : 1.6, -4.6, 0);
+      meta[kind] = gun;
+    }
+    meta.pistol?.setEnabled(weapon === "pistol");
+    meta.smg?.setEnabled(weapon === "smg");
   }
 
   /**
@@ -1251,14 +1282,27 @@ export class ViceblockRuntime3D {
     const root = MeshBuilder.CreateBox(`${name}-root`, { width: 0.4, depth: 0.4, height: 0.4 }, this.scene);
     root.isVisible = false;
     let n = 0;
+    // The bodywork is rigid, so it does not need to be two dozen meshes: panels
+    // are collected by material and fused once the shape is finished. Only the
+    // wheels, which turn, stay separate.
+    const panels = new Map<StandardMaterial, Mesh[]>();
     const box = (w: number, d: number, h: number, x: number, y: number, z: number, mat: StandardMaterial): Mesh => {
       const m = MeshBuilder.CreateBox(`${name}-p${n++}`, { width: w, depth: d, height: h }, this.scene);
-      m.material = mat;
       m.position.set(x, y, z);
-      m.parent = root;
+      const bucket = panels.get(mat);
+      if (bucket) bucket.push(m);
+      else panels.set(mat, [m]);
       return m;
     };
-    if (defId === "needle") return this.makeBikeMesh(name, hex, root, box);
+    const fuse = (): void => {
+      let g = 0;
+      for (const [mat, list] of panels) this.weld(`${name}-body${g++}`, list, mat, root);
+    };
+    if (defId === "needle") {
+      this.makeBikeMesh(name, hex, root, box);
+      fuse();
+      return root;
+    }
 
     const paint = this.surface("carPaint", hex);
     const glass = this.surface("glass", isPolice ? "#40607e" : "#16202a");
@@ -1309,8 +1353,7 @@ export class ViceblockRuntime3D {
     if (sports) box(3.4, 12, 1, -14, sill + 7.2, 0, trim);
     if (sedan) box(1, 15, 1.2, -15.2, sill + 6.2, 0, chrome);
     if (isPolice) {
-      const bar = box(6, 11, 2, cabinX, sill + 5.4 + roofH, 0, this.material("#101418"));
-      bar.parent = root;
+      box(6, 11, 2, cabinX, sill + 5.4 + roofH, 0, this.material("#101418"));
       box(2.4, 4, 1.8, cabinX, sill + 5.6 + roofH, 3.4, this.material("#4a90d8", 0.95));
       box(2.4, 4, 1.8, cabinX, sill + 5.6 + roofH, -3.4, this.material("#d84040", 0.95));
     }
@@ -1339,6 +1382,7 @@ export class ViceblockRuntime3D {
     shadow.material = this.material("#0c0a08");
     shadow.position.y = 0.18;
     shadow.parent = root;
+    fuse();
     root.metadata = { wheels };
     return root;
   }
@@ -1349,7 +1393,7 @@ export class ViceblockRuntime3D {
     hex: string,
     root: Mesh,
     box: (w: number, d: number, h: number, x: number, y: number, z: number, mat: StandardMaterial) => Mesh,
-  ): Mesh {
+  ): void {
     const paint = this.surface("carPaint", hex);
     const trim = this.surface("metal", "#22262c", 0.06);
     const chrome = this.surface("metal", "#c0c4cc", 0.14);
@@ -1379,7 +1423,6 @@ export class ViceblockRuntime3D {
     shadow.position.y = 0.18;
     shadow.parent = root;
     root.metadata = { wheels };
-    return root;
   }
 
   private seedWorld(): void {
