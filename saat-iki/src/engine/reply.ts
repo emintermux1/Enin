@@ -60,7 +60,7 @@ const INTENT_PATTERNS: Array<{ intent: Intent; pattern: RegExp }> = [
   {
     intent: "question",
     pattern:
-      /\?|(ne yapıyorsun|ne yapiyorsun|neredesin|nerdeysin|ne giyiyorsun|ne giyiyon|ne istiyorsun|kaç yaş|kac yas|adın ne|adin ne)/i,
+      /\?|(ne yapıyorsun|ne yapiyorsun|neredesin|nerdeysin|ne giyiyorsun|ne giyiyon|ne istiyorsun|kaç yaş|kac yas|adın ne|adin ne|ismin|kimsin)/i,
   },
 ];
 

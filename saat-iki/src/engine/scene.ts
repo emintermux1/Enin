@@ -16,6 +16,7 @@ import {
   pickKimScene,
 } from "./kim";
 import { echoReply } from "./echo";
+import { hearReply } from "./hear";
 import { choicesForMove, playMove } from "./moves";
 import { AFTERCARE, nightPhase, PHASE_TALK } from "./night";
 import { dropRepeats, fillName, isRepeat, pickUnused, usedThem } from "./pool";
@@ -61,7 +62,7 @@ const ACT_PATTERNS: Array<{ act: Act; pattern: RegExp }> = [
   {
     act: "ask",
     pattern:
-      /\?|ne giy|neredesin|nerdesin|napıyon|napion|nasılsın|nasilsin|adın ne|adin ne|kaç yaş|kimsin|ıslak|islak/i,
+      /\?|ne giy|neredesin|nerdesin|napıyon|napion|nasılsın|nasilsin|adın ne|adin ne|ismin|ism(in|i)|kaç yaş|kimsin|sen kim|ıslak|islak/i,
   },
 ];
 
@@ -121,7 +122,7 @@ const ANSWERS: Array<{ pattern: RegExp; lines: string[] }> = [
   { pattern: /ne giy|giyiyon|üzerinde/, lines: ["hiçbişi yok ya", "mini etek bile kaydı", "ıslak tenim senin için"] },
   { pattern: /neredesin|nerdesin/, lines: ["yataktayım bacaklarım açık", "yastığım yapış yapış", "senin sikin olsa şuan içimde"] },
   { pattern: /nasılsın|napıyon|napion|naber/, lines: ["azgınım sırılsıklam", "kendime dokunuyom şuan", "sen napıyon söyleme göster"] },
-  { pattern: /adın ne|adin ne|kimsin/, lines: ["{who}", "{age}", "beni yatağında hayvan gibi sik"] },
+  { pattern: /adın ne|adin ne|ismin|ism(in|i)|kimsin|sen kim/, lines: ["{who}", "{age}", "beni yatağında hayvan gibi sik"] },
   { pattern: /kaç yaş|kac yas/, lines: ["{age}", "yeter yaş", "amım konuşsun yaş değil"] },
   { pattern: /ıslak|islak|azgın|azgin/, lines: ["sırılsıklamım ya", "parmaklarım kayıyo offf", "fışkırt beni dilinle"] },
   { pattern: /ne yap|napak|ne istiyon/, lines: ["önce yala sonra sok", "duvara yapıştır herkes duysun", "seçme de sik"] },
@@ -269,6 +270,19 @@ function sceneKey(act: Act): Exclude<Act, "ask" | "complaint"> {
   return act === "ask" || act === "complaint" ? "talk" : act;
 }
 
+function isIdentityReply(lines: string[], id: CharacterId): boolean {
+  const person = getCharacter(id);
+  const first = normalizeSlang(lines[0] ?? "");
+  if (!first) {
+    return false;
+  }
+  if (/^\d+$/.test(lines[0] ?? "")) {
+    return true;
+  }
+  const who = normalizeSlang(person.name);
+  return first.startsWith(who) || first.endsWith("evet ben") || first.startsWith(normalizeSlang(person.id));
+}
+
 function hookBank(id: CharacterId, act: Exclude<Act, "ask" | "complaint">): string[] {
   switch (id) {
     case "asya":
@@ -350,9 +364,10 @@ function finish(
       .replaceAll("{who}", getCharacter(opts.characterId).name.toLocaleLowerCase("tr-TR"))
       .replaceAll("{age}", String(getCharacter(opts.characterId).age)),
   );
-  const hooked = withHook(named, key, history, salt, opts.characterId);
+  const identity = isIdentityReply(named, opts.characterId);
+  const hooked = identity ? named : withHook(named, key, history, salt, opts.characterId);
   const moaned =
-    opts.characterId === "asya" || opts.characterId === "kim"
+    identity || opts.characterId === "asya" || opts.characterId === "kim"
       ? hooked
       : withMoan(hooked, salt, opts);
   const tinted = tintFantasy(moaned, opts.fantasy, history, input);
@@ -401,6 +416,11 @@ export function playScene(input: string, history: Message[], opts: PlayOpts): st
 
   const who = opts.characterId;
 
+  const heard = hearReply(input, opts);
+  if (heard) {
+    return finish(heard, "talk", history, salt, opts, input);
+  }
+
   if (act === "complaint") {
     return finish(pickUnused(COMPLAINTS, history, salt) ?? echoReply(input, opts.name, history, salt), "talk", history, salt, opts, input);
   }
@@ -422,7 +442,7 @@ export function playScene(input: string, history: Message[], opts: PlayOpts): st
     return finish(moved, key, history, salt, opts, input);
   }
 
-  if (act === "ask" && who !== "asya" && who !== "kim") {
+  if (act === "ask") {
     const hit = ANSWERS.find((item) => item.pattern.test(input));
     if (
       hit &&

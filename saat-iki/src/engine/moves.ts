@@ -433,9 +433,16 @@ const MOVES: Move[] = [
   },
 ];
 
+function matches(pattern: RegExp, input: string): boolean {
+  if (pattern.ignoreCase) {
+    return pattern.test(input);
+  }
+  return new RegExp(pattern.source, `${pattern.flags}i`).test(input);
+}
+
 export function detectMove(input: string): Move | null {
   for (const item of MOVES) {
-    if (item.pattern.test(input)) {
+    if (matches(item.pattern, input)) {
       return item;
     }
   }

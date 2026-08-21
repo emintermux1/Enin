@@ -75,7 +75,7 @@ const ACK: Array<{ pattern: RegExp; lines: string[][] }> = [
     ],
   },
   {
-    pattern: /fışkır|fiskir/,
+    pattern: /fışkır|fiskir/i,
     lines: [
       ["fışkırt beni offf", "yatağı ıslatayım", "çekme {name}"],
     ],
