@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { looksLikeMarkup, sanitizeText } from "../src/index";
 import { beginStick, moveStick, releaseStick } from "../src/joystick";
-import { applyVehicleDamage, createVehicleRuntime, tickVehicleExplosion } from "../src/vehicles";
+import { VEHICLE_CONFIG } from "../src/config";
+import { applyVehicleDamage, createVehicleRuntime, explosionRadius, tickVehicleExplosion } from "../src/vehicles";
 
 describe("sanitize", () => {
   it("strips html paste junk", () => {
@@ -35,5 +36,17 @@ describe("vehicle explosions", () => {
     expect(v.health).toBe(0);
     v = tickVehicleExplosion(v, 0.4);
     expect(v.exploded).toBe(true);
+  });
+
+  it("lights the fuse the config asks for, not a copy of it", () => {
+    let v = createVehicleRuntime("sparrow", 0, 0, 0, "#c44");
+    v = applyVehicleDamage(v, 999, false);
+    expect(v.explodeIn).toBe(VEHICLE_CONFIG.explosionFuseSeconds);
+    // A hair under the fuse and the car is still sitting there smoking.
+    expect(tickVehicleExplosion(v, VEHICLE_CONFIG.explosionFuseSeconds - 0.01).exploded).toBe(false);
+  });
+
+  it("gives a bike a smaller blast than a car, because it carries less to burn", () => {
+    expect(explosionRadius("needle")).toBeLessThan(explosionRadius("ironback"));
   });
 });

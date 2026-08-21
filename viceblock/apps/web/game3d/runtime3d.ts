@@ -43,6 +43,7 @@ import {
   nextMission,
   normalizeAngle,
   damageStage,
+  explosionRadius,
   performanceMultipliers,
   PLAYER_CONFIG,
   POLICE_CONFIG,
@@ -219,11 +220,16 @@ function clampPitch(p: number): number {
  * physics stable without tying the speed of the world to the frame rate.
  */
 /**
- * Collision half-width for a car against buildings. The old value of 12 made
- * the box wider than the lane markings allow, so cars caught on kerbs that
- * looked clear on screen.
+ * Collision half-width for a car against buildings, kerbs and walls. The old
+ * value of 12 made the box wider than the lane markings allow, so cars caught
+ * on kerbs that looked clear on screen.
+ *
+ * Deliberately narrower than `COLLISION_CONFIG.carRadius`, which is not the
+ * same measurement: that one is roughly half a car's *length*, because a car
+ * hitting another car meets it end-on as often as side-on, and a body-width
+ * circle would let the two overlap by a bonnet before anything registered.
  */
-const CAR_RADIUS = 9;
+const CAR_WALL_RADIUS = 9;
 
 const SIM = {
   stepSeconds: 1 / 60,
@@ -3333,7 +3339,7 @@ export class ViceblockRuntime3D {
     const speed = Math.hypot(v.vx, v.vy);
     const nx = v.x + v.vx * dt;
     const nz = v.y + v.vy * dt;
-    const r = CAR_RADIUS;
+    const r = CAR_WALL_RADIUS;
     // A car shunted into a wall by a crash used to sit there grinding itself to
     // death with the throttle pinned. If it is already overlapping, walk it out.
     if (blocked(this.world, v.x, v.y, r)) {
@@ -3369,7 +3375,7 @@ export class ViceblockRuntime3D {
         const a = (i / 8) * Math.PI * 2;
         const x = v.x + Math.cos(a) * step;
         const z = v.y + Math.sin(a) * step;
-        if (!blocked(this.world, x, z, CAR_RADIUS)) {
+        if (!blocked(this.world, x, z, CAR_WALL_RADIUS)) {
           v.x = x;
           v.y = z;
           return;
@@ -3413,6 +3419,7 @@ export class ViceblockRuntime3D {
             braking: def.braking,
             grip: ground * perf.grip,
             power: perf.accel,
+            top: perf.top,
           },
           dt,
         );
@@ -3485,7 +3492,7 @@ export class ViceblockRuntime3D {
         v.vy = Math.sin(v.heading) * spd;
         const nx = v.x + v.vx * dt;
         const nz = v.y + v.vy * dt;
-        const moved = !blocked(this.world, nx, nz, CAR_RADIUS);
+        const moved = !blocked(this.world, nx, nz, CAR_WALL_RADIUS);
         if (moved) {
           v.x = nx;
           v.y = nz;
@@ -3525,7 +3532,7 @@ export class ViceblockRuntime3D {
     const onRoad = (h: number, dist: number): boolean => {
       const px = v.x + Math.cos(h) * dist;
       const pz = v.y + Math.sin(h) * dist;
-      if (blocked(this.world, px, pz, CAR_RADIUS)) return false;
+      if (blocked(this.world, px, pz, CAR_WALL_RADIUS)) return false;
       return cellAt(this.world, px, pz) === Cell.Road;
     };
     const straight = normalizeAngleTo(v.heading);
@@ -4809,11 +4816,15 @@ export class ViceblockRuntime3D {
       this.exitVehicle();
       this.hurt(VEHICLE_CONFIG.explosionDamageDriver);
     }
-    if (Math.hypot(this.player.x - car.rt.x, this.player.z - car.rt.y) < 70) this.hurt(VEHICLE_CONFIG.explosionDamageNear);
+    // A bike carries a fraction of the fuel a car does, and the blast has to
+    // match: this used to be the car radius for everything, so a Needle going
+    // up beside you hit as hard as an Ironback.
+    const blast = explosionRadius(car.rt.defId);
+    if (Math.hypot(this.player.x - car.rt.x, this.player.z - car.rt.y) < blast) this.hurt(VEHICLE_CONFIG.explosionDamageNear);
     // A fireball in the street is not something a crowd stands around for.
     for (const a of this.actors) {
       const d = Math.hypot(a.x - car.rt.x, a.z - car.rt.y);
-      if (d < 60) this.hitActor(a, Math.round(70 - d), "vehicle", false);
+      if (d < blast) this.hitActor(a, Math.round((1 - d / blast) * VEHICLE_CONFIG.explosionDamageBystander), "vehicle", false);
     }
     this.panicNear();
     this.raiseHeat(1);

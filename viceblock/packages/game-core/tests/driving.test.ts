@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DRIVING_CONFIG, maxSpeedFor, speedoKmh, stepCar, type CarMotion, type DriveParams } from "../src/driving";
 import { isDrifting, THRILL_CONFIG } from "../src/thrill";
-import { vehicleById } from "../src/vehicles";
+import { createVehicleRuntime, performanceMultipliers, vehicleById } from "../src/vehicles";
 
 function paramsFor(id: string, grip = 1, power = 1): DriveParams {
   const def = vehicleById(id);
@@ -43,6 +43,15 @@ describe("car acceleration", () => {
 
   it("loses speed on a slick surface", () => {
     expect(floorIt("sparrow", 12, 0.6)).toBeLessThan(floorIt("sparrow", 12, 1));
+  });
+
+  it("caps top speed on shredded tires, not just cornering grip", () => {
+    // `performanceMultipliers` has always returned a `top` figure for tire
+    // wear and the driving model never read it, so a car on the rims ran to
+    // the same speed as one on fresh rubber.
+    const healthy = paramsFor("sparrow");
+    const shredded: DriveParams = { ...healthy, top: performanceMultipliers({ ...createVehicleRuntime("sparrow", 0, 0, 0, "#c44"), tires: 0.3 }).top };
+    expect(maxSpeedFor(shredded)).toBeLessThan(maxSpeedFor(healthy) * 0.8);
   });
 });
 

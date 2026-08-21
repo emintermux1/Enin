@@ -138,12 +138,12 @@ export function applyVehicleDamage(v: VehicleRuntime, amount: number, highSpeedC
   if (highSpeedCrash) next.tires = Math.max(0.35, next.tires - 0.12);
   next.burning = next.health < nextHealthBurn(next);
   if (next.health <= 0) {
-    next.explodeIn = next.explodeIn > 0 ? next.explodeIn : 0.35;
+    next.explodeIn = next.explodeIn > 0 ? next.explodeIn : VEHICLE_CONFIG.explosionFuseSeconds;
   } else if (highSpeedCrash && next.health < durabilityOf(next.defId) * 0.3 && Math.random() < VEHICLE_CONFIG.explodeChanceOnHeavyCrash) {
     // A big hit only ends the car outright once it is already falling apart.
     next.health = 0;
     next.burning = true;
-    next.explodeIn = 0.15;
+    next.explodeIn = VEHICLE_CONFIG.shortFuseSeconds;
   }
   return next;
 }

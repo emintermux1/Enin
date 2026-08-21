@@ -47,9 +47,17 @@ export const VEHICLE_CONFIG = {
   crashSpeedThreshold: 70,
   /** One wall is one hit: collision damage cannot land again within this window. */
   bumpCooldownSeconds: 0.5,
+  /** Delay between a car reaching zero health and the fireball. */
   explosionFuseSeconds: 0.35,
+  /**
+   * A wreck already burning when the crash lands goes up almost at once —
+   * there is no walking away from that one.
+   */
+  shortFuseSeconds: 0.15,
   explosionDamageNear: 18,
   explosionDamageDriver: 28,
+  /** Damage to a bystander standing on the wreck, falling off to nothing at the blast edge. */
+  explosionDamageBystander: 70,
 };
 
 export const PLAYER_CONFIG = {

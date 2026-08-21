@@ -53,10 +53,17 @@ export interface DriveParams {
   grip: number;
   /** Engine health multiplier, 1 = healthy. */
   power: number;
+  /**
+   * Top-speed multiplier from tire wear, 1 = healthy. Separate from `grip`,
+   * which only shapes how the car corners: shredded tires are supposed to cap
+   * what the car will do in a straight line as well, and until this was passed
+   * through they did not.
+   */
+  top?: number;
 }
 
 export function maxSpeedFor(params: DriveParams): number {
-  return params.topSpeed * DRIVING_CONFIG.topSpeedScale * params.power * (0.7 + params.grip * 0.3);
+  return params.topSpeed * DRIVING_CONFIG.topSpeedScale * params.power * (params.top ?? 1) * (0.7 + params.grip * 0.3);
 }
 
 export function speedoKmh(speed: number): number {
