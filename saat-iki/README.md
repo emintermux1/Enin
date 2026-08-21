@@ -1,6 +1,6 @@
 # Saat İki
 
-18+ Türkçe flört / ilişki simülasyonu. Yetişkin karakterlerle erotik sohbet.
+18+ Türkçe flört / ilişki simülasyonu. Erkek oyuncu, yetişkin AI kadınlarla erotik sohbet eder.
 
 Görsel seks sahnesi, porno model veya seks sesi yok. Konuşma, seçenek ve yakınlık barı var.
 

@@ -83,7 +83,7 @@ const REPLIES: Record<CharacterId, Record<Intent, [string, string, string, strin
       "Övülmeyi severim ama senin ağzından daha çok. Bir cümle daha at, ölçeyim.",
       "Seksiliğimi söylemen ucuz. Neremi hayal ettiğini söyle, pahalılaşsın.",
       "Böyle konuşursan vardiyayı kapatırım. Önlüğümü çözmem uzun sürmez.",
-      "Öv, evet. Dizlerinin üstündeyken de öv. Bakalım sesin titrer mi.",
+      "Öv, evet. Dizlerimin üstündeyken de öv, {name}. Bakalım sesin titrer mi.",
     ],
     question: [
       "Ne mi yapıyorum? Buz kırıyorum. Aklımda senin boynun var, itiraf edeyim.",
@@ -151,7 +151,7 @@ const REPLIES: Record<CharacterId, Record<Intent, [string, string, string, strin
       "Güzel demen yetmez. Hangi cümlemle bozulduğunu söyle, oradan devam edelim.",
       "Övgün edebi kaçmasın. Ellerimi, ağzımı, sabırsızlığımı öv.",
       "Böyle dillenirsen romanı bırakırım. Seni yazmak daha acil.",
-      "Övülmekten ıslandığımı yazmam ayıp mı? Ayıp değil. Devam et.",
+      "Övülmekten ıslandığımı yazmam ayıp mı, {name}? Ayıp değil. Devam et.",
     ],
     question: [
       "Ne mi yazıyorum? Senin parmaklarının sayfasını. Henüz bitmedi.",
@@ -219,7 +219,7 @@ const REPLIES: Record<CharacterId, Record<Intent, [string, string, string, strin
       "Güzelim, evet. Şimdi ne yapacağını söyle.",
       "Seksisiin demen ısındırdı. Ellerini yaz, daha ısınır.",
       "Öv, sonra tut. Sadece kelimeyle doymam.",
-      "Böyle konuşursan stüdyoda bırakmam seni. Aynanın önünde.",
+      "Böyle konuşursan stüdyoda bırakmam seni, {name}. Aynanın önünde, erkek gibi dur.",
     ],
     question: [
       "Ne yapıyorum: esniyorum. Aklımda senin ağzın var.",
@@ -287,7 +287,7 @@ const REPLIES: Record<CharacterId, Record<Intent, [string, string, string, strin
       "Övgün tatlı. Dizlerinin üstünde daha tatlı olur.",
       "Seksiliğimi biliyorum. Sen nerede duracağını bil.",
       "Böyle konuşursan ödül gelir. Şimdilik bekle, kıpırdama.",
-      "Övülmek hoşuma gider. İtaat daha çok. İkisini birden yap.",
+      "Övülmek hoşuma gider. İtaatin daha çok, {name}. İkisini birden yap.",
     ],
     question: [
       "Ne yaptığımı sorma. Seni düşündüğümü söylememi istiyorsan iste.",

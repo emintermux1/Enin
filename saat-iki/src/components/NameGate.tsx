@@ -18,10 +18,10 @@ export function NameGate({ onSubmit }: NameGateProps) {
 
   return (
     <section className="panel name-gate">
-      <p className="eyebrow">Önce ismin</p>
-      <h1>Sana nasıl seslensinler?</h1>
+      <p className="eyebrow">Önce sen</p>
+      <h1>Kadınlar sana nasıl seslensin?</h1>
       <p className="lede">
-        Kısa olsun. Gece uzayınca adın kulağa, sonra ağza, sonra yastığa düşecek.
+        Erkek adı yaz. Gece uzayınca o isim kulağa, sonra ağza, sonra yastığa düşecek.
       </p>
       <form className="name-form" onSubmit={handleSubmit}>
         <label className="sr-only" htmlFor="player-name">
