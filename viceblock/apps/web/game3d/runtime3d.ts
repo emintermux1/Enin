@@ -1308,6 +1308,35 @@ export class ViceblockRuntime3D {
     return m;
   }
 
+  /** The club's name in neon, painted straight onto the stage's back wall. */
+  private signWall(name: string): StandardMaterial {
+    const tex = new DynamicTexture(`${name}-tex`, { width: 512, height: 192 }, this.scene, false);
+    const ctx = tex.getContext();
+    const c2d = ctx as unknown as CanvasRenderingContext2D;
+    ctx.fillStyle = "#2e0a24";
+    ctx.fillRect(0, 0, 512, 192);
+    ctx.fillStyle = "#57123f";
+    for (let i = 0; i < 8; i++) ctx.fillRect(0, i * 24, 512, 12);
+    c2d.textAlign = "center";
+    c2d.textBaseline = "middle";
+    ctx.fillStyle = "#ff4aa8";
+    ctx.font = "bold 96px Impact, Arial Black, sans-serif";
+    ctx.fillText("MALIBU", 256, 82);
+    ctx.fillStyle = "#4ad8c8";
+    ctx.font = "bold 44px Impact, Arial Black, sans-serif";
+    ctx.fillText("C L U B", 256, 148);
+    tex.update();
+    // A box face maps the texture upside down and mirrored; spin it back.
+    tex.wAng = Math.PI;
+    const mat = new StandardMaterial(name, this.scene);
+    mat.diffuseTexture = tex;
+    mat.emissiveTexture = tex;
+    mat.emissiveColor = new Color3(1, 0.9, 0.98);
+    mat.specularColor = Color3.Black();
+    mat.disableLighting = true;
+    return mat;
+  }
+
   /** Collects a room's meshes by prefix and registers it, hidden. */
   private registerRoom(room: Omit<InteriorRoom, "meshes">): void {
     const meshes = this.scene.meshes.filter((m) => m.name.startsWith(room.prefix));
@@ -1362,6 +1391,29 @@ export class ViceblockRuntime3D {
     const stageLip = MeshBuilder.CreateBox(`${P}stage-lip`, { width: 190, depth: 3, height: 3 }, this.scene);
     stageLip.material = this.glow(`${P}m-lip`, "#ff2f9a");
     stageLip.position = new Vector3(cx, INTERIOR_Y + 15, stageZ + 39);
+    // A lit back wall behind the stage, with the club's name burned into it:
+    // without it the dancers are silhouettes against a dark room and the eye
+    // has nothing to land on.
+    const backdrop = MeshBuilder.CreateBox(`${P}backdrop`, { width: 190, depth: 4, height: 76 }, this.scene);
+    backdrop.material = this.signWall(`${P}m-backdrop`);
+    backdrop.position = new Vector3(cx, INTERIOR_Y + 40, stageZ - 42);
+    // Strip lights hug the edges of the wall so they frame the name, not cover it.
+    for (const side of [-1, 1]) {
+      const strip = MeshBuilder.CreateBox(`${P}stage-strip-${side}`, { width: 5, depth: 2, height: 62 }, this.scene);
+      strip.material = this.glow(`${P}m-strip-${side}`, side < 0 ? "#4ad8c8" : "#ff2f9a", 0.95);
+      strip.position = new Vector3(cx + side * 88, INTERIOR_Y + 44, stageZ - 38);
+    }
+    // Two hard spots pinning the poles, so the stage is plainly the main event.
+    for (let i = 0; i < 2; i++) {
+      const spot = MeshBuilder.CreateCylinder(
+        `${P}stage-spot-${i}`,
+        { height: 64, diameterTop: 8, diameterBottom: 40, tessellation: 10 },
+        this.scene,
+      );
+      spot.material = this.glow(`${P}m-stage-spot-${i}`, "#ffe6f4", 0.2);
+      spot.isPickable = false;
+      spot.position = new Vector3(cx + (i === 0 ? -52 : 52), INTERIOR_Y + 60, stageZ);
+    }
     const poleMat = this.surface("metal", "#d8d0c0", 0.6);
     for (let i = 0; i < 2; i++) {
       const px = cx + (i === 0 ? -52 : 52);
@@ -1377,30 +1429,6 @@ export class ViceblockRuntime3D {
     lead.position = new Vector3(cx, INTERIOR_Y + 14, stageZ - 12);
     lead.rotation.y = Math.PI;
     this.addClubDancer(lead, 2, 0.8);
-
-    // Backdrop neon: MALIBU in strip lights above the stage.
-    const backTex = new DynamicTexture(`${P}sign-tex`, { width: 512, height: 128 }, this.scene, false);
-    const bctx = backTex.getContext();
-    bctx.fillStyle = "#140a18";
-    bctx.fillRect(0, 0, 512, 128);
-    bctx.fillStyle = "#ff4aa8";
-    bctx.font = "bold 74px Impact, sans-serif";
-    const bt = bctx as unknown as CanvasRenderingContext2D;
-    bt.textAlign = "center";
-    bt.textBaseline = "middle";
-    bctx.fillText("MALIBU", 256, 60);
-    bctx.fillStyle = "#4ad8c8";
-    bctx.font = "bold 26px Impact, sans-serif";
-    bctx.fillText("C L U B", 256, 106);
-    backTex.update();
-    const backMat = new StandardMaterial(`${P}sign-mat`, this.scene);
-    backMat.diffuseTexture = backTex;
-    backMat.emissiveTexture = backTex;
-    backMat.emissiveColor = new Color3(1, 0.8, 0.95);
-    backMat.specularColor = Color3.Black();
-    const backSign = MeshBuilder.CreatePlane(`${P}sign`, { width: 150, height: 38 }, this.scene);
-    backSign.material = backMat;
-    backSign.position = new Vector3(cx, INTERIOR_Y + 74, stageZ - 34);
 
     // Dance floor: a checker of emissive tiles that the update loop cycles.
     const tileSize = 26;
@@ -1539,20 +1567,39 @@ export class ViceblockRuntime3D {
     if (!mark) return;
     const dx = (mark.doorX + 0.5) * TILE;
     const dz = (mark.doorY + 0.5) * TILE;
-    const carpet = MeshBuilder.CreateBox("clubdoor-carpet", { width: 40, depth: 46, height: 0.8 }, this.scene);
+    const carpet = MeshBuilder.CreateBox("clubdoor-carpet", { width: 34, depth: 44, height: 0.8 }, this.scene);
     carpet.material = this.surface("cloth", "#7a1030");
     carpet.position = new Vector3(dx, 0.6, dz + 16);
-    const glow = MeshBuilder.CreateBox("clubdoor-glow", { width: 34, depth: 2, height: 3 }, this.scene);
+    const glow = MeshBuilder.CreateBox("clubdoor-glow", { width: 30, depth: 2, height: 2.4 }, this.scene);
     glow.material = this.glow("clubdoor-glow-mat", "#ff2f9a");
-    glow.position = new Vector3(dx, 26, dz + 2);
-    for (let i = 0; i < 4; i++) {
-      const post = MeshBuilder.CreateCylinder(`clubdoor-post-${i}`, { height: 20, diameter: 4, tessellation: 8 }, this.scene);
-      post.material = this.glow(`clubdoor-post-mat-${i}`, "#f0c040", 0.95);
-      post.position = new Vector3(dx + (i < 2 ? -22 : 22), 10, dz + (i % 2 ? 34 : 6));
-      const rope = MeshBuilder.CreateBox(`clubdoor-rope-${i}`, { width: 2.4, depth: 28, height: 2.4 }, this.scene);
-      rope.material = this.surface("cloth", "#8a1030");
-      rope.position = new Vector3(dx + (i < 2 ? -22 : 22), 16, dz + 20);
+    glow.position = new Vector3(dx, 25, dz + 3);
+    // Uplighters either side of the door, so the entrance glows after dark.
+    for (const side of [-1, 1]) {
+      const wash = MeshBuilder.CreateCylinder(
+        `clubdoor-wash-${side}`,
+        { height: 22, diameterTop: 16, diameterBottom: 4, tessellation: 8 },
+        this.scene,
+      );
+      wash.material = this.glow(`clubdoor-wash-mat-${side}`, "#ff2f9a", 0.22);
+      wash.isPickable = false;
+      wash.position = new Vector3(dx + side * 15, 11, dz + 2);
     }
+    // Two ropes down the sides of the carpet, four posts holding them up.
+    for (const side of [-1, 1]) {
+      for (const along of [6, 34]) {
+        const post = MeshBuilder.CreateCylinder(`clubdoor-post-${side}-${along}`, { height: 18, diameter: 3, tessellation: 8 }, this.scene);
+        post.material = this.glow(`clubdoor-post-mat-${side}-${along}`, "#f0c040", 0.95);
+        post.position = new Vector3(dx + side * 21, 9, dz + along);
+      }
+      const rope = MeshBuilder.CreateBox(`clubdoor-rope-${side}`, { width: 1.6, depth: 28, height: 1.6 }, this.scene);
+      rope.material = this.surface("cloth", "#8a1030");
+      rope.position = new Vector3(dx + side * 21, 14, dz + 20);
+    }
+    // A lit facade panel above the awning: the street should read "club" from
+    // the far pavement, not only once you are standing on the carpet.
+    const facade = MeshBuilder.CreateBox("clubdoor-sign", { width: 88, depth: 2, height: 24 }, this.scene);
+    facade.material = this.signWall("clubdoor-sign-mat");
+    facade.position = new Vector3(dx, 36, dz + 1);
     const bouncer = this.makeHumanoid("clubdoor-bouncer", "#14141a", "#6a4a3a", "#101018");
     bouncer.position = new Vector3(dx + 18, 0, dz + 8);
     bouncer.rotation.y = -Math.PI / 2;
@@ -1667,14 +1714,6 @@ export class ViceblockRuntime3D {
     this.audio.setVenue(true);
     this.flash(`MALIBU CLUB  ·  cover $${CLUB.cover}  ·  bar, stage, VIP booth`);
     this.say("BOUNCER", "Hands to yourself, tip the stage, don't start anything.");
-  }
-
-  private leaveClub(): void {
-    this.audio.setVenue(false);
-    if (this.preClubStation && this.audio.station === "palm") this.audio.setStation(this.preClubStation);
-    this.preClubStation = null;
-    this.danceT = 0;
-    this.flash("MALIBU CLUB  ·  back out on the strip");
   }
 
   /** A small camera kick for moments that are felt rather than hit. */
@@ -1812,12 +1851,28 @@ export class ViceblockRuntime3D {
 
   private exitInterior(): void {
     if (!this.interiorMode) return;
-    this.showInterior(false);
+    const club = this.interiorMode.id === "malibu-club";
     this.player.x = this.interiorMode.returnX;
     this.player.z = this.interiorMode.returnZ;
-    if (this.interiorMode.id === "malibu-club") this.leaveClub();
-    this.interiorMode = null;
+    this.clearInterior();
+    if (club) this.flash("MALIBU CLUB  ·  back out on the strip");
     this.audio.uiClick();
+  }
+
+  /**
+   * Tears the room down without moving the player: used when something else
+   * has already decided where they end up, such as being arrested.
+   */
+  private clearInterior(): void {
+    if (!this.interiorMode) return;
+    this.showInterior(false);
+    if (this.interiorMode.id === "malibu-club") {
+      this.audio.setVenue(false);
+      if (this.preClubStation && this.audio.station === "palm") this.audio.setStation(this.preClubStation);
+      this.preClubStation = null;
+    }
+    this.interiorMode = null;
+    this.danceT = 0;
   }
 
   /** Interior interactions resolve by proximity to the same spots the discs use. */
@@ -3090,8 +3145,7 @@ export class ViceblockRuntime3D {
     // Contraband is confiscated but you keep your cash minus processing.
     this.loot = [];
     this.player.vehicleId = null;
-    this.interiorMode = null;
-    this.showInterior(false);
+    this.clearInterior();
     this.lockpick = null;
     this.lockpickCar = null;
     this.player.cash = Math.max(0, this.player.cash - 60);
