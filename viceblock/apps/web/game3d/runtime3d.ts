@@ -2437,9 +2437,10 @@ export class ViceblockRuntime3D {
     if (!this.interiorMode) this.tryFire(dt);
     const elev = this.interiorMode ? INTERIOR_Y : 0;
     const bob = mag > 0.05 && this.player.grounded ? Math.abs(Math.sin(this.clock * (axis.sprint ? 14 : 9))) * 1.1 : 0;
-    // Stand off the brickwork a little, or the tilted body sinks half of
-    // itself into the facade it is holding.
-    const hug = this.cling ? -6 : 0;
+    // Stand off the brickwork, or the tilted body sinks into the facade it is
+    // holding. The lean puts the head furthest in, so the gap has to cover
+    // sin(tilt) times half a body, not just the depth of the chest.
+    const hug = this.cling ? -11 : 0;
     this.playerMesh.position.set(
       this.player.x + Math.cos(this.cling?.dir ?? 0) * hug,
       elev + this.player.y + bob,
