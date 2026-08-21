@@ -1,6 +1,6 @@
 import { getCharacter } from "../data/characters";
 import { getFantasy } from "../data/fantasies";
-import type { Choice, FantasyId, Message, PlayOpts } from "../types";
+import type { CharacterId, Choice, FantasyId, Message, PlayOpts } from "../types";
 import {
   ASYA_HOOKS,
   pickAsyaAfter,
@@ -8,6 +8,13 @@ import {
   pickAsyaPhase,
   pickAsyaScene,
 } from "./asya";
+import {
+  KIM_HOOKS,
+  pickKimAfter,
+  pickKimMove,
+  pickKimPhase,
+  pickKimScene,
+} from "./kim";
 import { echoReply } from "./echo";
 import { choicesForMove, playMove } from "./moves";
 import { AFTERCARE, nightPhase, PHASE_TALK } from "./night";
@@ -262,18 +269,36 @@ function sceneKey(act: Act): Exclude<Act, "ask" | "complaint"> {
   return act === "ask" || act === "complaint" ? "talk" : act;
 }
 
+function hookBank(id: CharacterId, act: Exclude<Act, "ask" | "complaint">): string[] {
+  switch (id) {
+    case "asya":
+      return ASYA_HOOKS[act];
+    case "kim":
+      return KIM_HOOKS[act];
+    case "elif":
+    case "defne":
+    case "yasemin":
+    case "melis":
+      return HOOKS[act];
+    default: {
+      const _exhaustive: never = id;
+      return _exhaustive;
+    }
+  }
+}
+
 function withHook(
   lines: string[],
   act: Exclude<Act, "ask" | "complaint">,
   history: Message[],
   salt: number,
-  asya: boolean,
+  id: CharacterId,
 ): string[] {
   if (salt % 3 !== 1 || lines.length === 0) {
     return lines;
   }
   const used = usedThem(history);
-  const source = asya ? ASYA_HOOKS[act] : HOOKS[act];
+  const source = hookBank(id, act);
   const pool = source.filter((line) => !used.has(normalizeSlang(line)));
   const hook = (pool.length > 0 ? pool : source)[Math.abs(salt) % Math.max(source.length, 1)];
   if (!hook || lines.some((line) => normalizeSlang(line) === normalizeSlang(hook))) {
@@ -292,7 +317,8 @@ function withHook(
   if (lines.length < 2) {
     return [...lines, hook];
   }
-  return asya ? [...lines.slice(0, 1), hook] : [...lines.slice(0, 2), hook];
+  const tight = id === "asya" || id === "kim";
+  return tight ? [...lines.slice(0, 1), hook] : [...lines.slice(0, 2), hook];
 }
 
 export function openingChoices(): Choice[] {
@@ -324,9 +350,11 @@ function finish(
       .replaceAll("{who}", getCharacter(opts.characterId).name.toLocaleLowerCase("tr-TR"))
       .replaceAll("{age}", String(getCharacter(opts.characterId).age)),
   );
-  const asya = opts.characterId === "asya";
-  const hooked = withHook(named, key, history, salt, asya);
-  const moaned = asya ? hooked : withMoan(hooked, salt, opts);
+  const hooked = withHook(named, key, history, salt, opts.characterId);
+  const moaned =
+    opts.characterId === "asya" || opts.characterId === "kim"
+      ? hooked
+      : withMoan(hooked, salt, opts);
   const tinted = tintFantasy(moaned, opts.fantasy, history, input);
   const unique = dropRepeats(tinted, history);
   const voiced = applyVoice(unique.length > 0 ? unique : echoReply(input, opts.name, history, salt), opts.characterId, salt, opts.name);
@@ -371,26 +399,27 @@ export function playScene(input: string, history: Message[], opts: PlayOpts): st
   const key = sceneKey(act);
   const phase = nightPhase(opts.heat, opts.climaxCount);
 
-  const asya = opts.characterId === "asya";
+  const who = opts.characterId;
 
   if (act === "complaint") {
     return finish(pickUnused(COMPLAINTS, history, salt) ?? echoReply(input, opts.name, history, salt), "talk", history, salt, opts, input);
   }
 
   if (phase === "after" && /boşal|bosal|bir daha|yanımda kal/.test(input)) {
-    const after = asya ? pickAsyaAfter(history, salt) : pickUnused(AFTERCARE, history, salt);
+    const after =
+      who === "asya"
+        ? pickAsyaAfter(history, salt)
+        : who === "kim"
+          ? pickKimAfter(history, salt)
+          : pickUnused(AFTERCARE, history, salt);
     return finish(after ?? echoReply(input, opts.name, history, salt), key, history, salt, opts, input);
   }
 
-  const moved = asya ? pickAsyaMove(input, history, salt) : playMove(input, history, salt);
+  const specialMove =
+    who === "asya" ? pickAsyaMove(input, history, salt) : who === "kim" ? pickKimMove(input, history, salt) : null;
+  const moved = specialMove ?? playMove(input, history, salt);
   if (moved) {
     return finish(moved, key, history, salt, opts, input);
-  }
-  if (asya) {
-    const genericMove = playMove(input, history, salt);
-    if (genericMove) {
-      return finish(genericMove, key, history, salt, opts, input);
-    }
   }
 
   if (act === "ask") {
@@ -406,11 +435,10 @@ export function playScene(input: string, history: Message[], opts: PlayOpts): st
   }
 
   if (act === "talk" || act === "ask") {
-    if (asya) {
-      const asyaPhase = pickAsyaPhase(phase, history, salt);
-      if (asyaPhase) {
-        return finish(asyaPhase, "talk", history, salt, opts, input);
-      }
+    const specialPhase =
+      who === "asya" ? pickAsyaPhase(phase, history, salt) : who === "kim" ? pickKimPhase(phase, history, salt) : null;
+    if (specialPhase) {
+      return finish(specialPhase, "talk", history, salt, opts, input);
     }
     const used = usedThem(history);
     const freshPhase = PHASE_TALK[phase].find((pair) =>
@@ -421,11 +449,10 @@ export function playScene(input: string, history: Message[], opts: PlayOpts): st
     }
   }
 
-  if (asya) {
-    const asyaScene = pickAsyaScene(key, history, salt);
-    if (asyaScene) {
-      return finish(asyaScene, key, history, salt, opts, input);
-    }
+  const specialScene =
+    who === "asya" ? pickAsyaScene(key, history, salt) : who === "kim" ? pickKimScene(key, history, salt) : null;
+  if (specialScene) {
+    return finish(specialScene, key, history, salt, opts, input);
   }
 
   const count = sceneCount(history, key);

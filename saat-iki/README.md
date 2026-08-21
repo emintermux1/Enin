@@ -23,6 +23,7 @@ Tarayıcıda `http://localhost:4173` açılır. Yaş kapısı, adın, sonra Asya
 Hepsi 24 yaş ve üzeri:
 
 - Asya, 24, seni delirtecek (varsayılan)
+- Cutie Kim, 23, doğal cutie (AI persona, foto/video yok)
 - Lila, 26, Cihangir
 - Sera, 29, Galata
 - Duru, 26, Kadıköy

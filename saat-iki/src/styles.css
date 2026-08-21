@@ -849,6 +849,34 @@ h2 {
   background: radial-gradient(circle, oklch(0.62 0.18 12 / 0.45), transparent 70%);
 }
 
+.tone-kim { --ember: #d4786a; }
+.tone-kim .collar {
+  height: 30%;
+  background: linear-gradient(180deg, #f4e6dc, #c9a090);
+}
+.tone-kim .hair {
+  width: 84%;
+  left: 8%;
+  height: 60%;
+  top: -2%;
+  background: #6b3a28;
+  border-radius: 55% 45% 30% 35%;
+}
+.tone-kim .face { background: #edd0b4; }
+.tone-kim .eye { background: #6a7380; }
+.tone-kim .mouth {
+  width: 26%;
+  height: 6px;
+  background: #c56b72;
+}
+.tone-kim .jewel {
+  background: #e8d5c4;
+  box-shadow: 0 0 8px oklch(0.86 0.04 70 / 0.55);
+}
+.tone-kim .portrait-glow {
+  background: radial-gradient(circle, oklch(0.78 0.08 40 / 0.4), transparent 70%);
+}
+
 .loc-taxi .portrait-room {
   background: linear-gradient(180deg, #2a1d18, #14100e);
 }

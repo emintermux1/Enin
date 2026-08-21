@@ -16,6 +16,12 @@ const VOICES: Record<CharacterId, Voice> = {
     endings: ["istiyorum", "offf"],
     moan: ["offf", "🥺", "mm"],
   },
+  kim: {
+    stretch: "light",
+    maxBubbles: 2,
+    endings: ["🥺", "mm"],
+    moan: ["mm", "off", "🥺"],
+  },
   elif: {
     stretch: "light",
     maxBubbles: 2,
@@ -53,6 +59,11 @@ function swapForVoice(line: string, id: CharacterId): string {
         .replaceAll("anlarsın ya", "istiyorum")
         .replaceAll("seni delirtiyom", "istiyorum")
         .replaceAll("seni çıldırtıcam", "utanmıcam");
+    case "kim":
+      return line
+        .replaceAll("hayvan gibi", "yavaş sonra sert")
+        .replaceAll("orospu gibi", "utanarak")
+        .replaceAll("anlarsın ya", "utanıyom ya");
     case "elif":
       return line.replaceAll("yaaa", "hadi").replaceAll("lütfen", "hadi").replaceAll("anlarsın ya", "geç kalma");
     case "defne":

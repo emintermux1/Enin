@@ -17,7 +17,7 @@ export type NightPhase = "tease" | "wet" | "peak" | "after";
 
 export type StretchMode = "heavy" | "mid" | "light" | "none";
 
-export type CharacterId = "asya" | "elif" | "defne" | "yasemin" | "melis";
+export type CharacterId = "asya" | "kim" | "elif" | "defne" | "yasemin" | "melis";
 
 export type HeatTier = 0 | 1 | 2 | 3;
 
