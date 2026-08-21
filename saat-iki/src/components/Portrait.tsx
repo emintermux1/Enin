@@ -21,6 +21,8 @@ export function Portrait({ id, large = false }: PortraitProps) {
       <div className="neck" />
       <div className="collar" />
       <div className="jewel" />
+      <div className="lash left" />
+      <div className="lash right" />
     </div>
   );
 }

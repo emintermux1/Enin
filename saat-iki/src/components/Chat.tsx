@@ -3,6 +3,7 @@ import { FANTASIES, fantasyLabel } from "../data/fantasies";
 import { nightPhase, phaseLabel } from "../engine/night";
 import { nightClock } from "../engine/reply";
 import type { Character, Choice, FantasyId, LocationId, Message } from "../types";
+import { Atmosphere } from "./Atmosphere";
 import { Portrait } from "./Portrait";
 
 type ChatProps = {
@@ -69,9 +70,10 @@ export function Chat({
 
   return (
     <section
-      className={`chat-shell loc-${location} tone-${character.id} phase-${phase}`}
+      className={`chat-shell loc-${location} tone-${character.id} phase-${phase} fan-${fantasy}`}
       style={{ ["--heat" as string]: String(heat / 100) }}
     >
+      <Atmosphere kind="chat" />
       <p className="phone-bar">
         <time>{nightClock(heat)}</time>
         <span>LTE</span>
@@ -83,7 +85,10 @@ export function Chat({
         <div className="who">
           <Portrait id={character.id} />
           <div>
-            <p className="who-name">{character.name}</p>
+            <p className="who-name">
+              <i className={`live-dot${waiting ? " is-type" : ""}`} />
+              {character.name}
+            </p>
             <p className="who-sub">{status}</p>
           </div>
         </div>

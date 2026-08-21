@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { Atmosphere } from "./Atmosphere";
 
 type NameGateProps = {
   onSubmit: (name: string) => void;
@@ -18,9 +19,10 @@ export function NameGate({ onSubmit }: NameGateProps) {
 
   return (
     <section className="lock name-gate">
-      <p className="eyebrow">önce sen</p>
+      <Atmosphere kind="lock" />
+      <p className="eyebrow">kulağına fısıldasın</p>
       <h1>Adın ne?</h1>
-      <p className="lede">Erkek adı yaz. Sana öyle seslenecek.</p>
+      <p className="lede">Erkek adı yaz. Öperken öyle seslenecek.</p>
       <form className="name-form" onSubmit={handleSubmit}>
         <label className="sr-only" htmlFor="player-name">
           Adın

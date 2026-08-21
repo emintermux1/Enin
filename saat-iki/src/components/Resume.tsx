@@ -1,6 +1,7 @@
 import { FANTASIES } from "../data/fantasies";
 import { getCharacter } from "../data/characters";
 import type { SavedNight } from "../types";
+import { Atmosphere } from "./Atmosphere";
 
 type ResumeProps = {
   night: SavedNight;
@@ -13,7 +14,8 @@ export function Resume({ night, onContinue, onFresh }: ResumeProps) {
   const fantasy = FANTASIES.find((item) => item.id === night.fantasy);
   return (
     <section className="lock">
-      <p className="eyebrow">gece yarım kaldı</p>
+      <Atmosphere kind="lock" />
+      <p className="eyebrow">çarşaf hâlâ dağınık</p>
       <h1>{person.name} hâlâ çevrimiçi.</h1>
       <p className="lede">
         {night.playerName}, ateş {night.heat}. {fantasy && fantasy.id !== "free" ? `${fantasy.label} kilitli.` : "Fantezi serbest."}{" "}

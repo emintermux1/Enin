@@ -1,3 +1,5 @@
+import { Atmosphere } from "./Atmosphere";
+
 type AgeGateProps = {
   onEnter: () => void;
 };
@@ -5,12 +7,12 @@ type AgeGateProps = {
 export function AgeGate({ onEnter }: AgeGateProps) {
   return (
     <section className="lock">
+      <Atmosphere kind="lock" />
       <p className="lock-clock">02:14</p>
-      <p className="lock-date">Cuma gecesi</p>
+      <p className="lock-date">Cuma gecesi · çarşaf hâlâ ılık</p>
       <h1>18+ değilse girme.</h1>
       <p className="lede">
-        Sen erkeksin. Karşında yetişkin bir hatun var. Yazarsın, o azgın cevap verir.
-        Video yok. Sohbet var.
+        Sen erkeksin. Karşında yetişkin bir hatun var. Yazarsın, o ıslanarak cevap verir.
       </p>
       <div className="gate-actions">
         <button type="button" className="btn-primary" onClick={onEnter}>
