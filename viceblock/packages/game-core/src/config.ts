@@ -12,6 +12,21 @@ export const POLICE_CONFIG = {
   maxSpawnDistance: 460,
   copShootMinHeat: 2,
   copShootChancePerTick: 0.012,
+  /**
+   * How close a cop gets before he is grabbing at you. Body separation used to
+   * hold him at arm's length forever, so a foot chase had no ending: he could
+   * neither arrest you nor lose you, and just walked behind you for the rest
+   * of the session.
+   */
+  grabRange: 13,
+  /**
+   * Seconds a cop keeps hunting after his last sighting. When it runs out he
+   * gives up and walks off the job, so one stray star cannot buy a permanent
+   * shadow.
+   */
+  giveUpSeconds: 18,
+  /** A cop this far away has lost the plot entirely and is recycled. */
+  leashDistance: 1100,
 };
 
 export const AIM_ASSIST_CONFIG = {

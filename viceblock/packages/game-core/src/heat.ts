@@ -51,6 +51,12 @@ export function tickHeat(
   playerY: number,
   crimeJustCommitted: number,
   currentVehicle = "",
+  /**
+   * Whether the player is actually running from the police. Standing in the
+   * street being looked at used to climb the wanted level to three on its own,
+   * which turned one minor star into a growing escort that never left.
+   */
+  resisting = true,
 ): HeatState {
   const next = { ...state };
   if (crimeJustCommitted > 0) {
@@ -72,7 +78,7 @@ export function tickHeat(
     next.lastKnownY = playerY;
     next.knownVehicle = currentVehicle;
     next.searchRadius = 90;
-    if (next.level >= 1 && next.seenTimer > 14 && next.level < 3) {
+    if (resisting && next.level >= 1 && next.seenTimer > 14 && next.level < 3) {
       next.level = clampHeat(next.level + 1);
       next.seenTimer = 0;
     }

@@ -115,6 +115,10 @@ interface Actor {
   searchT?: number;
   searchX?: number;
   searchZ?: number;
+  /** Seconds a cop has gone without seeing the suspect, before breaking off. */
+  lostT?: number;
+  /** A cop who has given up: walks off the job instead of trailing the player. */
+  quit?: boolean;
   /** Seconds left filming the player instead of fleeing. */
   recording?: number;
   /** Seconds since this one went down; the body lies there, then is cleared. */
@@ -363,6 +367,8 @@ export class ViceblockRuntime3D {
   private eventCarIds = new Set<string>();
   contract: { def: ContractDef; stage: "pickup" | "drop" } | null = null;
   private surrenderT = 0;
+  /** Distance to the closest officer still working the case, last tick. */
+  private copGap = Infinity;
   private gpsT = 0;
   /** Walkable interior state: rooms are built high above the city. */
   private interiorMode: { id: string; returnX: number; returnZ: number } | null = null;
@@ -2320,12 +2326,15 @@ export class ViceblockRuntime3D {
   }
 
   private separateFromBodies(): void {
-    const min = this.player.vehicleId ? 28 : 24;
     for (const a of [...this.actors, ...this.cops]) {
+      // A cop has to be able to get his hands on you, or a foot chase has no
+      // ending: held at a civilian's arm's length he could never make the
+      // arrest and simply walked behind the player forever.
+      const min = a.kind === "cop" ? POLICE_CONFIG.grabRange : this.player.vehicleId ? 28 : 24;
       const dx = a.x - this.player.x;
       const dz = a.z - this.player.z;
       const d = Math.hypot(dx, dz);
-      a.mesh.setEnabled(d >= 20);
+      a.mesh.setEnabled(d >= min - 6);
       if (d < 0.2 || d >= min) continue;
       const push = (min - d) / Math.max(0.2, d);
       if (a.kind === "named") {
@@ -2899,9 +2908,17 @@ export class ViceblockRuntime3D {
       } else {
         const wander = hour > 21 || hour < 5 ? 22 : 38;
         a.heading += (Math.random() - 0.5) * 0.4;
+        // Give the player room. Rejecting steps that came near them made a
+        // pedestrian circle you instead of walking on, which reads as being
+        // followed by a stranger who will not leave.
+        const gap = Math.hypot(a.x - this.player.x, a.z - this.player.z);
+        if (gap < 46) {
+          const away = Math.atan2(a.z - this.player.z, a.x - this.player.x);
+          a.heading += normalizeAngle(away - a.heading) * Math.min(1, dt * 2.4);
+        }
         const nx = a.x + Math.cos(a.heading) * wander * dt;
         const nz = a.z + Math.sin(a.heading) * wander * dt;
-        if (!blocked(this.world, nx, nz, 7) && Math.hypot(nx - this.player.x, nz - this.player.z) > 16) {
+        if (!blocked(this.world, nx, nz, 7)) {
           a.x = nx;
           a.z = nz;
         } else a.heading += 1.2;
@@ -2964,7 +2981,11 @@ export class ViceblockRuntime3D {
         (c) => Math.hypot(c.x - this.player.x, c.z - this.player.z) < sight && this.lineOpen(c.x, c.z, this.player.x, this.player.z),
       );
     const heatBefore = this.heat.level;
-    this.heat = tickHeat(this.heat, dt, seen, this.player.x, this.player.z, 0, this.player.vehicleId ? this.currentDefId() : "");
+    // Running is what raises the stakes. Being looked at while you stand in
+    // the street used to climb the wanted level on its own, which turned one
+    // careless moment into a growing escort that never went home.
+    const resisting = Boolean(this.player.vehicleId) || this.copGap > 90;
+    this.heat = tickHeat(this.heat, dt, seen, this.player.x, this.player.z, 0, this.player.vehicleId ? this.currentDefId() : "", resisting);
     if (heatBefore > 0 && this.heat.level === 0) {
       this.flash("EVADED  ·  they lost you  ·  lay low");
       this.audio.uiClick();
@@ -2973,16 +2994,48 @@ export class ViceblockRuntime3D {
     if (this.crackdown && this.heat.level > 0) want = Math.min(5, want + 1);
     while (this.cops.length < want) this.cops.push(this.makeCop());
     while (this.cops.length > want) {
-      const c = this.cops.pop();
-      c?.mesh.dispose();
+      // Retire whoever is furthest away: popping the list could delete the cop
+      // standing in front of you, who then vanished mid-stride.
+      let far = 0;
+      for (let i = 1; i < this.cops.length; i++) {
+        const a = this.cops[i];
+        const b = this.cops[far];
+        if (a && b && Math.hypot(a.x - this.player.x, a.z - this.player.z) > Math.hypot(b.x - this.player.x, b.z - this.player.z)) far = i;
+      }
+      this.cops[far]?.mesh.dispose();
+      this.cops.splice(far, 1);
     }
     this.updatePoliceCars();
     const speed = PLAYER_CONFIG.sprintSpeed * POLICE_CONFIG.footSpeedRatio * (0.9 + this.heat.level * 0.05);
     let nearest = Infinity;
     for (const c of this.cops) {
+      // Patience runs out. A cop who has not laid eyes on the suspect for a
+      // while stops hunting and walks off, instead of trailing you across the
+      // city on a hunch he can never act on.
+      if (seen) {
+        c.lostT = 0;
+        c.quit = false;
+      } else {
+        c.lostT = (c.lostT ?? 0) + dt;
+        if (c.lostT > POLICE_CONFIG.giveUpSeconds && !c.quit) {
+          c.quit = true;
+          c.searchX = undefined;
+        }
+      }
       let tx: number;
       let tz: number;
-      if (seen) {
+      if (c.quit) {
+        // Off the job: head away from the suspect until he is out of the area.
+        c.searchT = (c.searchT ?? 0) - dt;
+        if (c.searchX === undefined || c.searchT <= 0) {
+          c.searchT = 4;
+          const away = Math.atan2(c.z - this.player.z, c.x - this.player.x) + (Math.random() - 0.5) * 0.8;
+          c.searchX = c.x + Math.cos(away) * 420;
+          c.searchZ = c.z + Math.sin(away) * 420;
+        }
+        tx = c.searchX;
+        tz = c.searchZ ?? c.z;
+      } else if (seen) {
         tx = this.player.x;
         tz = this.player.z;
         c.searchT = 0;
@@ -3000,8 +3053,17 @@ export class ViceblockRuntime3D {
         tx = c.searchX;
         tz = c.searchZ ?? this.heat.lastKnownY;
       } else {
-        tx = this.player.x;
-        tz = this.player.z;
+        // No idea where you are: patrol the block rather than walking a
+        // straight line to coordinates nobody reported.
+        c.searchT = (c.searchT ?? 0) - dt;
+        if (c.searchX === undefined || c.searchT <= 0) {
+          c.searchT = 3 + Math.random() * 3;
+          const ang = Math.random() * Math.PI * 2;
+          c.searchX = c.x + Math.cos(ang) * 260;
+          c.searchZ = c.z + Math.sin(ang) * 260;
+        }
+        tx = c.searchX;
+        tz = c.searchZ ?? c.z;
       }
       const ang = Math.atan2(tz - c.z, tx - c.x);
       c.heading = ang;
@@ -3015,10 +3077,10 @@ export class ViceblockRuntime3D {
       c.mesh.rotation.y = -ang;
       this.poseWalk(c.mesh, true, this.heat.level >= 2);
       const d = Math.hypot(c.x - this.player.x, c.z - this.player.z);
-      nearest = Math.min(nearest, d);
-      const drawn = this.heat.level >= POLICE_CONFIG.copShootMinHeat && d < 260;
+      if (!c.quit) nearest = Math.min(nearest, d);
+      const drawn = !c.quit && this.heat.level >= POLICE_CONFIG.copShootMinHeat && d < 260;
       this.poseAim(c.mesh, drawn, 0);
-      if (seen && this.heat.level >= POLICE_CONFIG.copShootMinHeat && d < 190 && Math.random() < POLICE_CONFIG.copShootChancePerTick) {
+      if (!c.quit && seen && this.heat.level >= POLICE_CONFIG.copShootMinHeat && d < 190 && Math.random() < POLICE_CONFIG.copShootChancePerTick) {
         // Their shots read the same way yours do: flash, tracer, brass.
         const at = Math.atan2(this.player.z - c.z, this.player.x - c.x);
         const mx = c.x + Math.cos(at) * 9;
@@ -3052,15 +3114,18 @@ export class ViceblockRuntime3D {
       this.input.surrenderQueued = false;
       if (cornered) this.arrest("HANDS UP  ·  smart move");
     }
-    if (cornered && nearest < 15) {
+    if (cornered && nearest < POLICE_CONFIG.grabRange + 4) {
       this.surrenderT += dt;
       if (this.surrenderT > 2.4) this.arrest("TACKLED  ·  should have kept running");
     } else {
       this.surrenderT = 0;
     }
+    this.copGap = nearest;
 
     this.cops = this.cops.filter((c) => {
-      if (c.hp <= 0) {
+      const d = Math.hypot(c.x - this.player.x, c.z - this.player.z);
+      // Dead, walked out of the district, or off the job and clear of you.
+      if (c.hp <= 0 || d > POLICE_CONFIG.leashDistance || (c.quit && d > 420)) {
         c.mesh.dispose();
         return false;
       }
@@ -3184,6 +3249,11 @@ export class ViceblockRuntime3D {
     this.jailLeft = 40;
     this.surrenderT = 0;
     this.heat = createHeatState();
+    // The officers who booked you are off the case: leaving them alive meant a
+    // squad still jogging toward the precinct when you walked back out.
+    for (const c of this.cops) c.mesh.dispose();
+    this.cops = [];
+    this.copGap = Infinity;
     // Contraband is confiscated but you keep your cash minus processing.
     this.loot = [];
     this.player.vehicleId = null;
@@ -3218,10 +3288,23 @@ export class ViceblockRuntime3D {
   }
 
   private makeCop(): Actor {
-    const a = Math.random() * Math.PI * 2;
-    const d = POLICE_CONFIG.minSpawnDistance + Math.random() * (POLICE_CONFIG.maxSpawnDistance - POLICE_CONFIG.minSpawnDistance);
-    const x = Math.max(40, Math.min(MAP_W * TILE - 40, this.player.x + Math.cos(a) * d));
-    const z = Math.max(40, Math.min(MAP_H * TILE - 40, this.player.z + Math.sin(a) * d));
+    // Officers arrive where the police think the suspect is. Anchoring the
+    // spawn on the player meant a fresh cop popped into being behind you even
+    // when the last report put you on the other side of town.
+    const hunting = this.heat.hasLastKnown && this.heat.hiddenTimer > 2;
+    const ax = hunting ? this.heat.lastKnownX : this.player.x;
+    const az = hunting ? this.heat.lastKnownY : this.player.z;
+    // Behind the camera by preference: nobody should watch a policeman fade in.
+    const back = headingFromCamera(this.player.camYaw) + Math.PI;
+    let x = ax;
+    let z = az;
+    for (let tries = 0; tries < 14; tries++) {
+      const a = tries < 10 ? back + (Math.random() - 0.5) * 1.6 : Math.random() * Math.PI * 2;
+      const d = POLICE_CONFIG.minSpawnDistance + Math.random() * (POLICE_CONFIG.maxSpawnDistance - POLICE_CONFIG.minSpawnDistance);
+      x = Math.max(40, Math.min(MAP_W * TILE - 40, ax + Math.cos(a) * d));
+      z = Math.max(40, Math.min(MAP_H * TILE - 40, az + Math.sin(a) * d));
+      if (!blocked(this.world, x, z, 8)) break;
+    }
     const cop: Actor = {
       id: `cop-${Math.random().toString(36).slice(2, 7)}`,
       kind: "cop",
