@@ -12,6 +12,7 @@ import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTextur
 import { Scene } from "@babylonjs/core/scene";
 import {
   AIM_ASSIST_CONFIG,
+  AIM_CONFIG,
   applyReward,
   applyVehicleDamage,
   collisionDamage,
@@ -50,6 +51,7 @@ import {
   pedestrianImpact,
   PURSUIT_CONFIG,
   pursuitInput,
+  reloadAmount,
   recognitionRange,
   resolveCarCollision,
   scoreStunt,
@@ -135,7 +137,14 @@ interface CarEntity {
 interface Tracer {
   mesh: Mesh;
   life: number;
+  /** Set on debris — casings, sparks, blood — that arcs and lands. */
+  fall?: { vy: number; vx: number; vz: number };
+  /** Cleared until the effect has survived one render. */
+  seen?: boolean;
 }
+
+/** Height of a standing actor's hands: where muzzle flashes and tracers live. */
+const GUN_Y = 12;
 
 /**
  * How far the camera can be swung and how close it can be pulled. The old
@@ -233,6 +242,8 @@ export class ViceblockRuntime3D {
     vehicleId: null as string | null,
     weapon: "fists" as WeaponId,
     ammo: 36,
+    /** Rounds in the magazine; the rest of `ammo` is what is left in a pocket. */
+    mag: 0,
     phone: false,
     crate: false,
     grounded: true,
@@ -332,6 +343,20 @@ export class ViceblockRuntime3D {
   /** Real time owed to the simulation, paid off in fixed steps. */
   private simDebt = 0;
   private perf = { low: 0, dropped: false };
+  /** Upward camera kick from firing, worked off over the next moments. */
+  private recoil = 0;
+  /** Pitch to apply on the next camera update, cleared once consumed. */
+  private recoilStep = 0;
+  /** The part of the accumulated kick the shooter rides back down. */
+  private recoilPitch = 0;
+  private lastFired = -99;
+  private aiming = false;
+  private reloadT = 0;
+  /** Clock time of the last confirmed hit, and whether it put someone down. */
+  private hitMark = { at: -99, kill: false };
+  private shownWeapon: WeaponId | null = null;
+  /** Bullet holes, scorch and blood left on the world, oldest recycled first. */
+  private marks: Mesh[] = [];
   private matCache = new Map<string, StandardMaterial>();
 
   constructor(canvas: HTMLCanvasElement) {
@@ -436,6 +461,7 @@ export class ViceblockRuntime3D {
       const frame = Math.min(SIM.maxFrameSeconds, (now - last) / 1000);
       last = now;
       if (this.running) {
+        this.updateEffects(frame);
         this.stepSim(frame);
         this.scene.render();
         this.drawMinimap();
@@ -531,7 +557,11 @@ export class ViceblockRuntime3D {
     this.mission.step = save.missionStep ?? 0;
     if (save.inventory.some((i) => i.id === "smg")) this.player.weapon = "smg";
     else if (save.inventory.some((i) => i.id === "pistol")) this.player.weapon = "pistol";
-    if (this.player.weapon !== "fists") this.player.ammo = save.ammo ?? 0;
+    if (this.player.weapon !== "fists") {
+      this.player.ammo = save.ammo ?? 0;
+      this.player.mag = 0;
+      this.refillMagazine();
+    }
     if (this.player.health <= 0) this.player.health = 100;
     // Reconnect where you left off, as long as the spot is still walkable.
     if (save.x > 0 && save.y > 0 && !blocked(this.world, save.x, save.y, PLAYER_CONFIG.radius)) {
@@ -802,8 +832,80 @@ export class ViceblockRuntime3D {
     shadow.material = this.material("#0c0a08", 0);
     shadow.position.y = 0.16;
     shadow.parent = root;
-    root.metadata = { armL, armR, legL, legR };
+    // Hands hold something: the guns hang off the right arm so they follow the
+    // aim pose instead of floating beside the body.
+    const pistol = this.makeGunMesh(`${name}-gun-pistol`, "pistol");
+    pistol.parent = armR;
+    pistol.position.set(1.6, -4.6, 0);
+    pistol.setEnabled(false);
+    const smg = this.makeGunMesh(`${name}-gun-smg`, "smg");
+    smg.parent = armR;
+    smg.position.set(2.2, -4.6, 0);
+    smg.setEnabled(false);
+    root.metadata = { armL, armR, legL, legR, pistol, smg };
     return root;
+  }
+
+  /**
+   * Hand weapons, built from the same box vocabulary as everything else: a
+   * slide over a grip for the pistol, a receiver with a magazine, stock and
+   * sight for the SMG. The barrel points along +x, which is the actor's
+   * forward, so a muzzle flash can be pinned to the end of it.
+   */
+  private makeGunMesh(name: string, kind: "pistol" | "smg"): Mesh {
+    const root = MeshBuilder.CreateBox(`${name}-r`, { size: 0.3 }, this.scene);
+    root.isVisible = false;
+    const steel = this.surface("metal", "#2a2e34", 0.05);
+    const grip = this.surface("plastic", "#17141a");
+    let n = 0;
+    const part = (w: number, d: number, h: number, x: number, y: number, z: number, mat: StandardMaterial): void => {
+      const m = MeshBuilder.CreateBox(`${name}-${n++}`, { width: w, depth: d, height: h }, this.scene);
+      m.material = mat;
+      m.position.set(x, y, z);
+      m.parent = root;
+    };
+    if (kind === "pistol") {
+      part(4.6, 1.1, 1.5, 0.6, 0.9, 0, steel);
+      part(1.4, 1, 2.4, -0.9, -0.5, 0, grip);
+      part(1.2, 0.9, 0.7, 2.6, 0.4, 0, steel);
+      part(0.5, 0.5, 0.6, 2.2, 1.8, 0, steel);
+    } else {
+      part(6.4, 1.3, 1.8, 1.2, 0.9, 0, steel);
+      part(1.5, 1.1, 2.6, -0.4, -0.7, 0, grip);
+      part(1.2, 1, 2.8, 1.4, -0.8, 0, grip);
+      part(2.6, 0.8, 0.8, 4.6, 0.9, 0, steel);
+      part(2.4, 1, 1.2, -2.4, 1.1, 0, grip);
+      part(0.7, 0.5, 0.8, 3.4, 2, 0, steel);
+    }
+    return root;
+  }
+
+  /** Shows the weapon the actor is actually carrying, or empties their hands. */
+  private showWeapon(mesh: Mesh, weapon: WeaponId): void {
+    const meta = mesh.metadata as { pistol?: Mesh; smg?: Mesh } | undefined;
+    meta?.pistol?.setEnabled(weapon === "pistol");
+    meta?.smg?.setEnabled(weapon === "smg");
+  }
+
+  /**
+   * Levels the gun arm at whatever the actor is facing, with a kick that
+   * decays. Without this the weapon hangs at the hip and a firefight looks
+   * like two people standing near each other.
+   */
+  private poseAim(mesh: Mesh, aiming: boolean, kick: number): void {
+    const meta = mesh.metadata as { armL?: Mesh; armR?: Mesh } | undefined;
+    if (!meta?.armR) return;
+    // +90 degrees about z swings the hand end of the arm to the front, which is
+    // where the barrel and the muzzle flash need to be.
+    const want = aiming ? Math.PI / 2 + kick : 0;
+    meta.armR.rotation.z = meta.armR.rotation.z + (want - meta.armR.rotation.z) * 0.4;
+    meta.armR.rotation.x = 0;
+    if (meta.armL) {
+      // The support hand comes up too, but not all the way: one-handed grip.
+      const wantL = aiming ? 0.9 : 0;
+      meta.armL.rotation.z = meta.armL.rotation.z + (wantL - meta.armL.rotation.z) * 0.3;
+      if (aiming) meta.armL.rotation.x *= 0.5;
+    }
   }
 
   private poseWalk(mesh: Mesh, moving: boolean, sprint: boolean): void {
@@ -1390,7 +1492,7 @@ export class ViceblockRuntime3D {
     this.updateCars(dt);
     this.updateActors(dt);
     this.updateCops(dt);
-    this.updateTracers(dt);
+    this.lastShot += dt;
     this.updateMissions();
     this.updateCamera(dt);
     this.updateRemotes();
@@ -1460,9 +1562,12 @@ export class ViceblockRuntime3D {
     }
     this.playerMesh.setEnabled(true);
     const axis = this.input.axis();
+    this.updateWeapon(dt);
     if (this.player.sprintBoost > 0) this.player.sprintBoost -= dt;
     const boost = this.player.sprintBoost > 0 && axis.sprint ? 1.18 : 1;
-    const speed = (axis.sprint ? PLAYER_CONFIG.sprintSpeed : PLAYER_CONFIG.walkSpeed) * boost * (this.weather === "rain" ? 0.94 : 1);
+    const aimDrag = this.aiming ? AIM_CONFIG.moveScale : 1;
+    const speed =
+      (axis.sprint ? PLAYER_CONFIG.sprintSpeed : PLAYER_CONFIG.walkSpeed) * boost * aimDrag * (this.weather === "rain" ? 0.94 : 1);
     // Camera-relative movement.
     const yaw = this.player.camYaw;
     const fx = Math.sin(yaw);
@@ -1484,7 +1589,7 @@ export class ViceblockRuntime3D {
         if (!blocked(this.world, nx, this.player.z, PLAYER_CONFIG.radius)) this.player.x = nx;
         if (!blocked(this.world, this.player.x, nz, PLAYER_CONFIG.radius)) this.player.z = nz;
       }
-      this.player.heading = Math.atan2(mz, mx);
+      if (!this.aiming) this.player.heading = Math.atan2(mz, mx);
       this.lastFoot += dt;
       if (this.lastFoot > (axis.sprint ? 0.22 : 0.32)) {
         this.lastFoot = 0;
@@ -1517,7 +1622,40 @@ export class ViceblockRuntime3D {
     this.playerMesh.position.set(this.player.x, elev + this.player.y + bob, this.player.z);
     this.playerMesh.rotation.y = -this.player.heading;
     this.poseWalk(this.playerMesh, mag > 0.05, axis.sprint);
+    this.poseAim(this.playerMesh, this.armed() && (this.aiming || this.clock - this.lastFired < 0.7), this.recoil * 3);
     this.separateFromBodies();
+  }
+
+  private armed(): boolean {
+    return this.player.weapon !== "fists";
+  }
+
+  /**
+   * Everything that makes the gun feel like an object: which one is in hand,
+   * whether it is up, the magazine, the reload, and the kick working itself
+   * out of the camera between shots.
+   */
+  private updateWeapon(dt: number): void {
+    if (this.shownWeapon !== this.player.weapon) {
+      this.shownWeapon = this.player.weapon;
+      this.showWeapon(this.playerMesh, this.player.weapon);
+      this.reloadT = 0;
+      // Switching to a gun you already carry should not need a dry click first.
+      this.refillMagazine();
+    }
+    this.aiming = this.armed() && this.input.aiming();
+    // Aiming turns the body to the camera, which is what you are shooting along.
+    if (this.aiming) this.player.heading = Math.atan2(Math.cos(this.player.camYaw), Math.sin(this.player.camYaw));
+    if (this.input.consumeReload()) this.beginReload();
+    if (this.reloadT > 0) {
+      this.reloadT -= dt;
+      if (this.reloadT <= 0) {
+        this.reloadT = 0;
+        this.finishReload();
+        this.audio.uiClick();
+      }
+    }
+    this.recoil = Math.max(0, this.recoil - this.recoil * AIM_CONFIG.recoilRecovery * dt - dt * 0.02);
   }
 
   /** Title-screen wander parks civilians on spawn; kick them out on enter. */
@@ -1702,7 +1840,8 @@ export class ViceblockRuntime3D {
     const topSpeed = def
       ? Math.max(1, maxSpeedFor({ acceleration: def.acceleration, topSpeed: def.topSpeed, handling: def.handling, braking: def.braking, grip: 1, power: 1 }))
       : 1;
-    let dist = (car ? speedCameraDistance(165, speed, topSpeed) : 175) * this.camZoom;
+    // Sighting up pulls the camera in over the shoulder.
+    let dist = (car ? speedCameraDistance(165, speed, topSpeed) : 175) * this.camZoom * (this.aiming ? AIM_CONFIG.zoomScale : 1);
     // The lens opens as you wind the car out, so speed reads on screen.
     const wantFov = car ? speedFov(this.baseFov, speed, topSpeed) : this.baseFov;
     this.camera.fov += (wantFov - this.camera.fov) * Math.min(1, dt * 2.5);
@@ -1714,7 +1853,12 @@ export class ViceblockRuntime3D {
       this.player.camPitch += stick.y * sens * (this.settings.invertLook ? -1 : 1);
       this.lookedAt = this.clock;
     }
-    this.player.camPitch = clampPitch(this.player.camPitch);
+    // Recoil kicks the aim up and settles back: the camera itself climbs, so a
+    // held burst walks off target and has to be pulled down.
+    const settle = Math.min(this.recoilPitch, this.recoilPitch * 7 * dt);
+    this.recoilPitch -= settle;
+    this.player.camPitch = clampPitch(this.player.camPitch - this.recoilStep + settle);
+    this.recoilStep = 0;
     // A car swings the view back behind it, but only once the player has
     // stopped looking around — it used to snatch the camera back instantly.
     const looking = this.dragYaw.active || this.clock - this.lookedAt < CAMERA.manualLookHold;
@@ -2229,9 +2373,23 @@ export class ViceblockRuntime3D {
       this.poseWalk(c.mesh, true, this.heat.level >= 2);
       const d = Math.hypot(c.x - this.player.x, c.z - this.player.z);
       nearest = Math.min(nearest, d);
+      const drawn = this.heat.level >= POLICE_CONFIG.copShootMinHeat && d < 260;
+      this.poseAim(c.mesh, drawn, 0);
       if (seen && this.heat.level >= POLICE_CONFIG.copShootMinHeat && d < 190 && Math.random() < POLICE_CONFIG.copShootChancePerTick) {
-        this.spawnTracer(c.x, 10, c.z, this.player.x, 8, this.player.z);
-        if (Math.random() < 0.4) this.hurt(9);
+        // Their shots read the same way yours do: flash, tracer, brass.
+        const at = Math.atan2(this.player.z - c.z, this.player.x - c.x);
+        const mx = c.x + Math.cos(at) * 9;
+        const mz = c.z + Math.sin(at) * 9;
+        this.spawnMuzzleFlash(mx, GUN_Y, mz, at);
+        this.spawnTracer(mx, GUN_Y, mz, this.player.x, GUN_Y - 2, this.player.z);
+        this.spawnCasing(mx, GUN_Y, mz, at);
+        this.audio.gun();
+        if (Math.random() < 0.4) {
+          this.hurt(9);
+          this.spawnBlood(this.player.x, 10, this.player.z, at);
+        } else {
+          this.spawnSparks(this.player.x + Math.cos(at) * 8, 4, this.player.z + Math.sin(at) * 8, at);
+        }
       }
     }
     this.audio.setSirenDistance(Number.isFinite(nearest) ? nearest : 900);
@@ -2422,7 +2580,7 @@ export class ViceblockRuntime3D {
     const d = POLICE_CONFIG.minSpawnDistance + Math.random() * (POLICE_CONFIG.maxSpawnDistance - POLICE_CONFIG.minSpawnDistance);
     const x = Math.max(40, Math.min(MAP_W * TILE - 40, this.player.x + Math.cos(a) * d));
     const z = Math.max(40, Math.min(MAP_H * TILE - 40, this.player.z + Math.sin(a) * d));
-    return {
+    const cop: Actor = {
       id: `cop-${Math.random().toString(36).slice(2, 7)}`,
       kind: "cop",
       name: "NSB",
@@ -2433,15 +2591,35 @@ export class ViceblockRuntime3D {
       panic: 0,
       mesh: this.makeHumanoid(`cop-${Math.random().toString(36).slice(2, 5)}`, "#1a2430", "#d8dde4"),
     };
+    this.showWeapon(cop.mesh, "pistol");
+    return cop;
   }
 
-  private updateTracers(dt: number): void {
-    this.lastShot += dt;
+  /**
+   * Ages muzzle flashes, tracers and debris on real time, once per rendered
+   * frame and before the frame is drawn. Running this inside the fixed
+   * simulation step meant a flash could be born and disposed between two
+   * renders on a slow machine, so the gun fired but nothing was ever seen.
+   */
+  private updateEffects(frame: number): void {
+    const dt = Math.min(0.1, frame);
     this.tracers = this.tracers.filter((t) => {
+      // Everything gets at least one frame on screen before it starts ageing.
+      if (!t.seen) {
+        t.seen = true;
+        return true;
+      }
       t.life -= dt;
       if (t.life <= 0) {
         t.mesh.dispose();
         return false;
+      }
+      if (t.fall) {
+        t.fall.vy -= 150 * dt;
+        t.mesh.position.x += t.fall.vx * dt;
+        t.mesh.position.y = Math.max(0.4, t.mesh.position.y + t.fall.vy * dt);
+        t.mesh.position.z += t.fall.vz * dt;
+        t.mesh.rotation.z += dt * 9;
       }
       return true;
     });
@@ -2478,13 +2656,18 @@ export class ViceblockRuntime3D {
       return;
     }
 
-    if (this.player.ammo <= 0) {
-      this.flash("CLICK  ·  empty  ·  ammo at Red Pump");
+    if (this.reloadT > 0) return;
+    if (this.player.mag <= 0) {
+      if (this.player.ammo > 0) {
+        this.beginReload();
+        return;
+      }
+      this.flash("CLICK  ·  dry  ·  ammo at Red Pump");
       this.lastShot = 0.05;
       return;
     }
     this.lastShot = 0;
-    this.player.ammo -= 1;
+    this.player.mag -= 1;
 
     const yaw = this.player.camYaw;
     let heading: number;
@@ -2509,15 +2692,27 @@ export class ViceblockRuntime3D {
       heading = assisted.heading;
     }
 
-    // Weapon spread gives each gun a personality: pistol snaps, SMG sprays.
-    heading += (Math.random() - 0.5) * 2 * weapon.spread;
-    const range = weapon.range;
-    const tx = this.player.x + Math.cos(heading) * range;
-    const tz = this.player.z + Math.sin(heading) * range;
-    this.spawnTracer(this.player.x, 9, this.player.z, tx, 9, tz);
-    // Muzzle flash right off the barrel.
-    this.spawnPuff(this.player.x + Math.cos(heading) * 10, 9, this.player.z + Math.sin(heading) * 10, "#f8e080");
+    // Aiming tightens the group; spraying from the hip should cost you.
+    const spread = weapon.spread * (this.aiming ? AIM_CONFIG.spreadScale : 1);
+    heading += (Math.random() - 0.5) * 2 * spread;
+    // A wall stops a bullet. It never used to: rounds flew through blocks and
+    // killed people on the far side of a building.
+    const wall = this.shotStop(this.player.x, this.player.z, heading, weapon.range);
+    const tx = this.player.x + Math.cos(heading) * wall;
+    const tz = this.player.z + Math.sin(heading) * wall;
+
+    const mx = this.player.x + Math.cos(heading) * 9;
+    const mz = this.player.z + Math.sin(heading) * 9;
+    this.spawnMuzzleFlash(mx, GUN_Y, mz, heading);
+    this.spawnTracer(mx, GUN_Y, mz, tx, GUN_Y, tz);
+    this.spawnCasing(mx, GUN_Y, mz, heading);
     this.audio.gun();
+    this.recoil += weapon.recoil;
+    this.recoilStep += weapon.recoil;
+    // Most of the kick settles by itself; what is left is the climb the
+    // player has to ride down, which is what makes a long burst cost you.
+    this.recoilPitch += weapon.recoil * 0.7;
+    this.lastFired = this.clock;
     if (this.settings.shake) this.shake = weapon.id === "smg" ? 1.6 : 3;
     this.reportCrime("gunfire");
     this.panicNear();
@@ -2533,8 +2728,9 @@ export class ViceblockRuntime3D {
     for (const c of this.cops) {
       consider(c.x, c.z, 12, () => {
         c.hp -= weapon.damage;
-        this.spawnPuff(c.x, 10, c.z, "#c43020");
+        this.spawnBlood(c.x, 10, c.z, heading);
         this.impact(c.hp <= 0 ? "kill" : "hit");
+        this.markHit(c.hp <= 0);
         this.flash(c.hp <= 0 ? "DOWN  ·  that one's staying down" : "HIT");
         if (c.hp <= 0) {
           // Shooting an officer is the one crime the city never shrugs off.
@@ -2546,7 +2742,9 @@ export class ViceblockRuntime3D {
     for (const a of this.actors) {
       if (a.dead !== undefined) continue;
       consider(a.x, a.z, 11, () => {
-        this.spawnPuff(a.x, 10, a.z, "#c43020");
+        this.spawnBlood(a.x, 10, a.z, heading);
+        const fatal = a.hp - weapon.damage <= 0 && a.kind !== "named";
+        this.markHit(fatal);
         this.hitActor(a, weapon.damage, "gun", true);
       });
     }
@@ -2554,7 +2752,8 @@ export class ViceblockRuntime3D {
       if (car.rt.exploded) continue;
       consider(car.rt.x, car.rt.y, 16, () => {
         car.rt = applyVehicleDamage(car.rt, Math.round(weapon.damage * 0.65), false);
-        this.spawnPuff(car.rt.x, 8, car.rt.y, "#e8d8a0");
+        this.spawnSparks(car.rt.x, 8, car.rt.y, heading);
+        this.markHit(false);
         if (Math.random() < 0.3) {
           car.rt = shootTire(car.rt);
           this.flash("TIRE  ·  shredded, she'll wander now");
@@ -2562,16 +2761,137 @@ export class ViceblockRuntime3D {
         if (car.rt.health <= 0) this.flash("CAR  ·  fuel tank's punching out");
       });
     }
-    (best as { hit: () => void } | null)?.hit();
+    const target = best as { hit: () => void } | null;
+    if (target) target.hit();
+    else if (wall < weapon.range) {
+      // Nothing in the way but the building: chip it and leave a hole behind.
+      this.spawnSparks(tx, GUN_Y, tz, heading + Math.PI);
+      this.leaveMark(tx - Math.cos(heading) * 1.5, GUN_Y, tz - Math.sin(heading) * 1.5, "#12100e", 7, false);
+    }
+  }
+
+  /** Distance the round travels before a building stops it. */
+  private shotStop(x: number, z: number, heading: number, range: number): number {
+    const step = 7;
+    const cx = Math.cos(heading);
+    const cz = Math.sin(heading);
+    for (let d = step; d <= range; d += step) {
+      if (blocked(this.world, x + cx * d, z + cz * d, 1)) return Math.max(step, d - step / 2);
+    }
+    return range;
+  }
+
+  private beginReload(): void {
+    const weapon = weaponById(this.player.weapon);
+    if (weapon.magazine <= 0 || this.reloadT > 0) return;
+    if (this.player.ammo <= 0 || this.player.mag >= weapon.magazine) return;
+    this.reloadT = weapon.reloadSeconds;
+    this.audio.uiClick();
+    this.flash(`RELOADING  ·  ${weapon.name}`);
+  }
+
+  private finishReload(): void {
+    const weapon = weaponById(this.player.weapon);
+    const take = reloadAmount(weapon.magazine, this.player.mag, this.player.ammo);
+    this.player.mag += take;
+    this.player.ammo -= take;
+  }
+
+  /** Tops the magazine straight up, for pickups and shop purchases. */
+  private refillMagazine(): void {
+    const weapon = weaponById(this.player.weapon);
+    if (weapon.magazine <= 0) return;
+    const take = reloadAmount(weapon.magazine, this.player.mag, this.player.ammo);
+    this.player.mag += take;
+    this.player.ammo -= take;
+  }
+
+  private markHit(kill: boolean): void {
+    this.hitMark = { at: this.clock, kill };
   }
 
   private spawnTracer(x0: number, y0: number, z0: number, x1: number, y1: number, z1: number): void {
     const len = Math.hypot(x1 - x0, z1 - z0);
-    const line = MeshBuilder.CreateBox("tr", { width: len, depth: 0.8, height: 0.8 }, this.scene);
-    line.material = this.material("#f3e6d2", 0.9);
+    const line = MeshBuilder.CreateBox("tr", { width: len, depth: 0.5, height: 0.5 }, this.scene);
+    line.material = this.material("#ffe9a8", 1);
     line.position = new Vector3((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
     line.rotation.y = -Math.atan2(z1 - z0, x1 - x0);
-    this.tracers.push({ mesh: line, life: 0.08 });
+    this.tracers.push({ mesh: line, life: 0.06 });
+  }
+
+  /** The bright flare off the barrel that tells you the gun went off. */
+  private spawnMuzzleFlash(x: number, y: number, z: number, heading: number): void {
+    const flash = MeshBuilder.CreateBox("mz", { width: 7, depth: 2.6, height: 2.6 }, this.scene);
+    flash.material = this.material("#fff0b4", 1);
+    flash.position = new Vector3(x + Math.cos(heading) * 3, y, z + Math.sin(heading) * 3);
+    flash.rotation.y = -heading;
+    this.tracers.push({ mesh: flash, life: 0.05 });
+    const glow = MeshBuilder.CreateBox("mzg", { size: 4.4 }, this.scene);
+    glow.material = this.material("#f8a83c", 0.9);
+    glow.position = new Vector3(x, y, z);
+    this.tracers.push({ mesh: glow, life: 0.07 });
+  }
+
+  /**
+   * Brass out of the ejection port, so firing leaves something behind. Sized
+   * for a camera 150 units away rather than for realism: at true scale the
+   * casing is a single pixel and may as well not exist.
+   */
+  private spawnCasing(x: number, y: number, z: number, heading: number): void {
+    const side = heading + Math.PI / 2;
+    const c = MeshBuilder.CreateBox("cs", { width: 3.2, depth: 1.3, height: 1.3 }, this.scene);
+    c.material = this.surface("metal", "#e8c058", 0.35);
+    c.position = new Vector3(x + Math.cos(side) * 4, y - 1, z + Math.sin(side) * 4);
+    c.rotation.y = -heading;
+    this.tracers.push({ mesh: c, life: 1.6, fall: { vy: 12, vx: Math.cos(side) * 18, vz: Math.sin(side) * 18 } });
+  }
+
+  private spawnSparks(x: number, y: number, z: number, heading: number): void {
+    for (let i = 0; i < 5; i++) {
+      const a = heading + (Math.random() - 0.5) * 1.6;
+      const s = MeshBuilder.CreateBox("sp", { size: 2.2 + Math.random() * 1.8 }, this.scene);
+      s.material = this.material(i % 2 ? "#ffd27a" : "#fff4d8", 1);
+      s.position = new Vector3(x, y + (Math.random() - 0.3) * 3, z);
+      this.tracers.push({
+        mesh: s,
+        life: 0.4 + Math.random() * 0.3,
+        fall: { vy: 14 + Math.random() * 16, vx: Math.cos(a) * 40, vz: Math.sin(a) * 40 },
+      });
+    }
+    this.spawnPuff(x, y, z, "#cfc7b6");
+  }
+
+  private spawnBlood(x: number, y: number, z: number, heading: number): void {
+    for (let i = 0; i < 6; i++) {
+      const a = heading + (Math.random() - 0.5) * 1.1;
+      const s = MeshBuilder.CreateBox("bl", { size: 2 + Math.random() * 2.2 }, this.scene);
+      s.material = this.material("#8e1c14", 0.25);
+      s.position = new Vector3(x, y + (Math.random() - 0.5) * 5, z);
+      this.tracers.push({
+        mesh: s,
+        life: 0.5 + Math.random() * 0.3,
+        fall: { vy: 8 + Math.random() * 12, vx: Math.cos(a) * 30, vz: Math.sin(a) * 30 },
+      });
+    }
+    this.leaveMark(x + Math.cos(heading) * 6, 0.4, z + Math.sin(heading) * 6, "#5e120c", 11);
+  }
+
+  /**
+   * Leaves a flat patch on the ground or wall: bullet holes and blood that
+   * stay put, so a firefight is still readable once the shooting stops. The
+   * pool is capped, oldest recycled first.
+   */
+  private leaveMark(x: number, y: number, z: number, hex: string, size: number, onGround = true): void {
+    const m = MeshBuilder.CreateBox(
+      `mk${this.marks.length}`,
+      onGround ? { width: size, depth: size, height: 0.4 } : { size: size * 0.5 },
+      this.scene,
+    );
+    m.material = this.material(hex);
+    m.position = new Vector3(x, onGround ? Math.max(0.35, y - 1) : y, z);
+    m.rotation.y = Math.random() * Math.PI;
+    this.marks.push(m);
+    if (this.marks.length > 48) this.marks.shift()?.dispose();
   }
 
   private spawnPuff(x: number, y: number, z: number, hex: string): void {
@@ -2719,6 +3039,7 @@ export class ViceblockRuntime3D {
           this.player.cash -= smg.price;
           this.player.weapon = "smg";
           this.player.ammo = Math.max(this.player.ammo, 90);
+          this.refillMagazine();
           this.fenceOfferT = 0;
           this.audio.cash();
           this.flash(`FENCE  ·  ${smg.name} + 90 rounds  ·  it never happened`);
@@ -2744,6 +3065,7 @@ export class ViceblockRuntime3D {
         if (this.player.cash >= 25) {
           this.player.cash -= 25;
           this.player.ammo += rounds;
+          this.refillMagazine();
           this.audio.cash();
           this.flash(`AMMO  ·  +${rounds}, $25`);
         } else {
@@ -2765,6 +3087,7 @@ export class ViceblockRuntime3D {
     this.loot.push({ origin: "store-robbery", value: ECONOMY_CONFIG.martRobbery });
     this.player.weapon = "pistol";
     this.player.ammo = Math.max(this.player.ammo, 24);
+    this.refillMagazine();
     // The clerk always counts as one witness.
     this.reportCrime("robbery", 1);
     this.audio.cash();
@@ -3315,9 +3638,11 @@ export class ViceblockRuntime3D {
     if (level > 0) this.heat = tickHeat(this.heat, 0, true, this.player.x, this.player.z, level);
   }
 
-  debugGiveWeapon(): void {
-    this.player.weapon = "pistol";
+  debugGiveWeapon(id: WeaponId = "pistol"): void {
+    this.player.weapon = id;
     this.player.ammo = 60;
+    this.player.mag = 0;
+    this.refillMagazine();
   }
 
   debugHeal(): void {
@@ -3396,7 +3721,16 @@ export class ViceblockRuntime3D {
       gamepad: this.input.gamepadOn,
       contractLine: this.contract ? `${this.contract.def.title}  ·  ${this.contract.stage === "pickup" ? "PICKUP" : "DROP"}` : "",
       weapon: weaponById(this.player.weapon).name,
-      ammo: this.player.weapon === "fists" ? 0 : this.player.ammo,
+      ammo: this.player.weapon === "fists" ? 0 : this.player.ammo + this.player.mag,
+      mag: this.armed() ? this.player.mag : 0,
+      reserve: this.armed() ? this.player.ammo : 0,
+      reloading: this.reloadT > 0,
+      aiming: this.aiming,
+      // Crosshair bloom: what the gun is actually doing, not a fixed dot.
+      spread: this.armed()
+        ? weaponById(this.player.weapon).spread * (this.aiming ? AIM_CONFIG.spreadScale : 1) + this.recoil * 1.6
+        : 0,
+      hitMarker: this.clock - this.hitMark.at < 0.3 ? (this.hitMark.kill ? "kill" : "hit") : null,
       raceBestMs: this.player.raceBestMs,
       waypointBearing: wp
         ? normalizeAngle(Math.atan2(wp.x - this.player.x, wp.z - this.player.z) - this.player.camYaw)

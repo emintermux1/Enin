@@ -26,7 +26,11 @@ export class GameInput {
   mobile = false;
   gamepadOn = false;
   resetViewQueued = false;
+  reloadQueued = false;
+  /** Right mouse / left trigger: aim down the sights. */
+  aim = false;
   private padFire = false;
+  private padAim = false;
   private padButtons = new Set<number>();
   private padLook = { x: 0, y: 0 };
 
@@ -40,7 +44,10 @@ export class GameInput {
         e.preventDefault();
         this.phoneQueued = true;
       }
-      if (e.code === "KeyR") this.radioQueued = true;
+      // R reloads, as every shooter has trained players to expect; the radio
+      // moved to B and still has its button in the dock.
+      if (e.code === "KeyR") this.reloadQueued = true;
+      if (e.code === "KeyB") this.radioQueued = true;
       if (e.code === "KeyH") this.assistQueued = true;
       if (e.code === "KeyG") this.surrenderQueued = true;
       if (e.code === "KeyV") this.resetViewQueued = true;
@@ -49,21 +56,36 @@ export class GameInput {
     const up = (e: KeyboardEvent): void => {
       this.keys.delete(e.code);
     };
+    /**
+     * Pointer Events only fire `pointerdown` for the first button pressed: a
+     * left click made while the right button is already held arrives as a
+     * `pointermove` with an updated button mask. Reading the mask everywhere
+     * is what makes "hold to aim, click to shoot" work at all.
+     */
+    const syncButtons = (e: PointerEvent): void => {
+      if (e.pointerType === "touch" || this.aimStick.active) return;
+      this.fire = (e.buttons & 1) !== 0;
+      this.aim = (e.buttons & 2) !== 0;
+    };
     const md = (e: PointerEvent): void => {
       // Touch on the canvas orbits the camera; anything else (mouse, pen,
       // synthetic events with an empty pointerType) fires on button 0.
+      syncButtons(e);
       if (e.pointerType !== "touch" && e.button === 0) this.fire = true;
+      if (e.pointerType !== "touch" && e.button === 2) this.aim = true;
       this.pointerLocked = true;
     };
     const mu = (e: PointerEvent): void => {
       // Guarded by pointer type so lifting a touch (e.g. the move stick)
       // doesn't cancel fire held by the aim stick.
       if (e.pointerType !== "touch" && e.button === 0) this.fire = false;
+      if (e.pointerType !== "touch" && e.button === 2) this.aim = false;
     };
     const move = (e: PointerEvent): void => {
       const rect = canvas.getBoundingClientRect();
       this.mx = e.clientX - rect.left;
       this.my = e.clientY - rect.top;
+      syncButtons(e);
     };
     const blur = (): void => this.resetAll();
     const vis = (): void => {
@@ -106,6 +128,7 @@ export class GameInput {
   resetAll(): void {
     this.keys.clear();
     this.fire = false;
+    this.aim = false;
     this.stick = releaseStick(this.stick);
     this.aimStick = releaseStick(this.aimStick);
   }
@@ -122,6 +145,7 @@ export class GameInput {
       if (this.gamepadOn) {
         this.gamepadOn = false;
         this.padFire = false;
+        this.padAim = false;
         this.padLook = { x: 0, y: 0 };
       }
       return null;
@@ -132,6 +156,7 @@ export class GameInput {
     const y = dead(pad.axes[1] ?? 0);
     this.padLook = { x: dead(pad.axes[2] ?? 0), y: dead(pad.axes[3] ?? 0) };
     this.padFire = (pad.buttons[7]?.value ?? 0) > 0.5;
+    this.padAim = (pad.buttons[6]?.value ?? 0) > 0.4;
     const edge = (idx: number): boolean => {
       const pressed = Boolean(pad.buttons[idx]?.pressed);
       const was = this.padButtons.has(idx);
@@ -143,6 +168,7 @@ export class GameInput {
       return false;
     };
     if (edge(0)) this.interactQueued = true;
+    if (edge(2)) this.reloadQueued = true;
     if (edge(3)) this.phoneQueued = true;
     if (edge(5)) this.radioQueued = true;
     if (Math.hypot(x, y) < 0.02) return null;
@@ -175,6 +201,17 @@ export class GameInput {
 
   firing(): boolean {
     return this.fire || this.padFire;
+  }
+
+  aiming(): boolean {
+    this.pollGamepad();
+    return this.aim || this.padAim;
+  }
+
+  consumeReload(): boolean {
+    if (!this.reloadQueued) return false;
+    this.reloadQueued = false;
+    return true;
   }
 
   /** Right stick free-look, so a pad is not stuck with whatever the car decides. */

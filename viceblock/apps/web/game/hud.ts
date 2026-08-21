@@ -31,7 +31,16 @@ export interface HudSnapshot {
   gamepad: boolean;
   contractLine: string;
   weapon: string;
+  /** Total rounds carried, magazine included. */
   ammo: number;
+  /** Rounds in the magazine and rounds left in reserve. */
+  mag: number;
+  reserve: number;
+  reloading: boolean;
+  aiming: boolean;
+  /** Crosshair bloom in radians: spread plus whatever recoil has not settled. */
+  spread: number;
+  hitMarker: "hit" | "kill" | null;
   raceBestMs: number;
   /** Bearing to the active waypoint relative to the camera (radians), or null. */
   waypointBearing: number | null;

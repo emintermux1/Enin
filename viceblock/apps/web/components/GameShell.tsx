@@ -1,7 +1,7 @@
 "use client";
 
 import { DEFAULT_SETTINGS, GAME_NAME, sanitizeText, type PlayerSave } from "@viceblock/shared";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import type { HudSnapshot } from "../game/hud";
 import { ViceblockRuntime3D } from "../game3d/runtime3d";
 import { blockRichPaste } from "../lib/sanitize-dom";
@@ -44,6 +44,12 @@ const EMPTY: HudSnapshot = {
   contractLine: "",
   weapon: "Fists",
   ammo: 0,
+  mag: 0,
+  reserve: 0,
+  reloading: false,
+  aiming: false,
+  spread: 0,
+  hitMarker: null,
   raceBestMs: 0,
   waypointBearing: null,
   combo: 0,
@@ -354,7 +360,7 @@ export function GameShell() {
             ENTER SOUTHSIDE
           </button>
           <p className="hint">
-            WASD walk · Shift sprint · Space jump/handbrake · E interact · G surrender · click shoot · drag camera · wheel zoom · V recentre · R radio · F phone · H assist
+            WASD walk · Shift sprint · Space jump/handbrake · E interact · G surrender · click shoot · right-click aim · R reload · drag camera · wheel zoom · V recentre · B radio · F phone · H assist
             <br />
             Touch: left stick walks (push far to sprint) · right stick aims &amp; fires · drag screen for camera · E/G button acts
           </p>
@@ -409,12 +415,32 @@ export function GameShell() {
               <i style={{ width: `${xpPct(hud.xp, hud.level)}%` }} />
             </div>
             <div className="gun">
-              LV {hud.level} · {hud.inVehicle ? `RIDE ${hud.vehicleHp}%` : `${hud.weapon}${hud.ammo > 0 ? ` · ${hud.ammo}` : ""}`}
+              LV {hud.level} ·{" "}
+              {hud.inVehicle ? (
+                `RIDE ${hud.vehicleHp}%`
+              ) : hud.weapon === "Fists" ? (
+                hud.weapon
+              ) : (
+                <>
+                  {hud.weapon} ·{" "}
+                  <b className={hud.mag === 0 ? "dry" : ""}>{hud.mag}</b>
+                  <span className="reserve">/{hud.reserve}</span>
+                  {hud.reloading ? <em className="reloading">RELOADING</em> : null}
+                </>
+              )}
             </div>
           </div>
           {hud.health < 35 && hud.jailLeft <= 0 ? <div className="vignette" /> : null}
           <canvas ref={minimapRef} width={132} height={132} className="minimap" />
-          {!hud.inVehicle && hud.weapon !== "Fists" && <div className="crosshair" />}
+          {!hud.inVehicle && hud.weapon !== "Fists" ? (
+            <div className={`crosshair${hud.aiming ? " aimed" : ""}`} style={{ "--bloom": `${8 + hud.spread * 320}px` } as CSSProperties}>
+              <i />
+              <i />
+              <i />
+              <i />
+              {hud.hitMarker ? <u className={hud.hitMarker} /> : null}
+            </div>
+          ) : null}
           {hud.inVehicle ? (
             <div className={`speedo${hud.speed > 110 ? " fast" : ""}`}>
               <b>{hud.speed}</b>
@@ -1352,12 +1378,111 @@ export function GameShell() {
           position: absolute;
           left: 50%;
           top: 50%;
-          width: 4px;
-          height: 4px;
-          margin: -2px 0 0 -2px;
-          background: #f3e6d2;
-          box-shadow: 0 0 0 1px rgba(26, 20, 16, 0.7);
+          width: 0;
+          height: 0;
           pointer-events: none;
+          --bloom: 8px;
+        }
+        /* Four ticks that open with the gun's spread and close as it settles. */
+        .crosshair i {
+          position: absolute;
+          background: #f3e6d2;
+          box-shadow: 0 0 0 1px rgba(26, 20, 16, 0.75);
+          transition: transform 60ms linear;
+        }
+        .crosshair i:nth-child(1),
+        .crosshair i:nth-child(2) {
+          width: 2px;
+          height: 9px;
+          left: -1px;
+        }
+        .crosshair i:nth-child(1) {
+          top: calc(-1 * var(--bloom) - 9px);
+        }
+        .crosshair i:nth-child(2) {
+          top: var(--bloom);
+        }
+        .crosshair i:nth-child(3),
+        .crosshair i:nth-child(4) {
+          width: 9px;
+          height: 2px;
+          top: -1px;
+        }
+        .crosshair i:nth-child(3) {
+          left: calc(-1 * var(--bloom) - 9px);
+        }
+        .crosshair i:nth-child(4) {
+          left: var(--bloom);
+        }
+        .crosshair.aimed i {
+          background: #ff8a3c;
+          box-shadow: 0 0 0 1px rgba(26, 20, 16, 0.9);
+        }
+        /* Aiming adds a centre pip, so the mode is unmistakable. */
+        .crosshair.aimed::after {
+          content: "";
+          position: absolute;
+          left: -1.5px;
+          top: -1.5px;
+          width: 3px;
+          height: 3px;
+          background: #ff8a3c;
+          border-radius: 50%;
+        }
+        .crosshair u {
+          position: absolute;
+          left: -9px;
+          top: -9px;
+          width: 18px;
+          height: 18px;
+          animation: hitmark 0.3s ease-out forwards;
+        }
+        .crosshair u::before,
+        .crosshair u::after {
+          content: "";
+          position: absolute;
+          left: 8px;
+          top: 0;
+          width: 2px;
+          height: 18px;
+          background: #f3e6d2;
+        }
+        .crosshair u::before {
+          transform: rotate(45deg);
+        }
+        .crosshair u::after {
+          transform: rotate(-45deg);
+        }
+        .crosshair u.kill::before,
+        .crosshair u.kill::after {
+          background: #e84a32;
+        }
+        @keyframes hitmark {
+          from {
+            opacity: 1;
+            transform: scale(0.7);
+          }
+          to {
+            opacity: 0;
+            transform: scale(1.25);
+          }
+        }
+        .gun .reserve {
+          opacity: 0.6;
+        }
+        .gun b.dry {
+          color: #e8703c;
+        }
+        .gun .reloading {
+          margin-left: 6px;
+          color: #e8b04a;
+          font-style: normal;
+          animation: blink 0.7s steps(2, end) infinite;
+        }
+        @keyframes blink {
+          50% {
+            opacity: 0.25;
+          }
         }
         .debug {
           position: absolute;
