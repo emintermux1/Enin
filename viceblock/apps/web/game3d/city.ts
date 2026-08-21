@@ -76,6 +76,14 @@ interface FacadeStyle {
   glass: string;
   /** What burns behind that glass after dark. */
   lit: string;
+  /**
+   * Share of windows with a light on after dark. This is not decoration: the
+   * emissive mask is mipmapped, so from across a block every texel of a wall
+   * samples the tile average. Light three windows in four, as this used to,
+   * and the average is 0.18 against a night wall lit to 0.09 — the glow wins
+   * and the whole building turns into a lamp brighter than it was at noon.
+   */
+  occupancy: number;
 }
 
 /** Deterministic hash in [0,1): the city has to look the same every load. */
@@ -127,7 +135,7 @@ function paintWindow(
     d.fillStyle = "rgba(214,200,176,0.55)";
     d.fillRect(x, y, w, h * blind);
   }
-  if (hash01(seed * 7 + 5) < 0.72) {
+  if (hash01(seed * 7 + 5) < s.occupancy) {
     e.fillStyle = tint(s.lit, hash01(seed * 11) * 0.3 - 0.15);
     e.fillRect(x, y, w, h);
     e.fillStyle = "rgba(0,0,0,0.4)";
@@ -236,7 +244,7 @@ function paintFacade(d: CanvasRenderingContext2D, e: CanvasRenderingContext2D, s
           d.fillRect(x, y, w, w);
           d.fillStyle = `rgba(255,255,255,${0.03 + hash01(seed + r + c * 3) * 0.07})`;
           d.fillRect(x, y, w, w * 0.3);
-          if (hash01(seed * 3 + r * 8 + c) < 0.5) {
+          if (hash01(seed * 3 + r * 8 + c) < s.occupancy) {
             e.fillStyle = tint(s.lit, hash01(seed + r * 3 + c) * 0.3 - 0.2);
             e.fillRect(x + 1, y + 1, w - 2, w - 2);
           }
@@ -264,6 +272,26 @@ interface Facade {
 }
 
 /**
+ * Uploads a painted wall pair and sets it to tile.
+ *
+ * Walls are nearly always seen down their own length, and at that angle
+ * trilinear filtering picks a mip off the long derivative and collapses the
+ * tile toward its own average — brick softens, and lit windows wash over the
+ * wall between them. Anisotropy is the fix on hardware that honours it;
+ * software rasterisers ignore the hint, so the night emissive is scaled to
+ * stay believable even when the wash survives.
+ */
+function publishWall(...textures: DynamicTexture[]): void {
+  for (const t of textures) {
+    t.hasAlpha = false;
+    t.update();
+    t.wrapU = 1;
+    t.wrapV = 1;
+    t.anisotropicFilteringLevel = 8;
+  }
+}
+
+/**
  * Mipmapped: a facade repeated up a tower and then viewed from three streets
  * away samples the full-size image for every pixel without them, which both
  * shimmers and costs fill rate on weak hardware.
@@ -275,12 +303,7 @@ function facade(scene: Scene, name: string, s: FacadeStyle, seed: number): Facad
   e.fillStyle = "#000000";
   e.fillRect(0, 0, FACADE_PX, FACADE_PX);
   paintFacade(canvas2d(diffuse.getContext()), e, s, seed);
-  for (const t of [diffuse, emissive]) {
-    t.hasAlpha = false;
-    t.update();
-    t.wrapU = 1;
-    t.wrapV = 1;
-  }
+  publishWall(diffuse, emissive);
   const material = new StandardMaterial(name, scene);
   material.diffuseColor = new Color3(1, 1, 1);
   material.specularColor = new Color3(0.05, 0.05, 0.06);
@@ -867,12 +890,7 @@ function storefront(scene: Scene, name: string, glass: string, fascia: string, s
   d.fillRect(0, top, pier, glazedH);
   d.fillRect(px - pier, top, pier, glazedH);
   grain(d, 90, 0.05, seed + 3, px);
-  for (const t of [diffuse, emissive]) {
-    t.hasAlpha = false;
-    t.update();
-    t.wrapU = 1;
-    t.wrapV = 1;
-  }
+  publishWall(diffuse, emissive);
   const material = new StandardMaterial(name, scene);
   material.diffuseColor = new Color3(1, 1, 1);
   material.specularColor = new Color3(0.08, 0.08, 0.09);
@@ -906,14 +924,16 @@ function signTexture(scene: Scene, name: string, title: string, ink: string, pap
  * at street level with newer glass behind it, so the mix leans that way.
  */
 const FACADE_STYLES: readonly FacadeStyle[] = [
-  { kind: "brick", wall: "#6b4436", trim: "#c9b39a", glass: "#4a5f6e", lit: "#ffcf82" },
-  { kind: "brick", wall: "#7d5a44", trim: "#d8c4a8", glass: "#3f5866", lit: "#ffbe6a" },
-  { kind: "brick", wall: "#54453f", trim: "#a89684", glass: "#44596a", lit: "#ffd79a" },
-  { kind: "stucco", wall: "#d9c3a4", trim: "#f4ece0", glass: "#4e6f80", lit: "#ffe3ae" },
-  { kind: "stucco", wall: "#c9a68f", trim: "#f6e6d6", glass: "#42606f", lit: "#ffd0a0" },
-  { kind: "stucco", wall: "#a8c2bd", trim: "#eef6f3", glass: "#3d5d6b", lit: "#cfe6ff" },
-  { kind: "office", wall: "#8d8a82", trim: "#b4b0a6", glass: "#3a5566", lit: "#e6f0ff" },
-  { kind: "curtain", wall: "#2f4450", trim: "#26333c", glass: "#4b7285", lit: "#dbeaff" },
+  { kind: "brick", wall: "#6b4436", trim: "#c9b39a", glass: "#4a5f6e", lit: "#ffcf82", occupancy: 0.34 },
+  { kind: "brick", wall: "#7d5a44", trim: "#d8c4a8", glass: "#3f5866", lit: "#ffbe6a", occupancy: 0.27 },
+  { kind: "brick", wall: "#54453f", trim: "#a89684", glass: "#44596a", lit: "#ffd79a", occupancy: 0.4 },
+  { kind: "stucco", wall: "#d9c3a4", trim: "#f4ece0", glass: "#4e6f80", lit: "#ffe3ae", occupancy: 0.3 },
+  { kind: "stucco", wall: "#c9a68f", trim: "#f6e6d6", glass: "#42606f", lit: "#ffd0a0", occupancy: 0.38 },
+  { kind: "stucco", wall: "#a8c2bd", trim: "#eef6f3", glass: "#3d5d6b", lit: "#cfe6ff", occupancy: 0.24 },
+  // Offices and glass towers keep more lights on than flats do, and a tower
+  // that is all glass has no wall left to go dark, so they run leaner still.
+  { kind: "office", wall: "#8d8a82", trim: "#b4b0a6", glass: "#3a5566", lit: "#e6f0ff", occupancy: 0.44 },
+  { kind: "curtain", wall: "#2f4450", trim: "#26333c", glass: "#4b7285", lit: "#dbeaff", occupancy: 0.3 },
 ] as const;
 
 export function buildCity(scene: Scene, world: WorldData, kit: TextureKit): CityMeshes {
@@ -1252,7 +1272,16 @@ export function buildCity(scene: Scene, world: WorldData, kit: TextureKit): City
     const lmFace = facade(
       scene,
       `m-lm-${lm.id}`,
-      { kind: "stucco", wall: landmarkColor(lm.kind), trim: tint(landmarkColor(lm.kind), 0.4), glass: "#3d5a6a", lit: trimColor(lm.kind) },
+      {
+        kind: "stucco",
+        wall: landmarkColor(lm.kind),
+        trim: tint(landmarkColor(lm.kind), 0.4),
+        glass: "#3d5a6a",
+        lit: trimColor(lm.kind),
+        // Landmarks are places you are meant to be able to pick out after
+        // dark, so they keep the lights on harder than the blocks around them.
+        occupancy: 0.55,
+      },
       lm.x * 13 + lm.y * 7,
     );
     textures.push(lmFace.diffuse, lmFace.emissive);
@@ -1533,7 +1562,11 @@ export function buildCity(scene: Scene, world: WorldData, kit: TextureKit): City
     tops,
     setNight: (k: number) => {
       const lit = Math.max(0, Math.min(1, k));
-      for (const f of facades) f.material.emissiveColor.set(lit, lit * 0.94, lit * 0.86);
+      // 0.45, not 1: the mask is mipmapped, so a tower far enough away that
+      // its windows fall below a pixel glows at the tile average everywhere.
+      // At full strength that average beat the same wall's noon diffuse and
+      // the whole skyline came out brighter at midnight than at midday.
+      for (const f of facades) f.material.emissiveColor.set(lit * 0.45, lit * 0.42, lit * 0.38);
       // Neon still reads in daylight, just as a painted sign rather than a lamp.
       const glow = 0.3 + lit * 0.7;
       for (const [m, base] of glowing) m.emissiveColor.copyFrom(base).scaleInPlace(glow);
