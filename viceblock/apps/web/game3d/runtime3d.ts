@@ -682,7 +682,13 @@ export class ViceblockRuntime3D {
 
   applyQuality(): void {
     const scale = this.quality === "low" ? 0.68 : this.quality === "medium" ? 0.85 : 1;
-    this.engine.setHardwareScalingLevel(1 / scale / Math.min(1.5, window.devicePixelRatio || 1));
+    // Only a sliver of the device pixel ratio, and only at the top setting.
+    // Taking all of it, up to 1.5, meant a retina laptop on "high" rendered
+    // two and a quarter times the pixels of the same window on a plain
+    // monitor. This scene is fill-bound, so that alone was the difference
+    // between a smooth street and a slideshow, and nothing on screen said so.
+    const dpr = this.quality === "high" ? Math.min(1.15, window.devicePixelRatio || 1) : 1;
+    this.engine.setHardwareScalingLevel(1 / scale / dpr);
   }
 
   setQuality(q: Quality): void {
