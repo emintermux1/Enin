@@ -10,7 +10,7 @@ type Voice = {
 };
 
 const VOICES: Record<CharacterId, Voice> = {
-  leyla: {
+  asya: {
     stretch: "heavy",
     maxBubbles: 3,
     endings: ["anlarsın ya", "offf"],
@@ -48,7 +48,7 @@ export function voiceOf(id: CharacterId): Voice {
 
 function swapForVoice(line: string, id: CharacterId): string {
   switch (id) {
-    case "leyla":
+    case "asya":
       return line;
     case "elif":
       return line.replaceAll("yaaa", "hadi").replaceAll("lütfen", "hadi").replaceAll("anlarsın ya", "geç kalma");
@@ -76,7 +76,7 @@ export function applyVoice(
   const voice = VOICES[id];
   const person = getCharacter(id);
   let next = lines.map((line) =>
-    swapForVoice(line, id).replaceAll("{name}", name).replaceAll("leyla", person.name.toLocaleLowerCase("tr-TR")),
+    swapForVoice(line, id).replaceAll("{name}", name).replaceAll("asya", person.name.toLocaleLowerCase("tr-TR")),
   );
   if (next.length > voice.maxBubbles) {
     next = next.slice(0, voice.maxBubbles);

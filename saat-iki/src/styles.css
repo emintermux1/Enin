@@ -820,11 +820,11 @@ h2 {
 .tone-melis .hair { background: #4a2a18; height: 50%; }
 .tone-melis .jewel { background: #c9a227; }
 
-.tone-leyla { --ember: #c43b52; }
-.tone-leyla .collar { background: #5c1424; }
-.tone-leyla .hair { width: 72%; left: 14%; background: #140c0e; }
-.tone-leyla .face { background: #d4a27e; }
-.tone-leyla .jewel { background: #e6c15a; }
+.tone-asya { --ember: #c43b52; }
+.tone-asya .collar { background: #5c1424; }
+.tone-asya .hair { width: 72%; left: 14%; background: #140c0e; }
+.tone-asya .face { background: #d4a27e; }
+.tone-asya .jewel { background: #e6c15a; }
 
 .loc-taxi .portrait-room {
   background: linear-gradient(180deg, #2a1d18, #14100e);

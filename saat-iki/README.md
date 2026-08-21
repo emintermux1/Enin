@@ -6,7 +6,7 @@ Görsel seks sahnesi, porno model veya seks sesi yok.
 
 ## Canlı
 
-https://small-dawn-3698.zerodeploy.app
+https://sparkling-sun-3975.zerodeploy.app
 
 Geçici yayın (yaklaşık 72 saat). Yerelde:
 
@@ -16,13 +16,13 @@ npm install
 npm run dev
 ```
 
-Tarayıcıda `http://localhost:4173` açılır. Yaş kapısı, adın, sonra Leyla yazar. Sen yazınca “yazıyor…” görünür, o senin cümline cevap verir.
+Tarayıcıda `http://localhost:4173` açılır. Yaş kapısı, adın, sonra Asya yazar. Sen yazınca “yazıyor…” görünür, o senin cümline cevap verir.
 
 ## Kimler
 
 Hepsi 26 yaş ve üzeri:
 
-- Leyla, 27, AI hatun (varsayılan)
+- Asya, 27, azgın hatun (varsayılan)
 - Elif Kaya, 28, Cihangir
 - Defne Yılmaz, 31, Galata
 - Yasemin Arslan, 26, Kadıköy

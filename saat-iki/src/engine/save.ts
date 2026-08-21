@@ -15,11 +15,12 @@ export function loadNight(): SavedNight | null {
     if (!raw) {
       return null;
     }
-    const parsed = JSON.parse(raw) as SavedNight;
+    const parsed = JSON.parse(raw) as Omit<SavedNight, "characterId"> & { characterId: string };
     if (parsed.version !== 1 || !parsed.playerName || !parsed.characterId || !parsed.messages?.length) {
       return null;
     }
-    return parsed;
+    const characterId = parsed.characterId === "leyla" ? "asya" : parsed.characterId;
+    return { ...parsed, characterId } as SavedNight;
   } catch {
     return null;
   }
