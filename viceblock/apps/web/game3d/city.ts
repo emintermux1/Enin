@@ -1021,45 +1021,54 @@ export function buildCity(scene: Scene, world: WorldData, kit: TextureKit): City
   const whiteMat = mat(scene, "m-line-w", "#9d9a90");
   const solids: Mesh[] = [];
   const dashes: Mesh[] = [];
-  const dash = (x: number, z: number, w: number, d: number): void => {
-    const m = MeshBuilder.CreateBox("dash", { width: w, depth: d, height: 0.3 }, scene);
+  // Paint only where there is road under it. The markings used to be drawn as
+  // one strip per arterial spanning the entire map, so the centre lines ran
+  // straight across the docks, the park and the pavement.
+  const onRoad = (x: number, z: number): boolean => {
+    const i = Math.floor(x / TILE);
+    const j = Math.floor(z / TILE);
+    return i >= 0 && j >= 0 && i < MAP_W && j < MAP_H && (world.cells[j * MAP_W + i] as Cell) === Cell.Road;
+  };
+  const paint = (into: Mesh[], x: number, z: number, w: number, d: number): void => {
+    if (!onRoad(x, z)) return;
+    const m = MeshBuilder.CreateBox("mark", { width: w, depth: d, height: 0.3 }, scene);
     m.position = new Vector3(x, 0.22, z);
-    dashes.push(m);
+    into.push(m);
   };
   const HALF = TILE * 1.5;
   for (const yTile of [10, 22, 36, 50, 64]) {
     const cz = (yTile + 1.5) * TILE;
-    for (const off of [-1.4, 1.4]) {
-      const line = MeshBuilder.CreateBox("solid", { width: MAP_W * TILE, depth: 1.2, height: 0.3 }, scene);
-      line.position = new Vector3((MAP_W * TILE) / 2, 0.22, cz + off);
-      solids.push(line);
+    for (let x = TILE / 2; x < MAP_W * TILE; x += TILE) {
+      paint(solids, x, cz - 1.4, TILE, 1.2);
+      paint(solids, x, cz + 1.4, TILE, 1.2);
     }
     for (let x = TILE; x < MAP_W * TILE; x += 26) {
-      dash(x, cz - HALF * 0.55, 13, 1.2);
-      dash(x, cz + HALF * 0.55, 13, 1.2);
+      paint(dashes, x, cz - HALF * 0.55, 13, 1.2);
+      paint(dashes, x, cz + HALF * 0.55, 13, 1.2);
     }
   }
   for (const xTile of [8, 22, 36, 50, 64, 80]) {
     const cx = (xTile + 1.5) * TILE;
-    for (const off of [-1.4, 1.4]) {
-      const line = MeshBuilder.CreateBox("solid", { width: 1.2, depth: MAP_H * TILE, height: 0.3 }, scene);
-      line.position = new Vector3(cx + off, 0.22, (MAP_H * TILE) / 2);
-      solids.push(line);
+    for (let z = TILE / 2; z < MAP_H * TILE; z += TILE) {
+      paint(solids, cx - 1.4, z, 1.2, TILE);
+      paint(solids, cx + 1.4, z, 1.2, TILE);
     }
     for (let z = TILE; z < MAP_H * TILE; z += 26) {
-      dash(cx - HALF * 0.55, z, 1.2, 13);
-      dash(cx + HALF * 0.55, z, 1.2, 13);
+      paint(dashes, cx - HALF * 0.55, z, 1.2, 13);
+      paint(dashes, cx + HALF * 0.55, z, 1.2, 13);
     }
   }
-  const centre = Mesh.MergeMeshes(solids, true, true);
+  const centre = solids.length > 0 ? Mesh.MergeMeshes(solids, true, true) : null;
   if (centre) {
     centre.material = yellowMat;
+    centre.isPickable = false;
     centre.freezeWorldMatrix();
     disposables.push(centre);
   }
-  const lanes = Mesh.MergeMeshes(dashes, true, true);
+  const lanes = dashes.length > 0 ? Mesh.MergeMeshes(dashes, true, true) : null;
   if (lanes) {
     lanes.material = whiteMat;
+    lanes.isPickable = false;
     lanes.freezeWorldMatrix();
     disposables.push(lanes);
   }
@@ -1376,30 +1385,30 @@ export function buildCity(scene: Scene, world: WorldData, kit: TextureKit): City
     }
   }
 
-  const curbMat = kit.material("concrete", "#6a5a4c");
-  const zebraMat = mat(scene, "m-zebra", "#e8d8c0", 0.08);
-  for (const yTile of [10, 22, 36, 50, 64]) {
-    const north = MeshBuilder.CreateBox(`curb-n-${yTile}`, { width: MAP_W * TILE, depth: 1.8, height: 1.2 }, scene);
-    north.position = new Vector3((MAP_W * TILE) / 2, 0.6, (yTile - 0.15) * TILE);
-    north.material = curbMat;
-    north.freezeWorldMatrix();
-    disposables.push(north);
-    const south = MeshBuilder.CreateBox(`curb-s-${yTile}`, { width: MAP_W * TILE, depth: 1.8, height: 1.2 }, scene);
-    south.position = new Vector3((MAP_W * TILE) / 2, 0.6, (yTile + 3.15) * TILE);
-    south.material = curbMat;
-    south.freezeWorldMatrix();
-    disposables.push(south);
-  }
+  // Crossings, one merged mesh, and only where there is road under them. The
+  // pair of kerb strips that used to run the full width of the map along each
+  // arterial went with them: the per-tile kerbing laid earlier follows the
+  // actual pavement instead of cutting across docks and lawns.
+  const zebraMat = mat(scene, "m-zebra", "#b3a894");
+  const stripes: Mesh[] = [];
   for (const xTile of [8, 22, 36, 50, 64, 80]) {
     for (const yTile of [10, 22, 36, 50, 64]) {
       for (let s = 0; s < 5; s++) {
+        const px = (xTile + 1.5) * TILE;
+        const pz = yTile * TILE + 8 + s * 10;
+        if ((world.cells[Math.floor(pz / TILE) * MAP_W + Math.floor(px / TILE)] as Cell) !== Cell.Road) continue;
         const zebra = MeshBuilder.CreateBox(`zw-${xTile}-${yTile}-${s}`, { width: 10, depth: 4, height: 0.25 }, scene);
-        zebra.position = new Vector3((xTile + 1.5) * TILE, 0.28, yTile * TILE + 8 + s * 10);
-        zebra.material = zebraMat;
-        zebra.freezeWorldMatrix();
-        disposables.push(zebra);
+        zebra.position = new Vector3(px, 0.28, pz);
+        stripes.push(zebra);
       }
     }
+  }
+  const crossings = stripes.length > 0 ? Mesh.MergeMeshes(stripes, true, true) : null;
+  if (crossings) {
+    crossings.material = zebraMat;
+    crossings.isPickable = false;
+    crossings.freezeWorldMatrix();
+    disposables.push(crossings);
   }
 
   const binMat = kit.material("metal", "#3a4a38");
@@ -1428,7 +1437,7 @@ export function buildCity(scene: Scene, world: WorldData, kit: TextureKit): City
   }
 
   dressSpawnStreet(scene, kit, disposables, textures, lampMat, trunkMat, frondMat);
-  dressCityStreets(scene, kit, world, disposables, lampMat, lampHead, binMat, hydrantMat, benchMat, curbMat, lamps);
+  dressCityStreets(scene, kit, world, disposables, lampMat, lampHead, binMat, hydrantMat, benchMat, kit.material("concrete", "#6a5a4c"), lamps);
 
   // Contact shadows and lamp pools, each merged into a single mesh. Both are
   // transparent decals laid on the ground: a draw call apiece is affordable,
