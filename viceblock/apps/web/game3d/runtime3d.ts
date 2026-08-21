@@ -798,6 +798,53 @@ export class ViceblockRuntime3D {
     return m;
   }
 
+  /**
+   * The red half of the suit. Flat red at this scale is a red box, so the
+   * webbing is drawn in: radials out of one corner and rings across them, the
+   * pattern that says whose costume this is even from a rooftop away.
+   */
+  private webbedMaterial(hex: string): StandardMaterial {
+    const key = `webbed-${hex}`;
+    const hit = this.matCache.get(key);
+    if (hit) return hit;
+    const size = 128;
+    const tex = new DynamicTexture(`webtex-${hex}`, { width: size, height: size }, this.scene, true);
+    const ctx = tex.getContext() as unknown as CanvasRenderingContext2D;
+    ctx.fillStyle = hex;
+    ctx.fillRect(0, 0, size, size);
+    const base = Color3.FromHexString(hex);
+    const ink = new Color3(base.r * 0.32, base.g * 0.3, base.b * 0.42);
+    ctx.strokeStyle = `rgb(${Math.round(ink.r * 255)},${Math.round(ink.g * 255)},${Math.round(ink.b * 255)})`;
+    ctx.lineWidth = 1.6;
+    ctx.lineCap = "round";
+    const spokes = 9;
+    for (let i = 0; i < spokes; i++) {
+      const a = (i / (spokes - 1)) * (Math.PI / 2);
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(Math.cos(a) * size * 1.5, Math.sin(a) * size * 1.5);
+      ctx.stroke();
+    }
+    for (let r = 16; r < size * 1.5; r += 17) {
+      // Strands sag between spokes, which is what stops this reading as a target.
+      ctx.beginPath();
+      for (let i = 0; i < spokes - 1; i++) {
+        const a0 = (i / (spokes - 1)) * (Math.PI / 2);
+        const a1 = ((i + 1) / (spokes - 1)) * (Math.PI / 2);
+        const mid = (a0 + a1) / 2;
+        ctx.moveTo(Math.cos(a0) * r, Math.sin(a0) * r);
+        ctx.quadraticCurveTo(Math.cos(mid) * r * 0.86, Math.sin(mid) * r * 0.86, Math.cos(a1) * r, Math.sin(a1) * r);
+      }
+      ctx.stroke();
+    }
+    tex.update();
+    const m = new StandardMaterial(key, this.scene);
+    m.diffuseTexture = tex;
+    m.specularColor = new Color3(0.1, 0.1, 0.12);
+    this.matCache.set(key, m);
+    return m;
+  }
+
   private faceMaterial(skinHex: string): StandardMaterial {
     const key = `face-${skinHex}`;
     const hit = this.matCache.get(key);
@@ -848,16 +895,20 @@ export class ViceblockRuntime3D {
   private makeHumanoid(name: string, shirtHex: string, skinHex: string, pantsHex = "#2a2420", masked = false): Mesh {
     const root = MeshBuilder.CreateBox(`${name}-root`, { width: 0.4, depth: 0.4, height: 0.4 }, this.scene);
     root.isVisible = false;
+    // Red webbing over head, chest, gloves and boots; the blue takes the limbs.
+    // Split that way the silhouette is a costume rather than a red block.
+    const red = masked ? this.webbedMaterial(shirtHex) : this.surface("cloth", shirtHex);
+    const blue = masked ? this.surface("cloth", pantsHex) : this.surface("cloth", shirtHex);
     const torso = MeshBuilder.CreateBox(`${name}-t`, { width: 7.2, depth: 4.6, height: 9.2 }, this.scene);
-    torso.material = this.surface("cloth", shirtHex);
+    torso.material = red;
     torso.position.y = 13.2;
     torso.parent = root;
     const neck = MeshBuilder.CreateCylinder(`${name}-nk`, { height: 1.8, diameter: 2.2, tessellation: 8 }, this.scene);
-    neck.material = masked ? this.surface("cloth", shirtHex) : this.surface("skin", skinHex);
+    neck.material = masked ? red : this.surface("skin", skinHex);
     neck.position.y = 18.4;
     neck.parent = root;
     const head = MeshBuilder.CreateBox(`${name}-h`, { width: 5.2, depth: 5.2, height: 5.4 }, this.scene);
-    head.material = masked ? this.surface("cloth", shirtHex) : this.surface("skin", skinHex);
+    head.material = masked ? red : this.surface("skin", skinHex);
     head.position.y = 21.4;
     head.parent = root;
     if (masked) {
@@ -875,10 +926,25 @@ export class ViceblockRuntime3D {
         rim.rotation.x = 0.22 * s;
         rim.parent = root;
       }
-      const emblem = MeshBuilder.CreateBox(`${name}-emblem`, { width: 0.4, depth: 3, height: 3, }, this.scene);
-      emblem.material = this.material("#14161c", 0.05);
-      emblem.position.set(2.4, 14.4, 0);
-      emblem.parent = root;
+      // A spider on the chest and a bigger one across the back, because from
+      // behind is how you see this character for most of a swing.
+      // The torso is 7.2 across, so these sit just proud of its faces at 3.6;
+      // buried in the middle of the box they render as nothing at all.
+      for (const [x, w, s] of [
+        [3.72, 3, 1],
+        [-3.72, 4.2, -1],
+      ] as const) {
+        const body = MeshBuilder.CreateBox(`${name}-emblem${s}`, { width: 0.4, depth: w * 0.42, height: w }, this.scene);
+        body.material = this.material("#14161c", 0.05);
+        body.position.set(x, 14.4, 0);
+        body.parent = root;
+        for (const side of [1, -1]) {
+          const legs = MeshBuilder.CreateBox(`${name}-emblem-leg${s}${side}`, { width: 0.38, depth: w * 0.86, height: 0.36 }, this.scene);
+          legs.material = this.material("#14161c", 0.05);
+          legs.position.set(x, 14.4 + w * 0.26 * side, 0);
+          legs.parent = root;
+        }
+      }
       const belt = MeshBuilder.CreateBox(`${name}-belt`, { width: 7.4, depth: 4.8, height: 1.1 }, this.scene);
       belt.material = this.surface("cloth", pantsHex);
       belt.position.y = 9;
@@ -935,19 +1001,19 @@ export class ViceblockRuntime3D {
       earR.parent = root;
     }
     const armL = MeshBuilder.CreateBox(`${name}-al`, { width: 2.1, depth: 2.2, height: 8.6 }, this.scene);
-    armL.material = this.surface("cloth", shirtHex);
+    armL.material = blue;
     armL.position.set(0, 13.4, 3.8);
     armL.parent = root;
     const armR = MeshBuilder.CreateBox(`${name}-ar`, { width: 2.1, depth: 2.2, height: 8.6 }, this.scene);
-    armR.material = this.surface("cloth", shirtHex);
+    armR.material = blue;
     armR.position.set(0, 13.4, -3.8);
     armR.parent = root;
     const handL = MeshBuilder.CreateBox(`${name}-hl`, { width: 1.8, depth: 1.8, height: 1.8 }, this.scene);
-    handL.material = masked ? this.surface("cloth", shirtHex) : this.surface("skin", skinHex);
+    handL.material = masked ? red : this.surface("skin", skinHex);
     handL.position.set(0, 8.6, 3.8);
     handL.parent = root;
     const handR = MeshBuilder.CreateBox(`${name}-hr`, { width: 1.8, depth: 1.8, height: 1.8 }, this.scene);
-    handR.material = masked ? this.surface("cloth", shirtHex) : this.surface("skin", skinHex);
+    handR.material = masked ? red : this.surface("skin", skinHex);
     handR.position.set(0, 8.6, -3.8);
     handR.parent = root;
     const legL = MeshBuilder.CreateBox(`${name}-ll`, { width: 2.8, depth: 2.6, height: 8 }, this.scene);
@@ -958,13 +1024,17 @@ export class ViceblockRuntime3D {
     legR.material = this.surface("denim", pantsHex);
     legR.position.set(0, 4.1, -1.7);
     legR.parent = root;
-    const shoeL = MeshBuilder.CreateBox(`${name}-sl`, { width: 3.6, depth: 2.7, height: 1.4 }, this.scene);
-    shoeL.material = this.surface("leather", "#1a1410");
-    shoeL.position.set(0.6, 0.7, 1.7);
+    // Boots come up the shin on a costume, so the masked one gets a taller,
+    // red block where the others get a flat shoe.
+    const bootH = masked ? 3.4 : 1.4;
+    const bootMat = masked ? red : this.surface("leather", "#1a1410");
+    const shoeL = MeshBuilder.CreateBox(`${name}-sl`, { width: 3.6, depth: 2.7, height: bootH }, this.scene);
+    shoeL.material = bootMat;
+    shoeL.position.set(0.6, bootH / 2, 1.7);
     shoeL.parent = root;
-    const shoeR = MeshBuilder.CreateBox(`${name}-sr`, { width: 3.6, depth: 2.7, height: 1.4 }, this.scene);
-    shoeR.material = this.surface("leather", "#1a1410");
-    shoeR.position.set(0.6, 0.7, -1.7);
+    const shoeR = MeshBuilder.CreateBox(`${name}-sr`, { width: 3.6, depth: 2.7, height: bootH }, this.scene);
+    shoeR.material = bootMat;
+    shoeR.position.set(0.6, bootH / 2, -1.7);
     shoeR.parent = root;
     const shadow = MeshBuilder.CreateCylinder(`${name}-sh`, { diameter: 11, height: 0.35, tessellation: 10 }, this.scene);
     shadow.material = this.material("#0c0a08", 0);
@@ -2708,7 +2778,9 @@ export class ViceblockRuntime3D {
   /** The rope itself, plus the splat where it caught. */
   private drawLine(): void {
     if (!this.webMesh) {
-      const m = MeshBuilder.CreateBox("web-line", { width: 1.6, height: 1.6, depth: 1 }, this.scene);
+      // A rope, not a ribbon. The line runs past the camera on most swings, so
+      // anything thicker than this fills half the screen with white.
+      const m = MeshBuilder.CreateBox("web-line", { width: 0.5, height: 0.5, depth: 1 }, this.scene);
       m.material = this.material("#ffffff", 0.55);
       m.isPickable = false;
       m.applyFog = false;
