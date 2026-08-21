@@ -2595,26 +2595,30 @@ export class ViceblockRuntime3D {
       const dir = base + off;
       const cos = Math.cos(dir);
       const sin = Math.sin(dir);
-      // Everything a shot passes over has to be lower than the last, or it is
-      // behind a wall you cannot see through. Marching on rather than stopping
-      // at the first block is what lets you web the tower over the corner shop.
-      let overShoulder = 0;
+      // A shot has to clear everything it passes over, so what matters is not
+      // whether a roof is taller than the last one but whether it stands above
+      // the line already climbing over them. Comparing heights instead let the
+      // web reach a tower one unit taller than the block in front of it, and
+      // the rope visibly cut through the corner of that block. Tracking the
+      // steepest rise so far still lets you web the tower over the corner
+      // shop, because the tower clears the shop's slope from further out.
+      let horizon = Number.NEGATIVE_INFINITY;
       for (let d = 30; d <= SPIDER_CONFIG.maxRange; d += 9) {
         const x = this.player.x + cos * d;
         const z = this.player.z + sin * d;
         const top = this.topAt(x, z);
         if (!Number.isFinite(top)) break;
-        if (top <= overShoulder) continue;
-        overShoulder = top;
         // Just under the parapet, so the line reads as caught on the edge.
         const y = top - 7;
-        if (!anchorUsable(this.player.x, this.player.y, this.player.z, x, y, z, limits)) continue;
-        const score = d + Math.abs(off) * 260;
-        if (score < bestScore) {
-          bestScore = score;
-          best = { x, y, z };
+        if ((y - this.player.y) / d > horizon && anchorUsable(this.player.x, this.player.y, this.player.z, x, y, z, limits)) {
+          const score = d + Math.abs(off) * 260;
+          if (score < bestScore) {
+            bestScore = score;
+            best = { x, y, z };
+          }
+          break;
         }
-        break;
+        horizon = Math.max(horizon, (top - this.player.y) / d);
       }
     }
     return best;
