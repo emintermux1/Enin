@@ -86,6 +86,12 @@ describe("web swinging", () => {
     expect(anchorUsable(0, 0, 0, 200, 260, 0)).toBe(true);
   });
 
+  it("takes a long low shot across a block, because the auto-reel saves it", () => {
+    // A tower roof most of a street away. Refusing this is what left whole
+    // directions in the city with nothing to shoot at.
+    expect(anchorUsable(0, 0, 0, 400, 180, 0)).toBe(true);
+  });
+
   it("caps the line at what the drop below the anchor can take", () => {
     expect(lineCeiling(300, 0)).toBe(300 - SPIDER_CONFIG.groundClearance);
     expect(lineCeiling(300, 280)).toBe(SPIDER_CONFIG.minLength);

@@ -30,8 +30,12 @@ export const SPIDER_CONFIG = {
   maxRange: 760,
   /** An anchor must be at least this far above you, or the swing is a faceplant. */
   minAnchorRise: 40,
-  /** Rise over horizontal reach: how steep a line has to be to be worth firing. */
-  minSteepness: 0.5,
+  /**
+   * Rise over horizontal reach: how steep a line has to be to be worth firing.
+   * A shallow one is still allowed to bite because `reelToCeiling` hauls it in
+   * as the arc starts; only a genuine tow rope is refused.
+   */
+  minSteepness: 0.38,
   /** Forward throw when a swing starts from a standstill. */
   launchSpeed: 200,
   launchLift: 200,

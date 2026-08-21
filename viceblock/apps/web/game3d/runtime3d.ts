@@ -2409,6 +2409,16 @@ export class ViceblockRuntime3D {
     return false;
   }
 
+  /**
+   * Whether a face is a building you can hold onto. Off the map every column
+   * reads as infinitely solid, and a wall with no top is a wall you climb
+   * forever, so the boundary has to stay a limit rather than a route.
+   */
+  private climbable(x: number, z: number): boolean {
+    const top = this.topAt(x, z);
+    return Number.isFinite(top) && top > 0;
+  }
+
   /** The surface under the player's feet: a rooftop if they are over one. */
   private supportY(x: number, z: number, y: number, rad = PLAYER_CONFIG.radius): number {
     let best = 0;
@@ -2436,23 +2446,28 @@ export class ViceblockRuntime3D {
     const base = headingFromCamera(this.player.camYaw);
     let best: { x: number; y: number; z: number } | null = null;
     let bestScore = Number.POSITIVE_INFINITY;
-    for (const off of [0, 0.2, -0.2, 0.42, -0.42, 0.68, -0.68]) {
+    for (const off of [0, 0.2, -0.2, 0.42, -0.42, 0.68, -0.68, 0.98, -0.98]) {
       const dir = base + off;
       const cos = Math.cos(dir);
       const sin = Math.sin(dir);
+      // Everything a shot passes over has to be lower than the last, or it is
+      // behind a wall you cannot see through. Marching on rather than stopping
+      // at the first block is what lets you web the tower over the corner shop.
+      let overShoulder = 0;
       for (let d = 30; d <= SPIDER_CONFIG.maxRange; d += 9) {
         const x = this.player.x + cos * d;
         const z = this.player.z + sin * d;
         const top = this.topAt(x, z);
-        if (!Number.isFinite(top) || top <= 0) continue;
+        if (!Number.isFinite(top)) break;
+        if (top <= overShoulder) continue;
+        overShoulder = top;
         // Just under the parapet, so the line reads as caught on the edge.
         const y = top - 7;
-        if (anchorUsable(this.player.x, this.player.y, this.player.z, x, y, z, rise)) {
-          const score = d + Math.abs(off) * 260;
-          if (score < bestScore) {
-            bestScore = score;
-            best = { x, y, z };
-          }
+        if (!anchorUsable(this.player.x, this.player.y, this.player.z, x, y, z, rise)) continue;
+        const score = d + Math.abs(off) * 260;
+        if (score < bestScore) {
+          bestScore = score;
+          best = { x, y, z };
         }
         break;
       }
@@ -2595,14 +2610,17 @@ export class ViceblockRuntime3D {
   private settleFlight(next: SwingState): void {
     const y = Math.max(0, next.y);
     let hitDir: number | null = null;
+    let hitFace: [number, number] | null = null;
     if (!this.airSolid(next.x, this.player.z, y)) this.player.x = next.x;
     else {
       hitDir = next.vx > 0 ? 0 : Math.PI;
+      hitFace = [next.x, this.player.z];
       next.vx = 0;
     }
     if (!this.airSolid(this.player.x, next.z, y)) this.player.z = next.z;
     else {
       hitDir = next.vz > 0 ? Math.PI / 2 : -Math.PI / 2;
+      hitFace = [this.player.x, next.z];
       next.vz = 0;
     }
 
@@ -2617,7 +2635,7 @@ export class ViceblockRuntime3D {
     if (Math.hypot(next.vx, next.vz) > 30) this.player.heading = Math.atan2(next.vz, next.vx);
     // Hit a wall with air under you: stick to it. That is the difference
     // between a building being an obstacle and a building being a route.
-    if (hitDir !== null && !this.web && this.player.y > 14) {
+    if (hitDir !== null && hitFace && this.climbable(hitFace[0], hitFace[1]) && !this.web && this.player.y > 14) {
       this.cling = { dir: hitDir, t: 0 };
       this.flight = { vx: 0, vy: 0, vz: 0 };
       this.audio.foot(false, "concrete");
@@ -2677,8 +2695,9 @@ export class ViceblockRuntime3D {
       this.player.grounded = true;
       this.cling = null;
     }
-    // Sidled off the end of the wall: nothing left to hold.
-    if (!this.airSolid(fx, fz, this.player.y) && this.player.y > 4) {
+    // Sidled off the end of the wall, or onto the edge of the map: nothing
+    // left to hold either way.
+    if ((!this.airSolid(fx, fz, this.player.y) || !this.climbable(fx, fz)) && this.player.y > 4) {
       this.cling = null;
       this.player.grounded = false;
     }
