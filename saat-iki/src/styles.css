@@ -820,11 +820,34 @@ h2 {
 .tone-melis .hair { background: #4a2a18; height: 50%; }
 .tone-melis .jewel { background: #c9a227; }
 
-.tone-asya { --ember: #c43b52; }
-.tone-asya .collar { background: #5c1424; }
-.tone-asya .hair { width: 72%; left: 14%; background: #140c0e; }
-.tone-asya .face { background: #d4a27e; }
-.tone-asya .jewel { background: #e6c15a; }
+.tone-asya { --ember: #e04560; }
+.tone-asya .collar {
+  height: 28%;
+  background: linear-gradient(180deg, #4a1020, #8a1a36);
+}
+.tone-asya .hair {
+  width: 88%;
+  left: 6%;
+  height: 64%;
+  top: -4%;
+  background: #0a0608;
+  border-radius: 52% 48% 28% 32%;
+}
+.tone-asya .face { background: #e2b48c; }
+.tone-asya .mouth {
+  width: 34%;
+  height: 8px;
+  background: #c4283c;
+  box-shadow: 0 2px 8px oklch(0.45 0.18 12 / 0.55);
+}
+.tone-asya .jewel {
+  background: #f0c85a;
+  box-shadow: 0 0 10px oklch(0.82 0.14 85 / 0.7);
+}
+.tone-asya .portrait-glow {
+  opacity: 0.95;
+  background: radial-gradient(circle, oklch(0.62 0.18 12 / 0.45), transparent 70%);
+}
 
 .loc-taxi .portrait-room {
   background: linear-gradient(180deg, #2a1d18, #14100e);

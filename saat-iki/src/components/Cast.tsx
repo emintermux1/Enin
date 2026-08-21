@@ -13,8 +13,8 @@ export function Cast({ playerName, onPick, onReturn }: CastProps) {
     <section className="cast">
       <header className="cast-head">
         <p className="eyebrow">{playerName}, seç</p>
-        <h1>Başka hatun?</h1>
-        <p className="lede">Hepsi o tweet kızları gibi konuşur. Islak, kaba, istek listesi. Roman yok.</p>
+        <h1>Asya mı, başka mı?</h1>
+        <p className="lede">Asya seni azgınlıktan delirtecek. İstersen Lila, Sera, Duru, Vera.</p>
         {onReturn ? (
           <button type="button" className="btn-ghost" onClick={onReturn}>
             Bu geceye dön

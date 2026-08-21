@@ -49,7 +49,9 @@ export function voiceOf(id: CharacterId): Voice {
 function swapForVoice(line: string, id: CharacterId): string {
   switch (id) {
     case "asya":
-      return line;
+      return line
+        .replaceAll("anlarsın ya", "seni delirtiyom")
+        .replaceAll("utanmıcam", "seni çıldırtıcam");
     case "elif":
       return line.replaceAll("yaaa", "hadi").replaceAll("lütfen", "hadi").replaceAll("anlarsın ya", "geç kalma");
     case "defne":

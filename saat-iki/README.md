@@ -20,12 +20,12 @@ Tarayıcıda `http://localhost:4173` açılır. Yaş kapısı, adın, sonra Asya
 
 ## Kimler
 
-Hepsi 26 yaş ve üzeri:
+Hepsi 24 yaş ve üzeri:
 
-- Asya, 27, azgın hatun (varsayılan)
-- Elif Kaya, 28, Cihangir
-- Defne Yılmaz, 31, Galata
-- Yasemin Arslan, 26, Kadıköy
-- Melis Demir, 33, Nişantaşı
+- Asya, 24, seni delirtecek (varsayılan)
+- Lila, 26, Cihangir
+- Sera, 29, Galata
+- Duru, 26, Kadıköy
+- Vera, 31, Nişantaşı
 
 Yakınlık yükseldikçe gece ilerler: masa → yol → oda → yatak. Yatak sahne adıdır; anlatı metindedir.
