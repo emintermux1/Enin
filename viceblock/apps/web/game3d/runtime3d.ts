@@ -13,6 +13,7 @@ import { Scene } from "@babylonjs/core/scene";
 import {
   AIM_ASSIST_CONFIG,
   AIM_CONFIG,
+  type AimTarget,
   applyReward,
   applyVehicleDamage,
   collisionDamage,
@@ -564,7 +565,7 @@ export class ViceblockRuntime3D {
         return;
       }
       if (!this.dragYaw.active || e.pointerId !== this.dragYaw.id) return;
-      const sens = this.settings.lookSensitivity;
+      const sens = this.settings.lookSensitivity * this.aimSlowdown();
       this.player.camYaw += (e.clientX - this.dragYaw.lastX) * 0.005 * sens;
       const dy = (e.clientY - this.dragYaw.lastY) * 0.005 * sens * (this.settings.invertLook ? -1 : 1);
       this.player.camPitch = clampPitch(this.player.camPitch + dy);
@@ -649,7 +650,7 @@ export class ViceblockRuntime3D {
     const ricoX = 29.5 * TILE;
     const ricoZ = 49.2 * TILE;
     this.player.heading = Math.atan2(ricoZ - this.player.z, ricoX - this.player.x);
-    this.player.camYaw = this.player.heading - Math.PI / 2 + 0.42;
+    this.player.camYaw = cameraFromHeading(this.player.heading) + 0.42;
     this.player.camPitch = 0.28;
     this.playerMesh.rotation.y = -this.player.heading;
     this.evictCrowd(110);
@@ -2139,7 +2140,7 @@ export class ViceblockRuntime3D {
       this.player.x = door.x;
       this.player.z = door.z + TILE * 1.15;
       this.player.heading = -Math.PI / 2;
-      this.player.camYaw = Math.PI;
+      this.player.camYaw = cameraFromHeading(this.player.heading);
     } else {
       this.player.x = this.interiorMode.returnX;
       this.player.z = this.interiorMode.returnZ;
@@ -3037,7 +3038,7 @@ export class ViceblockRuntime3D {
     }
     this.aiming = this.armed() && this.input.aiming();
     // Aiming turns the body to the camera, which is what you are shooting along.
-    if (this.aiming) this.player.heading = Math.atan2(Math.cos(this.player.camYaw), Math.sin(this.player.camYaw));
+    if (this.aiming) this.player.heading = headingFromCamera(this.player.camYaw);
     if (this.input.consumeReload()) this.beginReload();
     if (this.reloadT > 0) {
       this.reloadT -= dt;
@@ -3118,11 +3119,31 @@ export class ViceblockRuntime3D {
     this.lookedAt = this.clock;
   }
 
+  /** Everything a bullet can be pulled toward: police and other players. */
+  private aimTargets(): AimTarget[] {
+    return [
+      ...this.cops.map((c) => ({ id: c.id, x: c.x, y: c.z, isPlayer: false })),
+      ...[...this.remoteMeshes.entries()].map(([id, r]) => ({ id, x: r.x, y: r.z, isPlayer: true })),
+    ];
+  }
+
+  /**
+   * Look-sensitivity scale for sticky aim. Sweeping the reticle over somebody
+   * while sighted slows the turn so it settles on them rather than skating
+   * past — the half of aim assist that acts before the trigger, and the half
+   * that was configured but never wired up.
+   */
+  private aimSlowdown(): number {
+    if (!this.aiming || !this.aimAssistOn) return 1;
+    const onTarget = assistAim(this.player.x, this.player.z, headingFromCamera(this.player.camYaw), this.aimTargets(), AIM_ASSIST_CONFIG).targetId;
+    return onTarget ? AIM_ASSIST_CONFIG.slowdownNearTarget : 1;
+  }
+
   /** Back to the default shoulder view, for when the player has tied it in knots. */
   resetCamera(): void {
     this.camZoom = 1;
     this.player.camPitch = 0.5;
-    this.player.camYaw = this.player.heading - Math.PI / 2;
+    this.player.camYaw = cameraFromHeading(this.player.heading);
     this.lookedAt = -99;
   }
 
@@ -3286,7 +3307,7 @@ export class ViceblockRuntime3D {
     if (this.input.consumeResetView()) this.resetCamera();
     const stick = this.input.look();
     if (stick.x !== 0 || stick.y !== 0) {
-      const sens = this.settings.lookSensitivity * dt * 2.6;
+      const sens = this.settings.lookSensitivity * dt * 2.6 * this.aimSlowdown();
       this.player.camYaw += stick.x * sens;
       this.player.camPitch += stick.y * sens * (this.settings.invertLook ? -1 : 1);
       this.lookedAt = this.clock;
@@ -3301,14 +3322,14 @@ export class ViceblockRuntime3D {
     // stopped looking around — it used to snatch the camera back instantly.
     const looking = this.dragYaw.active || this.clock - this.lookedAt < CAMERA.manualLookHold;
     if (car && speed > 30 && !looking) {
-      const desired = Math.atan2(car.rt.vx, car.rt.vy);
+      const desired = cameraFromHeading(Math.atan2(car.rt.vy, car.rt.vx));
       this.player.camYaw += normalizeAngle(desired - this.player.camYaw) * Math.min(1, dt * 3);
     }
     // On a wall the boom has to end up out over the street. Left alone it
     // pointed straight into the brickwork the player was holding, and the
     // whole screen filled with the inside of the building.
     if (this.cling) {
-      const want = normalizeAngle(Math.PI / 2 - this.cling.dir);
+      const want = cameraFromHeading(this.cling.dir);
       if (!looking) this.player.camYaw += normalizeAngle(want - this.player.camYaw) * Math.min(1, dt * 2.6);
       this.player.camYaw = this.clearOfWall(this.player.camYaw, this.cling.dir);
     }
@@ -4204,16 +4225,11 @@ export class ViceblockRuntime3D {
       heading = Math.atan2(wz, wx);
     } else {
       // Desktop fires along camera forward.
-      heading = Math.atan2(Math.cos(yaw), Math.sin(yaw));
+      heading = headingFromCamera(yaw);
     }
 
     if (this.aimAssistOn) {
-      const targets = [
-        ...this.cops.map((c) => ({ id: c.id, x: c.x, y: c.z, isPlayer: false })),
-        ...[...this.remoteMeshes.entries()].map(([id, r]) => ({ id, x: r.x, y: r.z, isPlayer: true })),
-      ];
-      const assisted = assistAim(this.player.x, this.player.z, heading, targets, AIM_ASSIST_CONFIG);
-      heading = assisted.heading;
+      heading = assistAim(this.player.x, this.player.z, heading, this.aimTargets(), AIM_ASSIST_CONFIG).heading;
     }
 
     // Aiming tightens the group; spraying from the hip should cost you.
@@ -5422,4 +5438,17 @@ function pointNearSegment(px: number, pz: number, x0: number, z0: number, x1: nu
 
 export function headingFromCamera(camYaw: number): number {
   return normalizeAngle(Math.atan2(Math.cos(camYaw), Math.sin(camYaw)));
+}
+
+/**
+ * The camera yaw that looks along a world heading — the exact inverse of
+ * `headingFromCamera`, which is `PI/2 - x` in both directions.
+ *
+ * Places that wanted this used to spell it `heading - PI/2`, which is the
+ * negation rather than the inverse and so aimed the camera at the mirror of
+ * the requested direction. Reset-camera pointed away from wherever the player
+ * was facing, and the opening shot framed empty road instead of Rico.
+ */
+export function cameraFromHeading(heading: number): number {
+  return normalizeAngle(Math.PI / 2 - heading);
 }
