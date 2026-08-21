@@ -279,6 +279,16 @@ function withHook(
   if (!hook || lines.some((line) => normalizeSlang(line) === normalizeSlang(hook))) {
     return lines;
   }
+  const hookBits = normalizeSlang(hook)
+    .split(" ")
+    .filter((word) => word.length > 3)
+    .slice(0, 2);
+  if (
+    hookBits.length > 0 &&
+    lines.some((line) => hookBits.every((bit) => normalizeSlang(line).includes(bit)))
+  ) {
+    return lines;
+  }
   if (lines.length < 2) {
     return [...lines, hook];
   }
