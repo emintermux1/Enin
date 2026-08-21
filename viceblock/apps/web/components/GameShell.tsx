@@ -148,7 +148,6 @@ export function GameShell() {
     const c = canvasRef.current;
     if (!c) return;
     const game = new ViceblockRuntime3D(c);
-    game.minimap = minimapRef.current;
     gameRef.current = game;
     // Handle for the browser smoke checks and for anyone poking at the game in
     // a console. The client is not trusted for rewards, so this exposes nothing
@@ -189,6 +188,16 @@ export function GameShell() {
       gameRef.current = null;
     };
   }, []);
+
+  /**
+   * The HUD only mounts once the player has entered, which is long after the
+   * runtime is built, so the map canvas has to be handed over when it appears.
+   * Reading it at construction time only ever caught a null, which is why the
+   * minimap sat there as an empty box.
+   */
+  useEffect(() => {
+    if (gameRef.current) gameRef.current.minimap = minimapRef.current;
+  }, [started]);
 
   useEffect(() => {
     if (!started || !session) return;
