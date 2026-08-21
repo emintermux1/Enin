@@ -107,7 +107,7 @@ import { GameAudio, type StationId } from "../game/audio";
 import { GameInput } from "../game/input";
 import type { HudSnapshot } from "../game/hud";
 import { blocked, buildSouthside, Cell, cellAt, hideSpotNear, landmarkAt, type Landmark, type WorldData } from "../game/world";
-import { buildCity, type CityMeshes } from "./city";
+import { buildCity, sunElevation, type CityMeshes } from "./city";
 import { TextureKit, type Surface } from "./textures";
 
 type Quality = "low" | "medium" | "high" | "auto";
@@ -2223,7 +2223,11 @@ export class ViceblockRuntime3D {
       dt = rawDt * 0.14;
     }
     this.clock += dt;
-    this.time = (this.time + dt * WORLD_CONFIG.hoursPerRealSecond * 3600) % 24;
+    // hoursPerRealSecond already is hours per real second. The stray factor of
+    // 3600 here ran the clock at fifteen in-game hours a second, so the city
+    // strobed through a whole day every second and a half and nothing tied to
+    // the time of day — sky, street lights, shop hours — ever settled.
+    this.time = (this.time + dt * WORLD_CONFIG.hoursPerRealSecond) % 24;
     this.weatherT += dt;
     if (this.weatherT > WORLD_CONFIG.weatherCycleSeconds) {
       this.weatherT = 0;
@@ -2378,18 +2382,30 @@ export class ViceblockRuntime3D {
 
   private updateDayNight(): void {
     const t = this.time;
-    const day = t > 6.5 && t < 19;
-    const dusk = (t > 5 && t <= 6.5) || (t >= 19 && t < 21);
-    this.hemi.intensity = this.blackout ? 0.28 : day ? 1.28 : dusk ? 0.9 : 0.58;
-    this.sun.intensity = this.blackout ? 0.08 : day ? 1.2 : dusk ? 0.62 : 0.22;
-    const sky = this.blackout
-      ? new Color4(0.05, 0.05, 0.08, 1)
-      : day ? new Color4(0.48, 0.68, 0.86, 1) : dusk ? new Color4(0.72, 0.48, 0.36, 1) : new Color4(0.12, 0.11, 0.18, 1);
-    this.scene.clearColor = sky;
-    const fog = this.weather === "fog" ? 0.00028 : this.weather === "rain" ? 0.00016 : 0.00007;
+    // Driving light, colour and window glow off the sun's height is what stops
+    // dusk snapping between three fixed looks the way it used to.
+    const elev = sunElevation(t);
+    const day = Math.pow(Math.max(0, elev), 0.55);
+    const lit = this.blackout ? 1 : Math.max(0, Math.min(1, 1 - elev * 2.6));
+    this.city?.setNight(lit);
+    this.hemi.intensity = this.blackout ? 0.24 : 0.46 + day * 0.78;
+    this.sun.intensity = this.blackout ? 0.05 : 0.08 + day * 1.1;
+    // Low sun runs orange; overhead sun runs white. Skipping this is why noon
+    // and sunset lit every wall exactly the same.
+    const warm = Math.max(0, 1 - day * 1.9);
+    this.sun.diffuse.set(1, 0.93 - warm * 0.22, 0.82 - warm * 0.34);
+    this.hemi.diffuse.set(0.78 + day * 0.22, 0.8 + day * 0.2, 0.9 + day * 0.1);
+    this.hemi.groundColor.set(0.22 + day * 0.14, 0.2 + day * 0.14, 0.19 + day * 0.13);
+    // The sun swings east to west over the day, so which side of a street is
+    // in shade changes with it.
+    const arc = ((t - 5.5) / 13) * Math.PI;
+    this.sun.direction.set(-Math.cos(arc) * 0.75, -Math.max(0.3, Math.sin(arc)), -0.34).normalize();
+    const horizon = this.city?.setHour(t, this.blackout) ?? new Color3(0.48, 0.68, 0.86);
+    this.scene.clearColor = new Color4(horizon.r, horizon.g, horizon.b, 1);
+    const fog = this.weather === "fog" ? 0.00028 : this.weather === "rain" ? 0.00016 : 0.00009;
     this.scene.fogMode = Scene.FOGMODE_EXP2;
     this.scene.fogDensity = fog;
-    this.scene.fogColor = new Color3(sky.r, sky.g, sky.b);
+    this.scene.fogColor = horizon;
   }
 
   private updatePlayer(dt: number): void {
