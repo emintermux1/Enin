@@ -6,7 +6,7 @@ Görsel seks sahnesi, porno model veya seks sesi yok.
 
 ## Canlı
 
-https://aged-night-3158.zerodeploy.app
+https://wispy-smoke-1364.zerodeploy.app
 
 Geçici yayın (yaklaşık 72 saat). Yerelde:
 
