@@ -1,0 +1,104 @@
+import type { CharacterId, StretchMode } from "../types";
+import { getCharacter } from "../data/characters";
+import { humanize } from "./slang";
+
+type Voice = {
+  stretch: StretchMode;
+  maxBubbles: 2 | 3;
+  endings: string[];
+  moan: string[];
+};
+
+const VOICES: Record<CharacterId, Voice> = {
+  asya: {
+    stretch: "mid",
+    maxBubbles: 2,
+    endings: ["istiyorum", "offf"],
+    moan: ["offf", "🥺", "mm"],
+  },
+  kim: {
+    stretch: "light",
+    maxBubbles: 2,
+    endings: ["🥺", "mm"],
+    moan: ["mm", "off", "🥺"],
+  },
+  elif: {
+    stretch: "light",
+    maxBubbles: 2,
+    endings: ["hadi", "geç kalma"],
+    moan: ["of", "hıh"],
+  },
+  defne: {
+    stretch: "mid",
+    maxBubbles: 3,
+    endings: ["istiyorum onu", "yazdım bak"],
+    moan: ["mm", "ah"],
+  },
+  yasemin: {
+    stretch: "light",
+    maxBubbles: 2,
+    endings: ["konuşma", "hemen"],
+    moan: ["off", "ah"],
+  },
+  melis: {
+    stretch: "none",
+    maxBubbles: 3,
+    endings: ["söyledim", "şimdi"],
+    moan: ["mm"],
+  },
+};
+
+export function voiceOf(id: CharacterId): Voice {
+  return VOICES[id];
+}
+
+function swapForVoice(line: string, id: CharacterId): string {
+  switch (id) {
+    case "asya":
+      return line
+        .replaceAll("anlarsın ya", "istiyorum")
+        .replaceAll("seni delirtiyom", "istiyorum")
+        .replaceAll("seni çıldırtıcam", "utanmıcam");
+    case "kim":
+      return line
+        .replaceAll("hayvan gibi", "yavaş sonra sert")
+        .replaceAll("orospu gibi", "utanarak")
+        .replaceAll("anlarsın ya", "utanıyom ya");
+    case "elif":
+      return line.replaceAll("yaaa", "hadi").replaceAll("lütfen", "hadi").replaceAll("anlarsın ya", "geç kalma");
+    case "defne":
+      return line
+        .replaceAll("yapıyom bak", "istiyorum bak")
+        .replaceAll("anlarsın ya", "isteklerim bu");
+    case "yasemin":
+      return line.replaceAll("lütfen", "hemen").replaceAll("anlarsın ya", "konuşma");
+    case "melis":
+      return line.replaceAll("lütfen", "şimdi").replaceAll("durma", "emrettim").replaceAll("yaaa", "");
+    default: {
+      const _exhaustive: never = id;
+      return _exhaustive;
+    }
+  }
+}
+
+export function applyVoice(
+  lines: string[],
+  id: CharacterId,
+  salt: number,
+  name: string,
+): string[] {
+  const voice = VOICES[id];
+  const person = getCharacter(id);
+  let next = lines.map((line) =>
+    swapForVoice(line, id).replaceAll("{name}", name).replaceAll("asya", person.name.toLocaleLowerCase("tr-TR")),
+  );
+  if (next.length > voice.maxBubbles) {
+    next = next.slice(0, voice.maxBubbles);
+  }
+  return humanize(next, salt, voice.stretch);
+}
+
+export function voiceMoan(id: CharacterId, salt: number): string {
+  const voice = VOICES[id];
+  return voice.moan[Math.abs(salt) % voice.moan.length] ?? "offf";
+}
