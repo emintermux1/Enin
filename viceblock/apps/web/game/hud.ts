@@ -55,6 +55,13 @@ export interface HudSnapshot {
   failure: "wasted" | "busted" | null;
   /** What the web-shooters are doing right now. */
   web: "ready" | "aimed" | "swing" | "zip" | "wall" | "air";
+  /**
+   * What the shot the player is lining up would catch: a swing anchor, only
+   * something close enough to zip to, or nothing. A refused web is otherwise
+   * indistinguishable from a broken one, and "too close, zip instead" is a
+   * different problem from "nothing here is tall enough".
+   */
+  anchor: "swing" | "zip" | "none";
   /** Height above the street in world units, 0 on the pavement. */
   altitude: number;
   /** Airspeed while swinging, in km/h, so the arc has a number on it. */

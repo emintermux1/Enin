@@ -450,6 +450,12 @@ export class ViceblockRuntime3D {
   private splatT = 0;
   /** Where a web would land right now, for the reticle. */
   private anchorPreview: { x: number; y: number; z: number } | null = null;
+  /**
+   * Set when a swing is refused but a zip would still bite: the wall in front
+   * of you is too close to arc off, which is a different complaint from there
+   * being nothing there, and the answer is the other button.
+   */
+  private zipOnly = false;
   private gpsT = 0;
   /** Walkable interior state: rooms are built high above the city. */
   private interiorMode: { id: string; returnX: number; returnZ: number } | null = null;
@@ -2843,8 +2849,12 @@ export class ViceblockRuntime3D {
     if (this.webCooldown > 0) this.webCooldown -= dt;
     this.fadeSplat(dt);
     // Previewed with a swing's reach, so the reticle never promises an anchor
-    // that the shot itself would turn down.
+    // that the shot itself would turn down. When it turns one down, ask again
+    // with a zip's much shorter reach: if that catches, the player is stood
+    // too close to the brickwork to swing off it and the readout can say so
+    // rather than leaving them pressing a button that will not fire.
     this.anchorPreview = this.findAnchor({ minReach: SPIDER_CONFIG.minSwingReach });
+    this.zipOnly = this.anchorPreview === null && this.findAnchor({ rise: 24 }) !== null;
 
     if (this.input.consumeZip()) this.zipToAnchor();
     const wantWeb = this.input.webbing();
@@ -3098,6 +3108,7 @@ export class ViceblockRuntime3D {
     this.swingT = 0;
     this.airT = 0;
     this.anchorPreview = null;
+    this.zipOnly = false;
     this.webMesh?.setEnabled(false);
     this.webSplat?.setEnabled(false);
   }
@@ -5476,6 +5487,7 @@ export class ViceblockRuntime3D {
               : this.anchorPreview && !this.player.vehicleId
                 ? "aimed"
                 : "ready",
+      anchor: this.player.vehicleId ? "none" : this.anchorPreview ? "swing" : this.zipOnly ? "zip" : "none",
       altitude: this.player.vehicleId ? 0 : Math.round(this.player.y),
       airSpeed: this.player.grounded || this.player.vehicleId ? 0 : speedoKmh(Math.hypot(this.flight.vx, this.flight.vz)),
     };

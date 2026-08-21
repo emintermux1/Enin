@@ -60,27 +60,40 @@ const EMPTY: HudSnapshot = {
   drifting: false,
   failure: null,
   web: "ready",
+  anchor: "none",
   altitude: 0,
   airSpeed: 0,
 };
 
-function slingerLabel(web: HudSnapshot["web"], altitude: number): string {
+/**
+ * Why the web will not fire, and what to press instead. A shot that is refused
+ * without a word reads as a broken button, and the three reasons want three
+ * different answers from the player: turn around, back up, or step off.
+ */
+function noAnchorLabel(anchor: HudSnapshot["anchor"], altitude: number): string {
+  if (anchor === "zip") return "TOO CLOSE · C ZIPS UP";
+  // On top of a tower there is genuinely nothing higher to catch, and the way
+  // off is over the edge.
+  return altitude > 60 ? "NOTHING ABOVE · DIVE" : "NOTHING TALL ENOUGH · TURN";
+}
+
+function slingerLabel(web: HudSnapshot["web"], anchor: HudSnapshot["anchor"], altitude: number): string {
   switch (web) {
     case "swing":
       return "ON THE LINE";
     case "zip":
       return "REELING IN";
+    // Hanging off a wall or falling, the player still wants to know whether the
+    // next press of Q will catch. Saying only "ON THE WALL" left the one place
+    // the web is most needed as the one place the readout went quiet.
     case "wall":
-      return "ON THE WALL";
+      return anchor === "swing" ? "ON THE WALL · Q SWINGS OFF" : `ON THE WALL · ${noAnchorLabel(anchor, altitude)}`;
     case "air":
-      return "FALLING";
+      return anchor === "swing" ? "FALLING · ANCHOR" : `FALLING · ${noAnchorLabel(anchor, altitude)}`;
     case "aimed":
       return "ANCHOR";
     case "ready":
-      // On top of a tower there is genuinely nothing higher to catch, and the
-      // way off is over the edge. Saying so beats leaving the player pressing
-      // a button that will never do anything.
-      return altitude > 60 ? "NOTHING ABOVE · DIVE" : "NO ANCHOR";
+      return noAnchorLabel(anchor, altitude);
     default: {
       const never: never = web;
       return never;
@@ -503,7 +516,7 @@ export function GameShell() {
               </div>
               <div className={`slinger ${hud.web}`}>
                 <b>
-                  {slingerLabel(hud.web, hud.altitude)}
+                  {slingerLabel(hud.web, hud.anchor, hud.altitude)}
                 </b>
                 <span>
                   {hud.altitude > 2 ? `${hud.altitude}m up · ` : ""}
