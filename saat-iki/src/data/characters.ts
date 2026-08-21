@@ -13,9 +13,9 @@ export const CHARACTERS: Character[] = [
     hook: "ellerim kayıyo senin yüzünden",
     bio: "Flört eder, zevke gelir, 2–3 mesaj üst üste atar. Beklemez, roman yazmaz.",
     opening: [
-      "yatağımdayım",
-      "üstüm yok ellerim kayıyo",
-      "seni düşününce ıslandım haberin yok",
+      "yatağımdayııım",
+      "üstüm yok ellerim kayıyooo",
+      "seni düşününce ıslandım haberin yoook",
     ],
     accent: "#b33a4a",
   },

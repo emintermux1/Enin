@@ -45,36 +45,36 @@ const ACT_PATTERNS: Array<{ act: Act; pattern: RegExp }> = [
 
 const SCENES: Record<Exclude<Act, "ask" | "complaint">, string[][]> = {
   oralHer: [
-    ["offf dilin değdi ya", "bacaklarım titriyo", "ıslandım haberin yok durma"],
-    ["mm orasııı", "ellerim saçında sıkıyom", "daha böyle yap sesim çıkıyo"],
-    ["yüzün orda iyi duruyo", "kalçam oynuyo durduramıycam", "offf çekme"],
-    ["boşalıcam nerdeyse", "bacaklarım kilitlendi", "biraz daha lütfen"],
+    ["offf dilin değdi yaaa", "bacaklarım titriyo bak", "ıslandım haberin yok durma"],
+    ["mm orasııı", "ellerim saçında sıkıyom", "daha böyle yap sesim çıkıyo yaa"],
+    ["yüzün orda iyi duruyo", "kalçam oynuyo durduramıycam", "offf çekmeee"],
+    ["boşalıcam nerdeyseee", "bacaklarım kilitlendi", "biraz daha lütfeeen"],
   ],
   oralHim: [
-    ["mm ağzıma aldım", "bakıyom sana çıkarmıyom", "sıcak geldi offf"],
-    ["daha derine kaçtı", "gözlerim doldu salmıycam", "boğazım zonkluyo"],
-    ["tükürük aktı farketmez", "ellerim de çalışıyo", "senin sesini duymak istiyom"],
-    ["hâlâ ağzımdayım", "yutcam gibi oldum", "kalkmıycam senden"],
+    ["mm ağzıma aldııım", "bakıyom sana çıkarmıyom", "sıcak geldi offff"],
+    ["daha derine kaçtı yaa", "gözlerim doldu salmıycam", "boğazım zonkluyooo"],
+    ["tükürük aktı farketmez", "ellerim de çalışıyo bak", "senin sesini duymak istiyooom"],
+    ["hâlâ ağzımdayııım", "yutcam gibi oldum", "kalkmıycam sendeeen"],
   ],
   sex: [
-    ["içime girdi offf", "kaydı zaten ıslağım", "biraz öyle kal"],
-    ["her vuruşta sesim çıkıyo", "belimi tut", "daha hızlı yapamıyorum kendimi"],
-    ["üstündeyim titriyom", "dibine oturdum", "ellerin göğsümde olsun"],
-    ["arkamdan tuttun ya", "yüzümü yastığa gömdüm", "daha vur offf"],
-    ["içimde boşalıcam az kaldı", "sıkıyom seni", "çıkarma lütfen"],
+    ["içime girdi offff", "kaydı zaten ıslağım", "biraz öyle kalll"],
+    ["her vuruşta sesim çıkıyooo", "belimi tut bak", "daha hızlı yapamıyooum kendimi"],
+    ["üstündeyim titriyooom", "dibine oturdum yaa", "ellerin göğsümde olsuuun"],
+    ["arkamdan tuttun yaaa", "yüzümü yastığa gömdüm", "daha vur offff"],
+    ["içimde boşalıcam az kaldııı", "sıkıyom seniii", "çıkarma lütfeeen"],
   ],
   kiss: [
-    ["gel öpeyim bakim", "dudağın tatlı ya", "boynuna kayıcam şimdi"],
-    ["dişledim özür dilemicem", "kulağına nefesimi verdim", "ellerin belimde kalsın"],
+    ["gel öpeyim bakiiiim", "dudağın tatlı yaaa", "boynuna kayıcam şimdiii"],
+    ["dişledim özür dilemicem", "kulağına nefesimi verdimmm", "ellerin belimde kalsııın"],
   ],
   body: [
     ["memelerim keskinleşti senin yüzünden", "askı zaten durmuyodu", "ellerin orda iyi durur"],
     ["kalçamı sıktın mı aklım gidiyo", "aşağı inersen söylemem", "ıslaklığımı sen bul"],
   ],
   talk: [
-    ["yatağımdayım", "ellerim kayıyo senin yüzünden", "yanımda olsan ne yapardım biliyon mu"],
-    ["çok azgınım ya", "aklım sende kaldı", "gel burda ol biraz"],
-    ["çıplağım haberin yok", "nefesim kesildi seni düşününce", "yazma da durma"],
+    ["yatağımdayııım", "ellerim kayıyo senin yüzünden yaa", "yanımda olsan ne yapardım biliyon muu"],
+    ["çok azgınım yaaa", "aklım sende kaldı bak", "gel burda ol birazcıık"],
+    ["çıplağım haberin yoook", "nefesim kesildi seni düşününceee", "yazma da durmaaa"],
   ],
 };
 
@@ -238,15 +238,33 @@ export function nextChoices(input: string, history: Message[]): Choice[] {
   return fresh.length > 0 ? fresh : row;
 }
 
+function stretchTail(text: string): string {
+  if (/([aeıioöuü])\1\1|[f]{3}/i.test(text)) {
+    return text;
+  }
+  return text.replace(
+    /([aeıioöuüAEIİOÖUÜ])([^aeıioöuüAEIİOÖUÜ]*)$/u,
+    (_all, vowel: string, rest: string) => `${vowel}${vowel}${vowel}${rest}`,
+  );
+}
+
+function humanize(lines: string[], salt: number): string[] {
+  return lines.map((line, index) => {
+    const stretch = index === lines.length - 1 || (salt + index) % 3 === 0;
+    return stretch ? stretchTail(line) : line;
+  });
+}
+
 export function playScene(input: string, history: Message[]): string[] {
   const act = detectAct(input);
+  const salt = history.length;
   if (act === "complaint") {
-    return unusedPair(COMPLAINTS, history);
+    return humanize(unusedPair(COMPLAINTS, history), salt);
   }
   if (act === "ask") {
     const hit = ANSWERS.find((item) => item.pattern.test(input));
     if (hit && !history.some((item) => item.role === "them" && item.text === hit.lines[0])) {
-      return hit.lines;
+      return humanize(hit.lines, salt);
     }
   }
   const key: Exclude<Act, "ask" | "complaint"> = act === "ask" ? "talk" : act;
@@ -255,8 +273,9 @@ export function playScene(input: string, history: Message[]): string[] {
   const stage = Math.min(pairs.length - 1, Math.max(0, count - 1));
   const preferred = pairs[stage];
   const used = new Set(history.filter((item) => item.role === "them").map((item) => item.text));
-  if (preferred && preferred.every((line) => !used.has(line))) {
-    return preferred;
-  }
-  return unusedPair(pairs, history);
+  const raw =
+    preferred && preferred.every((line) => !used.has(line))
+      ? preferred
+      : unusedPair(pairs, history);
+  return humanize(raw, salt);
 }
