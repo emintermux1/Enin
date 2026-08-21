@@ -6,7 +6,7 @@ Görsel seks sahnesi, porno model veya seks sesi yok.
 
 ## Canlı
 
-https://falling-tree-3373.zerodeploy.app
+https://still-leaf-2390.zerodeploy.app
 
 Geçici yayın (yaklaşık 72 saat). Yerelde:
 
