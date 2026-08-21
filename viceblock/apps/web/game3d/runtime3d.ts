@@ -4491,11 +4491,19 @@ export class ViceblockRuntime3D {
     }
     if (!this.player.vehicleId) {
       const named = this.nearestNamed(52);
-      if (named?.talk) {
+      const car = this.nearestCar(34);
+      // Whichever is actually nearer. Conversation used to win outright over a
+      // reach of 52 against the car's 34, so standing with a hand on the door
+      // while a contact loitered across the street meant E only ever talked and
+      // the car looked broken.
+      const chat = named?.talk
+        ? Math.hypot(named.x - this.player.x, named.z - this.player.z)
+        : Number.POSITIVE_INFINITY;
+      const reach = car ? Math.hypot(car.rt.x - this.player.x, car.rt.y - this.player.z) : Number.POSITIVE_INFINITY;
+      if (named?.talk && chat <= reach) {
         this.talkTo(named);
         return;
       }
-      const car = this.nearestCar(34);
       if (car && !car.rt.exploded) {
         const def = vehicleById(car.rt.defId);
         if (def.security !== "none" && !this.unlocked.has(car.rt.id) && !car.rt.stolen) {
