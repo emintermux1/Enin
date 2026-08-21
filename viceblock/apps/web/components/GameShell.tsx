@@ -1,5 +1,6 @@
 "use client";
 
+import { WORLD_CONFIG } from "@viceblock/game-core";
 import { DEFAULT_SETTINGS, GAME_NAME, sanitizeText, type PlayerSave } from "@viceblock/shared";
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import type { HudSnapshot } from "../game/hud";
@@ -221,7 +222,7 @@ export function GameShell() {
           if (Array.isArray(d.players)) g.setRemotes(d.players);
         })
         .catch(() => undefined);
-    }, 800);
+    }, WORLD_CONFIG.presenceIntervalMs);
     return () => window.clearInterval(t);
   }, [started, session]);
 

@@ -94,8 +94,6 @@ export interface VehicleRuntime {
   explodeIn: number;
   stolen: boolean;
   registered: boolean;
-  /** True after the alarm was triggered by a failed pick. */
-  alarmed: boolean;
   color: string;
 }
 
@@ -124,7 +122,6 @@ export function createVehicleRuntime(
     explodeIn: 0,
     stolen,
     registered: false,
-    alarmed: false,
     color,
   };
 }

@@ -1,12 +1,17 @@
 /** Central gameplay tuning. No magic numbers scattered in systems. */
 
 export const POLICE_CONFIG = {
-  /** Cop movement speed as a fraction of player sprint. Below 1 = escapable. */
+  /**
+   * Cop movement speed as a fraction of player sprint. Below 1 = escapable.
+   * On foot only: cruisers are ordinary vehicles driven by the AI, so their
+   * speed comes off the same stat sheet the player's car does.
+   */
   footSpeedRatio: 0.82,
-  carSpeedRatio: 0.9,
   sightRange: 200,
+  /** Seconds out of sight, indexed by wanted level, before a star drops. */
   loseSightSeconds: [0, 3.2, 3.2, 5.5, 8, 8] as const,
   escalateAfterSeenSeconds: 14,
+  /** A chase escalates itself only this far; the rest has to be earned by crime. */
   maxAutoEscalateLevel: 3,
   minSpawnDistance: 240,
   maxSpawnDistance: 460,

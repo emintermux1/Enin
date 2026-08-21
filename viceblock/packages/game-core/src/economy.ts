@@ -1,6 +1,8 @@
 import { STARTER_CASH, levelFromXp } from "@viceblock/shared";
+import { PLAYER_CONFIG } from "./config";
 
-export const HOSPITAL_FEE = 80;
+/** What the county charges to put you back together. Priced with the rest of the player's tuning. */
+export const HOSPITAL_FEE = PLAYER_CONFIG.respawnMedicalFee;
 export const AMMO_PRICE = 25;
 export const REPAIR_PER_HP = 2;
 

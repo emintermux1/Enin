@@ -2311,7 +2311,6 @@ export class ViceblockRuntime3D {
           this.flash("LOCK POPPED  ·  she's yours");
           this.enterCar(car);
         } else if (this.lockpick.alarmed) {
-          car.rt.alarmed = true;
           // A blaring alarm keeps the car too hot to touch for a while.
           this.alarmLockout.set(car.rt.id, this.clock + 45);
           this.audio.alarm();

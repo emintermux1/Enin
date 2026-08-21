@@ -1,10 +1,10 @@
 import type { HeatLevel } from "@viceblock/shared";
+import { POLICE_CONFIG } from "./config";
 
 export interface HeatState {
   level: HeatLevel;
   seenTimer: number;
   hiddenTimer: number;
-  reportTimer: number;
   lastKnownX: number;
   lastKnownY: number;
   hasLastKnown: boolean;
@@ -23,7 +23,6 @@ export function createHeatState(): HeatState {
     level: 0,
     seenTimer: 0,
     hiddenTimer: 0,
-    reportTimer: 0,
     lastKnownX: 0,
     lastKnownY: 0,
     hasLastKnown: false,
@@ -61,6 +60,9 @@ export function tickHeat(
   const next = { ...state };
   if (crimeJustCommitted > 0) {
     next.level = clampHeat(next.level + crimeJustCommitted);
+    // A head start on the escalation clock, for pulling something where a cop
+    // can see it. It only survives when `seenByCop` is set in this same call:
+    // do it out of sight and the branch below zeroes it, which is the point.
     next.seenTimer = 2.4;
     next.hiddenTimer = 0;
     next.hasLastKnown = true;
@@ -78,7 +80,12 @@ export function tickHeat(
     next.lastKnownY = playerY;
     next.knownVehicle = currentVehicle;
     next.searchRadius = 90;
-    if (resisting && next.level >= 1 && next.seenTimer > 14 && next.level < 3) {
+    if (
+      resisting &&
+      next.level >= 1 &&
+      next.seenTimer > POLICE_CONFIG.escalateAfterSeenSeconds &&
+      next.level < POLICE_CONFIG.maxAutoEscalateLevel
+    ) {
       next.level = clampHeat(next.level + 1);
       next.seenTimer = 0;
     }
@@ -87,7 +94,7 @@ export function tickHeat(
     next.seenTimer = 0;
     // The search zone widens while cops sweep, then the whole thing cools off.
     next.searchRadius = Math.min(240, next.searchRadius + dt * 14);
-    const loseAfter = next.level <= 2 ? 3.2 : next.level === 3 ? 5.5 : 8;
+    const loseAfter = POLICE_CONFIG.loseSightSeconds[next.level] ?? 8;
     if (next.hiddenTimer >= loseAfter) {
       next.level = clampHeat(next.level - 1);
       next.hiddenTimer = 0;
@@ -125,12 +132,6 @@ export function copCountForHeat(level: HeatLevel): number {
       return _never;
     }
   }
-}
-
-export function copSpeedForHeat(level: HeatLevel, onFoot: boolean): number {
-  const foot = [0, 78, 86, 94, 102, 110][level] ?? 80;
-  const car = [0, 145, 165, 185, 200, 215][level] ?? 150;
-  return onFoot ? foot : car;
 }
 
 export function assistHint(level: HeatLevel, hiddenTimer: number, nearHide: boolean): string {
