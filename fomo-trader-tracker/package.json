@@ -1,0 +1,27 @@
+{
+  "name": "fomo-trader-tracker",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "dev": "tsx watch src/index.ts",
+    "discover-router": "tsx src/cli/discover-router.ts",
+    "scan": "tsx src/cli/scan.ts",
+    "monitor": "tsx src/cli/monitor.ts",
+    "list": "tsx src/cli/list.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "axios": "^1.7.0",
+    "better-sqlite3": "^11.0.0",
+    "dotenv": "^16.4.0",
+    "lru-cache": "^10.2.0",
+    "telegraf": "^4.16.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.0",
+    "@types/node": "^20.0.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.4.0"
+  }
+}
