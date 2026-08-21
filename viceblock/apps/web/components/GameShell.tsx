@@ -387,9 +387,11 @@ export function GameShell() {
             ENTER SOUTHSIDE
           </button>
           <p className="hint">
+            <strong>Hold Q to sling a web</strong> · C zips you to the rooftop · Space leaves a wall · WASD steers the arc · Shift reels the line in
+            <br />
             WASD walk · Shift sprint · Space jump/handbrake · E interact · G surrender · click shoot · right-click aim · R reload · drag camera · wheel zoom · V recentre · B radio · F phone · H assist
             <br />
-            Touch: left stick walks (push far to sprint) · right stick aims &amp; fires · drag screen for camera · E/G button acts
+            Touch: left stick walks (push far to sprint) · right stick aims &amp; fires · drag screen for camera · WEB button slings · E/G button acts
           </p>
           {bootError ? <p className="err">{sanitizeText(bootError, 80)}</p> : null}
         </div>
