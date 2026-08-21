@@ -6,7 +6,7 @@ Görsel seks sahnesi, porno model veya seks sesi yok.
 
 ## Canlı
 
-https://aged-glade-9737.zerodeploy.app
+https://damp-fog-3503.zerodeploy.app
 
 Geçici yayın (yaklaşık 72 saat). Yerelde:
 
