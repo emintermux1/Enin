@@ -4154,6 +4154,13 @@ export class ViceblockRuntime3D {
   }
 
   private tryInteract(): void {
+    // Everything here is decided on a flat map. Three hundred units up on a
+    // rooftop you are still "next to" the shop below, and E would walk you
+    // into it through the floor.
+    if (!this.player.grounded || this.player.y > LEDGE_STEP) {
+      this.audio.uiClick();
+      return;
+    }
     if (!this.player.vehicleId) {
       const named = this.nearestNamed(52);
       if (named?.talk) {
@@ -4906,8 +4913,10 @@ export class ViceblockRuntime3D {
       const meters = Math.round(Math.hypot(this.player.x - wp.x, this.player.z - wp.z) * 0.31);
       if (meters > 12) obj += `  ·  ${meters}m`;
     }
-    const mark = landmarkAt(this.world, this.player.x, this.player.z);
-    const car = this.nearestCar(34);
+    // Nothing on the pavement is within reach from the air or a rooftop.
+    const onFoot = this.player.grounded && this.player.y <= LEDGE_STEP;
+    const mark = onFoot ? landmarkAt(this.world, this.player.x, this.player.z) : null;
+    const car = onFoot ? this.nearestCar(34) : null;
     let prompt = "";
     const nearestCop = this.cops.reduce((min, c) => Math.min(min, Math.hypot(c.x - this.player.x, c.z - this.player.z)), Infinity);
     if (this.jailLeft > 0) prompt = "";
