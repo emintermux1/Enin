@@ -9,6 +9,24 @@ import type { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import type { Scene } from "@babylonjs/core/scene";
 import { MAP_H, MAP_W, TILE } from "@viceblock/shared";
 import { Cell, type Landmark, type WorldData } from "../game/world";
+import {
+  PropBatch,
+  type PropKit,
+  bench,
+  bin,
+  cone,
+  crate,
+  dumpster,
+  hydrant,
+  newsBox,
+  palm,
+  planter,
+  propKit,
+  scooter,
+  streetLamp,
+  trafficLight,
+  vendorStall,
+} from "./props";
 import type { TextureKit } from "./textures";
 
 /** World units: 1 unit = 1 game pixel of the 2D grid (TILE = 32). */
@@ -1362,24 +1380,21 @@ export function buildCity(scene: Scene, world: WorldData, kit: TextureKit): City
 
   const lampMat = kit.material("metal", "#2a2622");
   const lampHead = mat(scene, "m-lamphead", "#f0d890", 0.95);
+  // One batch for the whole city's street furniture. Every bin, bench, palm
+  // and signal below is several boxes rather than one, and all of it still
+  // costs about a dozen draw calls because the batch welds by material.
+  const batch = new PropBatch(scene);
+  const props = propKit(kit, lampHead, mat(scene, "m-tl-r", "#c43020", 0.85), mat(scene, "m-tl-g", "#2a8a50", 0.35));
   for (const yTile of [10, 22, 36, 50, 64]) {
     for (let x = 6; x < MAP_W; x += 12) {
-      const pole = MeshBuilder.CreateBox(`lp-${x}-${yTile}`, { width: 1.6, depth: 1.6, height: 22 }, scene);
-      pole.position = new Vector3(x * TILE, 11, (yTile - 1) * TILE + TILE / 2);
-      pole.material = lampMat;
-      pole.freezeWorldMatrix();
-      disposables.push(pole);
-      const head = MeshBuilder.CreateBox(`lh-${x}-${yTile}`, { width: 5, depth: 5, height: 2 }, scene);
-      head.position = new Vector3(x * TILE, 22, (yTile - 1) * TILE + TILE / 2);
-      head.material = lampHead;
-      head.freezeWorldMatrix();
-      disposables.push(head);
+      const px = x * TILE;
+      const pz = (yTile - 1) * TILE + TILE / 2;
+      streetLamp(batch, props, px, pz, 9);
+      lamps.push([px + 9, pz]);
     }
   }
 
   // Palms along the water and a few courtyards — cheap silhouette, big read.
-  const trunkMat = kit.material("bark", "#5a3a28");
-  const frondMat = kit.material("foliage", "#2f6a48");
   const palmSpots: Array<[number, number]> = [];
   for (let x = 4; x < MAP_W; x += 7) palmSpots.push([x * TILE, 4.2 * TILE]);
   palmSpots.push(
@@ -1397,21 +1412,7 @@ export function buildCity(scene: Scene, world: WorldData, kit: TextureKit): City
   );
   for (let i = 0; i < palmSpots.length; i++) {
     const [px, pz] = palmSpots[i] ?? [0, 0];
-    const trunk = MeshBuilder.CreateCylinder(`pt-${i}`, { height: 28, diameterTop: 2.2, diameterBottom: 3.6, tessellation: 6 }, scene);
-    trunk.position = new Vector3(px, 14, pz);
-    trunk.material = trunkMat;
-    trunk.freezeWorldMatrix();
-    disposables.push(trunk);
-    for (let f = 0; f < 5; f++) {
-      const frond = MeshBuilder.CreateBox(`pf-${i}-${f}`, { width: 16, depth: 3.2, height: 1.2 }, scene);
-      const ang = (f / 5) * Math.PI * 2;
-      frond.position = new Vector3(px + Math.cos(ang) * 6, 29, pz + Math.sin(ang) * 6);
-      frond.rotation.y = ang;
-      frond.rotation.z = -0.35;
-      frond.material = frondMat;
-      frond.freezeWorldMatrix();
-      disposables.push(frond);
-    }
+    palm(batch, props, px, pz, i * 7 + 3);
   }
 
   // Crossings, one merged mesh, and only where there is road under them. The
@@ -1440,33 +1441,19 @@ export function buildCity(scene: Scene, world: WorldData, kit: TextureKit): City
     disposables.push(crossings);
   }
 
-  const binMat = kit.material("metal", "#3a4a38");
-  const hydrantMat = kit.material("metal", "#c45a32");
-  const benchMat = kit.material("wood", "#4a3024");
   let prop = 0;
   for (const yTile of [14, 28, 42, 56]) {
     for (let x = 10; x < MAP_W - 4; x += 14) {
-      const bin = MeshBuilder.CreateBox(`bin-${prop}`, { width: 6, depth: 4, height: 7 }, scene);
-      bin.position = new Vector3(x * TILE, 3.6, yTile * TILE);
-      bin.material = binMat;
-      bin.freezeWorldMatrix();
-      disposables.push(bin);
-      const hyd = MeshBuilder.CreateCylinder(`hyd-${prop}`, { height: 5, diameter: 2.4, tessellation: 6 }, scene);
-      hyd.position = new Vector3((x + 3) * TILE, 2.6, (yTile + 1) * TILE);
-      hyd.material = hydrantMat;
-      hyd.freezeWorldMatrix();
-      disposables.push(hyd);
-      const bench = MeshBuilder.CreateBox(`bench-${prop}`, { width: 12, depth: 3.2, height: 3 }, scene);
-      bench.position = new Vector3((x + 6) * TILE, 1.6, (yTile - 1) * TILE);
-      bench.material = benchMat;
-      bench.freezeWorldMatrix();
-      disposables.push(bench);
+      bin(batch, props, x * TILE, yTile * TILE, prop);
+      hydrant(batch, props, (x + 3) * TILE, (yTile + 1) * TILE);
+      bench(batch, props, (x + 6) * TILE, (yTile - 1) * TILE, 0);
       prop++;
     }
   }
 
-  dressSpawnStreet(scene, kit, disposables, textures, lampMat, trunkMat, frondMat);
-  dressCityStreets(scene, kit, world, disposables, lampMat, lampHead, binMat, hydrantMat, benchMat, kit.material("concrete", "#6a5a4c"), lamps);
+  dressSpawnStreet(scene, disposables, textures, batch, props);
+  dressCityStreets(scene, kit, world, disposables, batch, props, lamps);
+  batch.flush(disposables);
 
   // Contact shadows and lamp pools, each merged into a single mesh. Both are
   // transparent decals laid on the ground: a draw call apiece is affordable,
@@ -1621,12 +1608,8 @@ function dressCityStreets(
   kit: TextureKit,
   world: WorldData,
   disposables: Mesh[],
-  lampMat: StandardMaterial,
-  lampHead: StandardMaterial,
-  binMat: StandardMaterial,
-  hydrantMat: StandardMaterial,
-  benchMat: StandardMaterial,
-  curbMat: StandardMaterial,
+  batch: PropBatch,
+  props: PropKit,
   lamps: Array<[number, number]>,
 ): void {
   const carCols = [
@@ -1637,8 +1620,6 @@ function dressCityStreets(
     kit.material("carPaint", "#6a8a48"),
   ];
   const cabinGlass = kit.material("glass", "#1c2630");
-  const lightRed = mat(scene, "m-tl-r", "#c43020", 0.85);
-  const lightGo = mat(scene, "m-tl-g", "#2a8a50", 0.35);
   let n = 0;
   for (let y = 2; y < MAP_H; y += 3) {
     for (let x = 2; x < MAP_W; x += 4) {
@@ -1647,46 +1628,19 @@ function dressCityStreets(
       const pz = y * TILE + 16;
       const kind = (x * 5 + y * 3) % 5;
       if (kind === 0) {
-        const bin = MeshBuilder.CreateBox(`st-bin-${n}`, { width: 5, depth: 4, height: 7 }, scene);
-        bin.position = new Vector3(px, 3.6, pz);
-        bin.material = binMat;
-        bin.freezeWorldMatrix();
-        disposables.push(bin);
+        bin(batch, props, px, pz, n);
       } else if (kind === 1) {
-        const hyd = MeshBuilder.CreateCylinder(`st-hyd-${n}`, { height: 5, diameter: 2.2, tessellation: 6 }, scene);
-        hyd.position = new Vector3(px, 2.6, pz);
-        hyd.material = hydrantMat;
-        hyd.freezeWorldMatrix();
-        disposables.push(hyd);
+        hydrant(batch, props, px, pz);
       } else if (kind === 2) {
-        const bench = MeshBuilder.CreateBox(`st-bench-${n}`, { width: 11, depth: 3, height: 3 }, scene);
-        bench.position = new Vector3(px, 1.6, pz);
-        bench.material = benchMat;
-        bench.freezeWorldMatrix();
-        disposables.push(bench);
+        // Benches face the road, so which way the block runs decides which
+        // way they sit.
+        bench(batch, props, px, pz, (world.cells[y * MAP_W + x + 1] as Cell) === Cell.Road ? Math.PI / 2 : 0);
       } else if (kind === 3) {
-        const box = MeshBuilder.CreateBox(`st-news-${n}`, { width: 3.4, depth: 3.4, height: 6 }, scene);
-        box.position = new Vector3(px, 3.1, pz);
-        box.material = curbMat;
-        box.freezeWorldMatrix();
-        disposables.push(box);
+        newsBox(batch, props, px, pz, n);
       } else {
-        const pot = MeshBuilder.CreateCylinder(`st-pot-${n}`, { height: 4, diameter: 4.4, tessellation: 6 }, scene);
-        pot.position = new Vector3(px, 2.1, pz);
-        pot.material = binMat;
-        pot.freezeWorldMatrix();
-        disposables.push(pot);
-        const pole = MeshBuilder.CreateBox(`st-lp-${n}`, { width: 1.4, depth: 1.4, height: 20 }, scene);
-        pole.position = new Vector3(px + 8, 10, pz);
-        pole.material = lampMat;
-        pole.freezeWorldMatrix();
-        disposables.push(pole);
-        const head = MeshBuilder.CreateBox(`st-lh-${n}`, { width: 4.4, depth: 4.4, height: 1.8 }, scene);
-        head.position = new Vector3(px + 8, 20, pz);
-        head.material = lampHead;
-        head.freezeWorldMatrix();
-        disposables.push(head);
-        lamps.push([px + 8, pz]);
+        planter(batch, props, px, pz, n);
+        streetLamp(batch, props, px + 8, pz, 8);
+        lamps.push([px + 16, pz]);
       }
       n++;
     }
@@ -1710,23 +1664,7 @@ function dressCityStreets(
   let t = 0;
   for (const yTile of arterials) {
     for (const xTile of [8, 22, 36, 50, 64, 80]) {
-      const px = (xTile - 0.55) * TILE;
-      const pz = (yTile - 0.55) * TILE;
-      const pole = MeshBuilder.CreateBox(`tl-${t}`, { width: 1.4, depth: 1.4, height: 26 }, scene);
-      pole.position = new Vector3(px, 13, pz);
-      pole.material = lampMat;
-      pole.freezeWorldMatrix();
-      disposables.push(pole);
-      const head = MeshBuilder.CreateBox(`tlh-${t}`, { width: 3.2, depth: 2.2, height: 8 }, scene);
-      head.position = new Vector3(px, 24, pz);
-      head.material = lampMat;
-      head.freezeWorldMatrix();
-      disposables.push(head);
-      const lens = MeshBuilder.CreateBox(`tll-${t}`, { width: 2.2, depth: 1.2, height: 2.2 }, scene);
-      lens.position = new Vector3(px, 25.4, pz + 1.4);
-      lens.material = t % 3 === 0 ? lightRed : lightGo;
-      lens.freezeWorldMatrix();
-      disposables.push(lens);
+      trafficLight(batch, props, (xTile - 0.55) * TILE, (yTile - 0.55) * TILE, 14, t % 3 === 0);
       t++;
     }
   }
@@ -1735,21 +1673,13 @@ function dressCityStreets(
 /** First 10 seconds of play happen here — pack the sidewalk so it isn't a tan void. */
 function dressSpawnStreet(
   scene: Scene,
-  kit: TextureKit,
   disposables: Mesh[],
   textures: DynamicTexture[],
-  lampMat: StandardMaterial,
-  trunkMat: StandardMaterial,
-  frondMat: StandardMaterial,
+  batch: PropBatch,
+  props: PropKit,
 ): void {
   const sx = 16 * TILE + 16;
   const sz = 63 * TILE + 8;
-  const rust = kit.material("metal", "#6a3a28");
-  const dump = kit.material("metal", "#3a4a32");
-  const crate = kit.material("wood", "#8a6238");
-  const cone = kit.material("plastic", "#d45a20");
-  const steel = kit.material("metal", "#4a4844");
-  const neon = mat(scene, "m-spawn-neon", "#e07040", 0.55);
   const muralTex = muralTexture(scene);
   textures.push(muralTex);
   const muralMat = new StandardMaterial("m-spawn-mural", scene);
@@ -1778,58 +1708,27 @@ function dressSpawnStreet(
   ss.freezeWorldMatrix();
   disposables.push(ss);
 
-  const props: Array<[string, number, number, number, number, number, number, StandardMaterial]> = [
-    ["dump-a", 10, 8, 12, sx + 22, 6, sz + 18, dump],
-    ["dump-b", 8, 6, 9, sx - 18, 4.6, sz + 22, rust],
-    ["crate-a", 6, 5, 5, sx + 34, 2.6, sz + 6, crate],
-    ["crate-b", 5, 4, 4, sx + 40, 2.1, sz + 10, crate],
-    ["news", 4, 4, 8, sx - 8, 4, sz + 14, steel],
-    ["vendor", 14, 8, 8, sx + 48, 4, sz - 8, rust],
-    ["bench-s", 16, 3.4, 3.2, sx - 4, 1.7, sz - 18, crate],
-    ["planter", 8, 8, 4, sx + 18, 2, sz - 22, dump],
-    ["scooter", 9, 3.2, 4, sx + 56, 2.1, sz + 4, steel],
-  ];
-  for (const [id, w, d, h, x, y, z, m] of props) {
-    const box = MeshBuilder.CreateBox(id, { width: w, depth: d, height: h }, scene);
-    box.position = new Vector3(x, y, z);
-    box.material = m;
-    box.freezeWorldMatrix();
-    disposables.push(box);
-  }
-  for (let i = 0; i < 4; i++) {
-    const c = MeshBuilder.CreateCylinder(`cone-${i}`, { height: 4.4, diameterTop: 0.6, diameterBottom: 2.4, tessellation: 6 }, scene);
-    c.position = new Vector3(sx + 28 + i * 5, 2.2, sz + 28);
-    c.material = cone;
-    c.freezeWorldMatrix();
-    disposables.push(c);
-  }
-  for (let i = 0; i < 3; i++) {
-    const pole = MeshBuilder.CreateBox(`sp-lamp-${i}`, { width: 1.5, depth: 1.5, height: 24 }, scene);
-    pole.position = new Vector3(sx - 20 + i * 28, 12, sz + 8);
-    pole.material = lampMat;
-    pole.freezeWorldMatrix();
-    disposables.push(pole);
-    const head = MeshBuilder.CreateBox(`sp-lamph-${i}`, { width: 6, depth: 5, height: 2.2 }, scene);
-    head.position = new Vector3(sx - 20 + i * 28, 24, sz + 8);
-    head.material = neon;
-    head.freezeWorldMatrix();
-    disposables.push(head);
-  }
-  const trunk = MeshBuilder.CreateCylinder("sp-palm", { height: 30, diameterTop: 2.2, diameterBottom: 3.8, tessellation: 6 }, scene);
-  trunk.position = new Vector3(sx - 36, 15, sz + 6);
-  trunk.material = trunkMat;
-  trunk.freezeWorldMatrix();
-  disposables.push(trunk);
-  for (let f = 0; f < 5; f++) {
-    const frond = MeshBuilder.CreateBox(`sp-frond-${f}`, { width: 18, depth: 3.4, height: 1.2 }, scene);
-    const ang = (f / 5) * Math.PI * 2;
-    frond.position = new Vector3(sx - 36 + Math.cos(ang) * 6, 31, sz + 6 + Math.sin(ang) * 6);
-    frond.rotation.y = ang;
-    frond.rotation.z = -0.35;
-    frond.material = frondMat;
-    frond.freezeWorldMatrix();
-    disposables.push(frond);
-  }
+  // This is the pavement the player is standing on when the game opens, so it
+  // gets the fullest dressing in the city.
+  dumpster(batch, props, sx + 22, sz + 18, 0.2, 2);
+  dumpster(batch, props, sx - 18, sz + 22, -0.5, 9);
+  crate(batch, props, sx + 34, sz + 6, 6, 4);
+  crate(batch, props, sx + 40, sz + 10, 5, 11);
+  crate(batch, props, sx + 37, sz + 7, 4.2, 19);
+  newsBox(batch, props, sx - 8, sz + 14, 6);
+  vendorStall(batch, props, sx + 48, sz - 8, Math.PI);
+  bench(batch, props, sx - 4, sz - 18, 0);
+  planter(batch, props, sx + 18, sz - 22, 3);
+  planter(batch, props, sx - 30, sz - 14, 8);
+  scooter(batch, props, sx + 56, sz + 4, 0.4);
+  scooter(batch, props, sx + 63, sz + 5, 0.55);
+  bin(batch, props, sx + 8, sz + 20, 5);
+  bin(batch, props, sx + 13, sz + 21, 12);
+  hydrant(batch, props, sx - 26, sz + 12);
+  for (let i = 0; i < 4; i++) cone(batch, props, sx + 28 + i * 5, sz + 28);
+  for (let i = 0; i < 3; i++) streetLamp(batch, props, sx - 20 + i * 28, sz + 8, -9);
+  palm(batch, props, sx - 36, sz + 6, 41);
+  palm(batch, props, sx - 44, sz + 14, 57);
 }
 
 function muralTexture(scene: Scene): DynamicTexture {
