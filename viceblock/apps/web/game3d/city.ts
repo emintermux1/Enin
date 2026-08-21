@@ -224,7 +224,10 @@ function dressBuildingKit(
     awn.freezeWorldMatrix();
     disposables.push(awn);
   });
-  const stories = Math.max(1, Math.floor((height - 20) / 16));
+  // Fire escapes only climb the lower floors; running them the full height of
+  // a 340-unit tower put thousands of extra meshes in the scene for detail
+  // nobody can see from the street.
+  const stories = Math.max(1, Math.min(7, Math.floor((height - 20) / 16)));
   for (let s = 0; s < stories; s++) {
     const plat = MeshBuilder.CreateBox(`${id}-fe${s}`, { width: 7, depth: 3.2, height: 0.7 }, scene);
     plat.position = new Vector3(cx + bw / 2 + 2.2, 20 + s * 16, cz);
@@ -237,6 +240,38 @@ function dressBuildingKit(
   sign.material = neon;
   sign.freezeWorldMatrix();
   disposables.push(sign);
+}
+
+/**
+ * A roof that reads as a roof from above. The building boxes wear their window
+ * texture on all six faces, so before this the top of every tower was a sheet
+ * of windows — fine when nobody could get up there, wrong now that rooftops
+ * are somewhere you land, walk and fight on.
+ */
+function roofDeck(
+  scene: Scene,
+  id: string,
+  cx: number,
+  cz: number,
+  w: number,
+  d: number,
+  height: number,
+  deck: StandardMaterial,
+  vent: StandardMaterial,
+): Mesh {
+  const root = MeshBuilder.CreateBox(`${id}-deck`, { width: w, depth: d, height: 2.4 }, scene);
+  root.position = new Vector3(cx, height + 1.2, cz);
+  root.material = deck;
+  const box = MeshBuilder.CreateBox(`${id}-vent`, { width: Math.min(16, w * 0.3), depth: Math.min(11, d * 0.3), height: 7 }, scene);
+  box.position = new Vector3(cx - w * 0.2, height + 5.4, cz + d * 0.16);
+  box.material = vent;
+  box.parent = root;
+  const stack = MeshBuilder.CreateCylinder(`${id}-stack`, { height: 12, diameter: 4.4, tessellation: 8 }, scene);
+  stack.position = new Vector3(cx + w * 0.24, height + 8, cz - d * 0.2);
+  stack.material = vent;
+  stack.parent = root;
+  root.freezeWorldMatrix();
+  return root;
 }
 
 function shopTexture(scene: Scene, glass: string): DynamicTexture {
@@ -364,13 +399,18 @@ export function buildCity(scene: Scene, world: WorldData, kit: TextureKit): City
   buildingMat.emissiveTexture = winA;
   buildingMat.emissiveColor = new Color3(0.28, 0.22, 0.12);
   (winA as Texture).uScale = 2.2;
-  (winA as Texture).vScale = 4.4;
+  // Twice the courses of windows: the towers are twice as tall as they were.
+  (winA as Texture).vScale = 8.8;
   const buildingMat2 = mat(scene, "m-bld2", "#4a3630");
   buildingMat2.diffuseTexture = winB;
   buildingMat2.emissiveTexture = winB;
   buildingMat2.emissiveColor = new Color3(0.24, 0.18, 0.1);
   (winB as Texture).uScale = 2.2;
-  (winB as Texture).vScale = 4.4;
+  (winB as Texture).vScale = 8.8;
+
+  const roofMat = kit.material("concrete", "#3b3733");
+  const ventMat = mat(scene, "m-vent", "#6d6a63");
+  const parapetMat = mat(scene, "m-parapet", "#2e2724");
 
   const seen = new Uint8Array(MAP_W * MAP_H);
   const landmarkArea = new Set<number>();
@@ -415,7 +455,10 @@ export function buildCity(scene: Scene, world: WorldData, kit: TextureKit): City
         h++;
       }
       for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) seen[(y + j) * MAP_W + x + i] = 1;
-      const height = 48 + ((x * 7 + y * 13) % 5) * 24;
+      // A skyline you can swing through. At the old 48-144 the tallest roof was
+      // barely five times the player's height, so a line fired from the street
+      // hung almost level and every arc scraped the pavement.
+      const height = 84 + ((x * 7 + y * 13) % 5) * 52;
       for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) tops[(y + j) * MAP_W + x + i] = height;
       const bw = w * TILE - 4;
       const bd = h * TILE - 4;
@@ -426,6 +469,20 @@ export function buildCity(scene: Scene, world: WorldData, kit: TextureKit): City
       box.material = (x + y) % 2 ? buildingMat : buildingMat2;
       box.freezeWorldMatrix();
       disposables.push(box);
+      disposables.push(roofDeck(scene, `b-${x}-${y}`, cx, cz, bw - 3, bd - 3, height, roofMat, ventMat));
+      // A parapet you can see over the edge of, and land against.
+      for (const [pw, pd, ox, oz] of [
+        [bw, 2.6, 0, bd / 2 - 1.3],
+        [bw, 2.6, 0, -bd / 2 + 1.3],
+        [2.6, bd, bw / 2 - 1.3, 0],
+        [2.6, bd, -bw / 2 + 1.3, 0],
+      ] as Array<[number, number, number, number]>) {
+        const wallTop = MeshBuilder.CreateBox(`bp-${x}-${y}-${ox}-${oz}`, { width: pw, depth: pd, height: 4 }, scene);
+        wallTop.position = new Vector3(cx + ox, height + 2, cz + oz);
+        wallTop.material = parapetMat;
+        wallTop.freezeWorldMatrix();
+        disposables.push(wallTop);
+      }
       const kit = (x + y) % 3;
       dressBuildingKit(scene, disposables, `b-${x}-${y}`, cx, cz, bw, bd, height, shopMats[kit] ?? shopGlassA, awningCols[kit] ?? awningCols[0], railMat, neonMats[kit] ?? neonMats[0]);
       if (((x + y) & 3) === 0) {
@@ -462,11 +519,26 @@ export function buildCity(scene: Scene, world: WorldData, kit: TextureKit): City
     box.freezeWorldMatrix();
     disposables.push(box);
 
-    const trim = MeshBuilder.CreateBox(`lt-${lm.id}`, { width: lm.w * TILE - 6, depth: lm.h * TILE - 6, height: 4 }, scene);
-    trim.position = new Vector3(box.position.x, height + 2, box.position.z);
-    trim.material = mat(scene, `mt-${lm.id}`, trimColor(lm.kind), 0.72);
-    trim.freezeWorldMatrix();
-    disposables.push(trim);
+    // The neon used to be a lit slab covering the whole footprint, which from
+    // above turned every landmark into a flat sheet of glowing colour. It is a
+    // band round the parapet now, with a real roof inside it.
+    const lw = lm.w * TILE - 6;
+    const ld = lm.h * TILE - 6;
+    const trimMat = mat(scene, `mt-${lm.id}`, trimColor(lm.kind), 0.72);
+    const edges: Array<[number, number, number, number]> = [
+      [lw, 3, 0, ld / 2 - 1.5],
+      [lw, 3, 0, -ld / 2 + 1.5],
+      [3, ld, lw / 2 - 1.5, 0],
+      [3, ld, -lw / 2 + 1.5, 0],
+    ];
+    edges.forEach(([w, d, ox, oz], i) => {
+      const bar = MeshBuilder.CreateBox(`lt-${lm.id}-${i}`, { width: w, depth: d, height: 4 }, scene);
+      bar.position = new Vector3(box.position.x + ox, height + 2, box.position.z + oz);
+      bar.material = trimMat;
+      bar.freezeWorldMatrix();
+      disposables.push(bar);
+    });
+    disposables.push(roofDeck(scene, `lr-${lm.id}`, box.position.x, box.position.z, lw - 6, ld - 6, height, roofMat, ventMat));
 
     // Recessed door on the south face — the street the player actually walks.
     const door = MeshBuilder.CreateBox(`ld-${lm.id}`, { width: 16, depth: 4, height: 20 }, scene);

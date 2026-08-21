@@ -1,5 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { SPIDER_CONFIG, anchorUsable, initialLength, releaseSwing, stepAirborne, stepSwing, zipVelocity, type SwingState, type WebLine } from "../src/spider";
+import {
+  SPIDER_CONFIG,
+  anchorUsable,
+  initialLength,
+  lineCeiling,
+  reelToCeiling,
+  releaseSwing,
+  stepAirborne,
+  stepSwing,
+  zipVelocity,
+  type SwingState,
+  type WebLine,
+} from "../src/spider";
 
 const still = (x = 0, y = 100, z = 0): SwingState => ({ x, y, z, vx: 0, vy: 0, vz: 0 });
 const idle = { lean: 0, steer: 0, reel: false };
@@ -66,6 +78,43 @@ describe("web swinging", () => {
     expect(anchorUsable(0, 0, 0, 100, 10, 0)).toBe(false);
     expect(anchorUsable(0, 0, 0, 100, 120, 0)).toBe(true);
     expect(anchorUsable(0, 0, 0, SPIDER_CONFIG.maxRange + 200, 120, 0)).toBe(false);
+  });
+
+  it("refuses a line so shallow it would tow you down the road", () => {
+    // 400 out, 90 up: a rope, not a pendulum.
+    expect(anchorUsable(0, 0, 0, 400, 90, 0)).toBe(false);
+    expect(anchorUsable(0, 0, 0, 200, 260, 0)).toBe(true);
+  });
+
+  it("caps the line at what the drop below the anchor can take", () => {
+    expect(lineCeiling(300, 0)).toBe(300 - SPIDER_CONFIG.groundClearance);
+    expect(lineCeiling(300, 280)).toBe(SPIDER_CONFIG.minLength);
+  });
+
+  it("hauls an over-long line in until the arc clears the street", () => {
+    let line: WebLine = { x: 0, y: 300, z: 0, length: 520 };
+    const ceiling = lineCeiling(300, 0);
+    for (let i = 0; i < 240; i++) line = reelToCeiling(line, ceiling, 1 / 60);
+    expect(line.length).toBe(ceiling);
+    // A line already short enough is left alone.
+    const short: WebLine = { x: 0, y: 300, z: 0, length: 100 };
+    expect(reelToCeiling(short, ceiling, 1 / 60)).toBe(short);
+  });
+
+  it("keeps a street-level swing off the pavement once the line is capped", () => {
+    const anchor = { x: 0, y: 340, z: 0 };
+    const ceiling = lineCeiling(anchor.y, 0);
+    let s: SwingState = { x: -180, y: 4, z: 0, vx: 190, vy: 200, vz: 0 };
+    let l: WebLine = { ...anchor, length: Math.hypot(180, 336) };
+    let lowest = Infinity;
+    for (let i = 0; i < 180; i++) {
+      l = reelToCeiling(l, ceiling, 1 / 60);
+      const out = stepSwing(s, l, { lean: 1, steer: 0, reel: false }, 0, 1 / 60);
+      s = out.state;
+      l = out.line;
+      if (i > 30) lowest = Math.min(lowest, s.y);
+    }
+    expect(lowest).toBeGreaterThan(0);
   });
 
   it("starts the line taut at the distance to the anchor, within limits", () => {

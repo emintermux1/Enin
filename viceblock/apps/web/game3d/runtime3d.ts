@@ -59,6 +59,8 @@ import {
   SPIDER_CONFIG,
   anchorUsable,
   initialLength,
+  lineCeiling,
+  reelToCeiling,
   releaseSwing,
   stepAirborne,
   stepSwing,
@@ -223,7 +225,12 @@ const RACE_CPS = [
 ];
 
 /** Interiors are separate rooms built high above the city grid. */
-const INTERIOR_Y = 400;
+/**
+ * Interiors sit in the sky, hidden from the street by visibility toggles. With
+ * the skyline now reaching 344 units, 400 was close enough that towers poked
+ * into shot through the shop floor.
+ */
+const INTERIOR_Y = 900;
 
 /**
  * A walkable room behind a landmark door. Everything is keyed off the mesh
@@ -391,6 +398,8 @@ export class ViceblockRuntime3D {
   private swingT = 0;
   private airT = 0;
   private webCooldown = 0;
+  private webWarned = false;
+  private splatT = 0;
   /** Where a web would land right now, for the reticle. */
   private anchorPreview: { x: number; y: number; z: number } | null = null;
   private gpsT = 0;
@@ -2437,16 +2446,25 @@ export class ViceblockRuntime3D {
   private fireWeb(): void {
     const a = this.findAnchor();
     if (!a) {
-      this.webCooldown = 0.35;
-      this.flash("NO ANCHOR  ·  aim at something tall");
+      // Say it once. Held down, this used to reprint the same complaint three
+      // times a second and bury every other message on screen.
+      this.webCooldown = 0.3;
+      if (!this.webWarned) {
+        this.webWarned = true;
+        this.flash("NO ANCHOR  ·  aim at something tall");
+      }
       return;
     }
+    this.webWarned = false;
     this.web = { x: a.x, y: a.y, z: a.z, length: initialLength(this.player.x, this.player.y, this.player.z, a.x, a.y, a.z) };
     this.swingT = 0;
     if (this.player.grounded) {
-      // Stepping off into the first swing needs a little lift or the line just
-      // drags you along the pavement.
-      this.flight.vy = Math.max(this.flight.vy, 110);
+      // Stepping off into the first swing needs a throw: from a standstill the
+      // line has no arc to work with and just tips you over.
+      const toward = Math.atan2(a.z - this.player.z, a.x - this.player.x);
+      this.flight.vy = Math.max(this.flight.vy, SPIDER_CONFIG.launchLift);
+      this.flight.vx += Math.cos(toward) * SPIDER_CONFIG.launchSpeed;
+      this.flight.vz += Math.sin(toward) * SPIDER_CONFIG.launchSpeed;
       this.player.grounded = false;
       this.player.y = Math.max(this.player.y, 2);
     }
@@ -2496,10 +2514,12 @@ export class ViceblockRuntime3D {
       return false;
     }
     if (this.webCooldown > 0) this.webCooldown -= dt;
+    this.fadeSplat(dt);
     this.anchorPreview = this.findAnchor();
 
     if (this.input.consumeZip()) this.zipToAnchor();
     const wantWeb = this.input.webbing();
+    if (!wantWeb) this.webWarned = false;
     if (wantWeb && !this.web && this.webCooldown <= 0) this.fireWeb();
     else if (!wantWeb && this.web) this.releaseWeb();
 
@@ -2537,6 +2557,10 @@ export class ViceblockRuntime3D {
     const input = { lean: -axis.y, steer: axis.x, reel: axis.sprint };
     let next: SwingState;
     if (this.web) {
+      // Shorten an over-long line toward what the drop below it can take, so a
+      // shot fired from the street climbs into an arc instead of ploughing one.
+      const ground = this.supportY(this.player.x, this.player.z, 0);
+      this.web = reelToCeiling(this.web, lineCeiling(this.web.y, ground), dt);
       const out = stepSwing(state, this.web, input, this.player.heading, dt);
       next = out.state;
       this.web = out.line;
@@ -2666,7 +2690,15 @@ export class ViceblockRuntime3D {
     this.webMesh.scaling.z = span;
   }
 
+  /** Ages the splat left by a zip, which otherwise sat on the wall forever. */
+  private fadeSplat(dt: number): void {
+    if (this.web || !this.webSplat?.isEnabled()) return;
+    this.splatT -= dt;
+    if (this.splatT <= 0) this.webSplat.setEnabled(false);
+  }
+
   private showSplat(a: { x: number; y: number; z: number }): void {
+    this.splatT = 1.1;
     if (!this.webSplat) {
       const m = MeshBuilder.CreateBox("web-splat", { width: 9, height: 9, depth: 9 }, this.scene);
       m.material = this.material("#ffffff", 0.5);
@@ -3866,9 +3898,12 @@ export class ViceblockRuntime3D {
 
     const mx = this.player.x + Math.cos(heading) * 9;
     const mz = this.player.z + Math.sin(heading) * 9;
-    this.spawnMuzzleFlash(mx, GUN_Y, mz, heading);
-    this.spawnTracer(mx, GUN_Y, mz, tx, GUN_Y, tz);
-    this.spawnCasing(mx, GUN_Y, mz, heading);
+    // Fire from wherever the player actually is: mid-swing the muzzle used to
+    // flash down at street level while the shooter was over the rooftops.
+    const gy = GUN_Y + this.player.y;
+    this.spawnMuzzleFlash(mx, gy, mz, heading);
+    this.spawnTracer(mx, gy, mz, tx, gy, tz);
+    this.spawnCasing(mx, gy, mz, heading);
     this.audio.gun();
     this.recoil += weapon.recoil;
     this.recoilStep += weapon.recoil;

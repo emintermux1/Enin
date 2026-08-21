@@ -20,18 +20,31 @@ export const SPIDER_CONFIG = {
   steer: 200,
   /** How fast the line is reeled in while the boost is held. */
   reelSpeed: 210,
+  /** How fast a line that is too long for the drop below it hauls itself in. */
+  autoReel: 340,
+  /** The bottom of an arc should clear the street by this much. */
+  groundClearance: 34,
   minLength: 48,
   maxLength: 560,
   /** Nothing beyond this can be webbed. */
   maxRange: 760,
   /** An anchor must be at least this far above you, or the swing is a faceplant. */
   minAnchorRise: 40,
+  /** Rise over horizontal reach: how steep a line has to be to be worth firing. */
+  minSteepness: 0.5,
+  /** Forward throw when a swing starts from a standstill. */
+  launchSpeed: 200,
+  launchLift: 200,
   /** Letting go at the bottom of an arc throws you up the far side. */
   releaseBoost: 120,
   /** A held zip drags you toward the anchor at this speed. */
-  zipSpeed: 700,
-  /** Ceiling on swing speed so the city stays readable. */
-  maxSpeed: 700,
+  zipSpeed: 560,
+  /**
+   * Ceiling on swing speed. Roughly three times what a car does, which is the
+   * point of the web, but slow enough that a district still takes a few arcs
+   * to cross rather than one.
+   */
+  maxSpeed: 470,
   /** Vertical climb rate while clinging to a wall. */
   climbSpeed: 150,
   /** Push-off when you jump away from a wall. */
@@ -162,12 +175,36 @@ export function releaseSwing(state: SwingState): SwingState {
 }
 
 /**
+ * The longest line that still leaves an arc above the pavement. A pendulum
+ * hangs at `anchorY - length` at its lowest point, so a line longer than the
+ * anchor is high simply drags the player along the ground.
+ */
+export function lineCeiling(anchorY: number, groundY: number): number {
+  return Math.max(SPIDER_CONFIG.minLength, anchorY - groundY - SPIDER_CONFIG.groundClearance);
+}
+
+/**
+ * Hauls an over-long line in toward its ceiling. This is the swing gaining
+ * height as it goes, and it is why a shot fired from street level ends up over
+ * the rooftops instead of face down in the road.
+ */
+export function reelToCeiling(line: WebLine, ceiling: number, dt: number): WebLine {
+  if (line.length <= ceiling) return line;
+  return { ...line, length: Math.max(ceiling, line.length - SPIDER_CONFIG.autoReel * dt) };
+}
+
+/**
  * Whether a candidate anchor is worth firing at: high enough above the player
  * to swing under, and within reach.
  */
 export function anchorUsable(px: number, py: number, pz: number, ax: number, ay: number, az: number, rise: number = SPIDER_CONFIG.minAnchorRise): boolean {
-  if (ay - py < rise) return false;
-  return Math.hypot(ax - px, ay - py, az - pz) <= SPIDER_CONFIG.maxRange;
+  const up = ay - py;
+  if (up < rise) return false;
+  const flat = Math.hypot(ax - px, az - pz);
+  // Too shallow and the line is a tow rope, not a pendulum: you get dragged
+  // along the road instead of swinging under the anchor.
+  if (up < flat * SPIDER_CONFIG.minSteepness) return false;
+  return Math.hypot(flat, up) <= SPIDER_CONFIG.maxRange;
 }
 
 /** Rope length to start a swing with: taut enough to bite immediately. */
