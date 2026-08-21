@@ -2388,8 +2388,11 @@ export class ViceblockRuntime3D {
     const day = Math.pow(Math.max(0, elev), 0.55);
     const lit = this.blackout ? 1 : Math.max(0, Math.min(1, 1 - elev * 2.6));
     this.city?.setNight(lit);
-    this.hemi.intensity = this.blackout ? 0.18 : 0.3 + day * 0.94;
-    this.sun.intensity = this.blackout ? 0.04 : 0.06 + day * 1.12;
+    // Ambient plus sun used to peak at 2.4, which clipped anything with a
+    // mid-tone albedo to white — kerbs and pavement came out as bare paper.
+    // Held under about 1.3 they keep their colour.
+    this.hemi.intensity = this.blackout ? 0.16 : 0.31 + day * 0.33;
+    this.sun.intensity = this.blackout ? 0.04 : 0.05 + day * 0.68;
     // Low sun runs orange, overhead sun white, and what is left after dark is
     // sky-blue rather than white. Skipping this is why noon, sunset and
     // midnight all lit every wall exactly the same.

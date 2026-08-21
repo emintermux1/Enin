@@ -141,10 +141,10 @@ function paintWindow(
 }
 
 /** Speckle that keeps a flat fill from reading as coloured paper. */
-function grain(ctx: CanvasRenderingContext2D, count: number, alpha: number, seed: number): void {
+function grain(ctx: CanvasRenderingContext2D, count: number, alpha: number, seed: number, size = FACADE_PX): void {
   for (let i = 0; i < count; i++) {
-    const x = hash01(seed + i * 2.1) * FACADE_PX;
-    const y = hash01(seed + i * 5.7 + 91) * FACADE_PX;
+    const x = hash01(seed + i * 2.1) * size;
+    const y = hash01(seed + i * 5.7 + 91) * size;
     ctx.fillStyle = hash01(seed + i) > 0.5 ? `rgba(255,248,235,${alpha})` : `rgba(0,0,0,${alpha * 1.4})`;
     ctx.fillRect(x, y, 1 + hash01(i * 3.3) * 2, 1 + hash01(i * 1.7) * 2);
   }
@@ -619,14 +619,12 @@ function glowTexture(scene: Scene): DynamicTexture {
   return tex;
 }
 
-function shopMat(scene: Scene, name: string, tex: DynamicTexture, glow: Color3): StandardMaterial {
-  const m = mat(scene, name, "#2a4050", 0.18);
-  m.diffuseTexture = tex;
-  m.emissiveTexture = tex;
-  m.emissiveColor = glow;
-  return m;
-}
-
+/**
+ * The street level of a block: shopfronts, awnings, a fire escape and a sign.
+ * Everything picks from its own hash of the building's position, because the
+ * previous version gave every block on the map the same green awning at the
+ * same height over the same strip of blue glass.
+ */
 function dressBuildingKit(
   scene: Scene,
   disposables: Mesh[],
@@ -636,49 +634,83 @@ function dressBuildingKit(
   bw: number,
   bd: number,
   height: number,
-  shop: StandardMaterial,
-  awning: StandardMaterial,
+  shops: readonly Facade[],
+  awnings: readonly StandardMaterial[],
   rail: StandardMaterial,
   neon: StandardMaterial,
 ): void {
+  const seed = cx * 0.031 + cz * 0.017;
   const faces: Array<{ x: number; z: number; rot: number; w: number }> = [
     { x: cx, z: cz + bd / 2 + 1.3, rot: 0, w: Math.max(12, bw - 8) },
     { x: cx, z: cz - bd / 2 - 1.3, rot: Math.PI, w: Math.max(12, bw - 8) },
     { x: cx + bw / 2 + 1.3, z: cz, rot: Math.PI / 2, w: Math.max(12, bd - 8) },
     { x: cx - bw / 2 - 1.3, z: cz, rot: -Math.PI / 2, w: Math.max(12, bd - 8) },
   ];
+  const tall = 11 + Math.round(hash01(seed) * 5);
   faces.forEach((f, i) => {
-    const glass = MeshBuilder.CreateBox(`${id}-g${i}`, { width: f.w, depth: 1.6, height: 12 }, scene);
-    glass.position = new Vector3(f.x, 6.2, f.z);
+    const shop = shops[Math.floor(hash01(seed + i * 4.3) * shops.length)] ?? shops[0];
+    if (!shop) return;
+    const bays = Math.max(1, Math.round(f.w / SHOP_BAY));
+    const glass = MeshBuilder.CreateBox(`${id}-g${i}`, {
+      width: f.w,
+      depth: 1.6,
+      height: tall,
+      faceUV: [
+        new Vector4(0, 0, bays, 1),
+        new Vector4(0, 0, bays, 1),
+        new Vector4(0, 0, 1, 1),
+        new Vector4(0, 0, 1, 1),
+        new Vector4(0, 0, bays, 1),
+        new Vector4(0, 0, bays, 1),
+      ],
+    }, scene);
+    glass.position = new Vector3(f.x, tall / 2 + 0.2, f.z);
     glass.rotation.y = f.rot;
-    glass.material = shop;
+    glass.material = shop.material;
     glass.freezeWorldMatrix();
     disposables.push(glass);
-    const awn = MeshBuilder.CreateBox(`${id}-a${i}`, { width: f.w * 0.92, depth: 7, height: 1.2 }, scene);
-    const ox = Math.sin(f.rot) * 4;
-    const oz = Math.cos(f.rot) * 4;
-    awn.position = new Vector3(f.x + ox, 13.4, f.z + oz);
-    awn.rotation.y = f.rot;
-    awn.material = awning;
-    awn.freezeWorldMatrix();
-    disposables.push(awn);
+    // Not every frontage has an awning, and the ones that do do not all run
+    // the full width of the block.
+    if (hash01(seed + i * 9.7 + 2) < 0.62) {
+      const span = f.w * (0.4 + hash01(seed + i * 2.9) * 0.52);
+      const awn = MeshBuilder.CreateBox(`${id}-a${i}`, { width: span, depth: 7, height: 1.2 }, scene);
+      const ox = Math.sin(f.rot) * 4;
+      const oz = Math.cos(f.rot) * 4;
+      const slide = (f.w - span) * (hash01(seed + i * 5.1) - 0.5);
+      awn.position = new Vector3(f.x + ox + Math.cos(f.rot) * slide, tall + 1.6, f.z + oz - Math.sin(f.rot) * slide);
+      awn.rotation.y = f.rot;
+      awn.material = awnings[Math.floor(hash01(seed + i * 7.7 + 5) * awnings.length)] ?? awnings[0]!;
+      awn.freezeWorldMatrix();
+      disposables.push(awn);
+    }
   });
   // Fire escapes only climb the lower floors; running them the full height of
   // a 340-unit tower put thousands of extra meshes in the scene for detail
-  // nobody can see from the street.
-  const stories = Math.max(1, Math.min(7, Math.floor((height - 20) / 16)));
-  for (let s = 0; s < stories; s++) {
-    const plat = MeshBuilder.CreateBox(`${id}-fe${s}`, { width: 7, depth: 3.2, height: 0.7 }, scene);
-    plat.position = new Vector3(cx + bw / 2 + 2.2, 20 + s * 16, cz);
-    plat.material = rail;
-    plat.freezeWorldMatrix();
-    disposables.push(plat);
+  // nobody can see from the street. They also pick a side rather than always
+  // hanging off the east wall.
+  if (hash01(seed + 11) < 0.7) {
+    const east = hash01(seed + 13) < 0.5;
+    const stories = Math.max(1, Math.min(7, Math.floor((height - 20) / 16)));
+    const ladders: Mesh[] = [];
+    for (let s = 0; s < stories; s++) {
+      const plat = MeshBuilder.CreateBox(`${id}-fe${s}`, { width: 7, depth: 3.2, height: 0.7 }, scene);
+      plat.position = new Vector3(cx + (east ? bw / 2 + 2.2 : -bw / 2 - 2.2), 20 + s * 16, cz);
+      ladders.push(plat);
+    }
+    const escape = Mesh.MergeMeshes(ladders, true, true);
+    if (escape) {
+      escape.material = rail;
+      escape.freezeWorldMatrix();
+      disposables.push(escape);
+    }
   }
-  const sign = MeshBuilder.CreateBox(`${id}-neon`, { width: Math.min(28, bw * 0.45), depth: 1.2, height: 5 }, scene);
-  sign.position = new Vector3(cx, Math.min(height - 8, 36), cz + bd / 2 + 1.6);
-  sign.material = neon;
-  sign.freezeWorldMatrix();
-  disposables.push(sign);
+  if (hash01(seed + 17) < 0.55) {
+    const sign = MeshBuilder.CreateBox(`${id}-neon`, { width: Math.min(28, bw * 0.45), depth: 1.2, height: 5 }, scene);
+    sign.position = new Vector3(cx, Math.min(height - 8, 26 + hash01(seed + 19) * 22), cz + bd / 2 + 1.6);
+    sign.material = neon;
+    sign.freezeWorldMatrix();
+    disposables.push(sign);
+  }
 }
 
 /**
@@ -776,23 +808,78 @@ function parapetRing(scene: Scene, id: string, cx: number, cz: number, bw: numbe
   return ring;
 }
 
-function shopTexture(scene: Scene, glass: string): DynamicTexture {
-  const tex = new DynamicTexture(`tex-shop-${glass}`, { width: 256, height: 128 }, scene, false);
-  const ctx = tex.getContext();
-  ctx.fillStyle = "#2a2018";
-  ctx.fillRect(0, 0, 256, 128);
-  ctx.fillStyle = glass;
-  ctx.fillRect(8, 16, 72, 96);
-  ctx.fillRect(92, 16, 72, 96);
-  ctx.fillRect(176, 16, 72, 96);
-  ctx.fillStyle = "rgba(255,230,180,0.22)";
-  ctx.fillRect(8, 16, 72, 28);
-  ctx.fillRect(92, 16, 72, 28);
-  ctx.fillRect(176, 16, 72, 28);
-  tex.update();
-  tex.wrapU = 0;
-  tex.wrapV = 0;
-  return tex;
+/** World units one shop bay covers along a facade. */
+const SHOP_BAY = 26;
+
+/**
+ * One shop bay, tiling side to side: half a pier at each edge, a fascia over
+ * the top and a stall riser under the glass. Scaled to the wall it runs along
+ * (see `SHOP_BAY`), a block-long frontage comes out as a row of shops rather
+ * than as the single stretched strip of blue glass it used to be.
+ */
+function storefront(scene: Scene, name: string, glass: string, fascia: string, seed: number): Facade {
+  const px = 128;
+  const diffuse = new DynamicTexture(`${name}-d`, { width: px, height: px }, scene, true);
+  const emissive = new DynamicTexture(`${name}-e`, { width: px, height: px }, scene, true);
+  const d = canvas2d(diffuse.getContext());
+  const e = canvas2d(emissive.getContext());
+  e.fillStyle = "#000000";
+  e.fillRect(0, 0, px, px);
+  d.fillStyle = "#26201a";
+  d.fillRect(0, 0, px, px);
+  // Fascia across the top, with the awning's shadow under it.
+  d.fillStyle = fascia;
+  d.fillRect(0, 6, px, 22);
+  d.fillStyle = "rgba(0,0,0,0.45)";
+  d.fillRect(0, 28, px, 5);
+  e.fillStyle = tint(fascia, 0.2);
+  e.fillRect(0, 8, px, 18);
+  // Piers: half at each edge so the bay meets its neighbour cleanly.
+  const pier = 7;
+  const inner = px - pier * 2;
+  const glazedH = 74;
+  const top = 36;
+  if (hash01(seed) < 0.28) {
+    // A doorway instead of a window on some bays.
+    d.fillStyle = tint(glass, -0.55);
+    d.fillRect(pier, top, inner, glazedH);
+    d.fillStyle = tint(fascia, -0.4);
+    d.fillRect(pier + inner * 0.3, top + 6, inner * 0.4, glazedH - 6);
+    e.fillStyle = tint(glass, 0.35);
+    e.fillRect(pier + inner * 0.3, top + 6, inner * 0.4, glazedH - 6);
+  } else {
+    const g = d.createLinearGradient(pier, top, pier + inner * 0.5, top + glazedH);
+    g.addColorStop(0, tint(glass, 0.3));
+    g.addColorStop(0.6, tint(glass, -0.3));
+    g.addColorStop(1, tint(glass, 0.05));
+    d.fillStyle = g;
+    d.fillRect(pier, top, inner, glazedH);
+    // Stall riser and a mullion, so the glass has a frame round it.
+    d.fillStyle = "#1d1814";
+    d.fillRect(pier, top + glazedH - 12, inner, 12);
+    d.fillRect(pier + inner / 2 - 1, top, 2, glazedH - 12);
+    e.fillStyle = tint(glass, 0.4);
+    e.fillRect(pier + 2, top + 2, inner - 4, glazedH - 16);
+    e.fillStyle = "rgba(0,0,0,0.5)";
+    e.fillRect(pier + inner / 2 - 1, top, 2, glazedH - 12);
+  }
+  d.fillStyle = "#332a22";
+  d.fillRect(0, top, pier, glazedH);
+  d.fillRect(px - pier, top, pier, glazedH);
+  grain(d, 90, 0.05, seed + 3, px);
+  for (const t of [diffuse, emissive]) {
+    t.hasAlpha = false;
+    t.update();
+    t.wrapU = 1;
+    t.wrapV = 1;
+  }
+  const material = new StandardMaterial(name, scene);
+  material.diffuseColor = new Color3(1, 1, 1);
+  material.specularColor = new Color3(0.08, 0.08, 0.09);
+  material.diffuseTexture = diffuse;
+  material.emissiveTexture = emissive;
+  material.emissiveColor = new Color3(0.35, 0.33, 0.3);
+  return { diffuse, emissive, material };
 }
 
 function signTexture(scene: Scene, name: string, title: string, ink: string, paper: string): DynamicTexture {
@@ -928,8 +1015,10 @@ export function buildCity(scene: Scene, world: WorldData, kit: TextureKit): City
   // lanes either side is what actually reads as tarmac from head height. All
   // the dashes of one colour merge into a single mesh — one per colour for the
   // whole city rather than a draw call per stripe.
-  const yellowMat = mat(scene, "m-line-y", "#d8b24e", 0.2);
-  const whiteMat = mat(scene, "m-line-w", "#d6d2c6", 0.2);
+  // Road paint, not light fittings: the emissive these carried put them a
+  // clear step brighter than anything can be under a midday sun.
+  const yellowMat = mat(scene, "m-line-y", "#a08131");
+  const whiteMat = mat(scene, "m-line-w", "#9d9a90");
   const solids: Mesh[] = [];
   const dashes: Mesh[] = [];
   const dash = (x: number, z: number, w: number, d: number): void => {
@@ -1035,22 +1124,31 @@ export function buildCity(scene: Scene, world: WorldData, kit: TextureKit): City
   }
 
   const acMat = kit.material("metal", "#5a5854");
-  const shopTexA = shopTexture(scene, "#3a6078");
-  const shopTexB = shopTexture(scene, "#784838");
-  const shopTexC = shopTexture(scene, "#2a5a48");
-  textures.push(shopTexA, shopTexB, shopTexC);
-  const shopGlassA = shopMat(scene, "m-shop-a", shopTexA, new Color3(0.2, 0.28, 0.32));
-  const shopGlassB = shopMat(scene, "m-shop-b", shopTexB, new Color3(0.32, 0.18, 0.14));
-  const shopGlassC = shopMat(scene, "m-shop-c", shopTexC, new Color3(0.16, 0.3, 0.22));
-  const shopMats = [shopGlassA, shopGlassB, shopGlassC];
-  const awningCols = [kit.material("canvas", "#c45a32"), kit.material("canvas", "#2a6a78"), kit.material("canvas", "#d8a030")];
+  const shops = [
+    storefront(scene, "m-shop-a", "#3a6078", "#8a3428", 1),
+    storefront(scene, "m-shop-b", "#784838", "#2c5a62", 7),
+    storefront(scene, "m-shop-c", "#2a5a48", "#b07a24", 13),
+    storefront(scene, "m-shop-d", "#4a4258", "#3a5a34", 21),
+    storefront(scene, "m-shop-e", "#6a5a3a", "#6a2a4a", 29),
+  ] as const;
+  for (const s of shops) {
+    textures.push(s.diffuse, s.emissive);
+    glowing.push([s.material, s.material.emissiveColor.clone()]);
+  }
+  const awningCols = [
+    kit.material("canvas", "#c45a32"),
+    kit.material("canvas", "#2a6a78"),
+    kit.material("canvas", "#d8a030"),
+    kit.material("canvas", "#7a3a52"),
+    kit.material("canvas", "#4a6a3a"),
+  ];
   const railMat = kit.material("metal", "#2a2622");
   const neonMats = [
     mat(scene, "m-neon-a", "#e07040", 0.7),
     mat(scene, "m-neon-b", "#40c0d0", 0.7),
     mat(scene, "m-neon-c", "#e8c050", 0.7),
   ];
-  for (const m of [...neonMats, ...shopMats]) glowing.push([m, m.emissiveColor.clone()]);
+  for (const m of neonMats) glowing.push([m, m.emissiveColor.clone()]);
   for (let y = 0; y < MAP_H; y++) {
     for (let x = 0; x < MAP_W; x++) {
       const idx = y * MAP_W + x;
@@ -1114,7 +1212,7 @@ export function buildCity(scene: Scene, world: WorldData, kit: TextureKit): City
       const parapet = parapetRing(scene, `bp-${x}-${y}`, cx, cz, tw, td, top, parapetMat);
       if (parapet) disposables.push(parapet);
       const kit = (x + y) % 3;
-      dressBuildingKit(scene, disposables, `b-${x}-${y}`, cx, cz, bw, bd, height, shopMats[kit] ?? shopGlassA, awningCols[kit] ?? awningCols[0], railMat, neonMats[kit] ?? neonMats[0]);
+      dressBuildingKit(scene, disposables, `b-${x}-${y}`, cx, cz, bw, bd, height, shops, awningCols, railMat, neonMats[kit] ?? neonMats[0]!);
       if (((x + y) & 3) === 0) {
         const ac = MeshBuilder.CreateBox(`ac-${x}-${y}`, { width: 10, depth: 14, height: 6 }, scene);
         ac.position = new Vector3(cx + 8, top + 3, cz);
@@ -1217,10 +1315,10 @@ export function buildCity(scene: Scene, world: WorldData, kit: TextureKit): City
       lm.w * TILE - 6,
       lm.h * TILE - 6,
       height,
-      shopGlassA,
-      awningMat,
+      shops,
+      awningCols,
       railMat,
-      neonMats[0] ?? shopGlassA,
+      neonMats[0]!,
     );
   }
 
