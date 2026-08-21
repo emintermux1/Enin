@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { PLAYER_CONFIG } from "../src/config";
 import {
   SPIDER_CONFIG,
   anchorUsable,
@@ -26,6 +27,29 @@ function swing(steps: number, input = idle, state = still(120, 100, 0), line: We
   }
   return { s, l };
 }
+
+describe("standing jump", () => {
+  /** Where a jump tops out, simulated under the same gravity the game uses. */
+  function apex(launch: number): number {
+    let s: SwingState = { x: 0, y: 0, z: 0, vx: 0, vy: launch, vz: 0 };
+    let high = 0;
+    for (let i = 0; i < 600 && (s.vy > 0 || s.y > 0); i++) {
+      s = stepAirborne(s, idle, 0, 1 / 60);
+      high = Math.max(high, s.y);
+    }
+    return high;
+  }
+
+  it("clears the ledge the player already walks up for free", () => {
+    // Otherwise the jump key is decorative: everything it can reach was
+    // reachable by walking into it.
+    expect(apex(PLAYER_CONFIG.jumpVelocity)).toBeGreaterThan(PLAYER_CONFIG.stepUpHeight * 1.5);
+  });
+
+  it("stays well under a wall push-off, which is meant to be the big one", () => {
+    expect(apex(PLAYER_CONFIG.jumpVelocity)).toBeLessThan(apex(SPIDER_CONFIG.wallJump));
+  });
+});
 
 describe("web swinging", () => {
   it("turns a fall into an arc instead of dropping straight down", () => {

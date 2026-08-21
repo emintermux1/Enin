@@ -162,7 +162,16 @@ interface Tracer {
 const GUN_Y = 12;
 
 /** How far you can step up, and how far a ledge can be below your feet. */
-const LEDGE_STEP = 14;
+const LEDGE_STEP = PLAYER_CONFIG.stepUpHeight;
+
+/**
+ * What "auto" resolves to. Startup and the quality menu each used to decide
+ * this for themselves and disagreed about phones, so opening the menu and
+ * picking the setting you were already on quietly halved the resolution.
+ */
+function defaultQuality(mobile: boolean): Quality {
+  return mobile ? "medium" : "high";
+}
 
 /** How far a clinging body leans head-first into the wall it is holding. */
 const CLING_LEAN = 0.55;
@@ -626,7 +635,7 @@ export class ViceblockRuntime3D {
   async start(): Promise<void> {
     await this.audio.unlock();
     this.audio.setLevels(this.settings);
-    if (this.quality === "auto") this.quality = this.input.mobile ? "medium" : "high";
+    if (this.quality === "auto") this.quality = defaultQuality(this.input.mobile);
     this.applyQuality();
     this.time = 15.4;
     // Face Rico so the first shot is a street, a hideout trim, and a 3/4 face.
@@ -648,7 +657,7 @@ export class ViceblockRuntime3D {
   }
 
   setQuality(q: Quality): void {
-    this.quality = q === "auto" ? (this.input.mobile ? "low" : "high") : q;
+    this.quality = q === "auto" ? defaultQuality(this.input.mobile) : q;
     this.applyQuality();
     // A manual choice ends the automatic one, in both directions.
     this.perf = { low: 0, dropped: true };
@@ -2768,7 +2777,7 @@ export class ViceblockRuntime3D {
       this.audio.foot(true, "concrete");
     } else if (jump && this.player.grounded && !this.web) {
       this.player.grounded = false;
-      this.flight.vy = PLAYER_CONFIG.jumpVelocity * 10;
+      this.flight.vy = PLAYER_CONFIG.jumpVelocity;
     }
 
     if (this.player.grounded && !this.web && !this.cling) {

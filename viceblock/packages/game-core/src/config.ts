@@ -55,8 +55,21 @@ export const VEHICLE_CONFIG = {
 export const PLAYER_CONFIG = {
   walkSpeed: 108,
   sprintSpeed: 168,
-  jumpVelocity: 7.2,
-  gravity: 22,
+  /**
+   * Height the player walks up without doing anything: kerbs, steps, the lip
+   * of a loading bay. Anything taller has to be jumped, climbed or webbed.
+   */
+  stepUpHeight: 14,
+  /**
+   * Standing jump, world units per second, falling under `SPIDER_CONFIG`'s
+   * gravity like everything else the player does in the air.
+   *
+   * This has to clear `stepUpHeight` by enough to be worth pressing. It used
+   * to read 7.2 and be multiplied by ten where it was used, which put the apex
+   * at six units — under half the height the player already gets for free, and
+   * a fifth of his own body — so the jump key moved nothing you could see.
+   */
+  jumpVelocity: 150,
   respawnMedicalFee: 80,
   radius: 8,
 };
@@ -103,13 +116,12 @@ export function assistAim(
     const dist = Math.hypot(dx, dy);
     if (dist > opts.maxRange || dist < 4) continue;
     const ang = Math.atan2(dy, dx);
-    let diff = Math.abs(normalizeAngle(ang - heading));
+    const diff = Math.abs(normalizeAngle(ang - heading));
     if (diff > cone) continue;
     const score = diff * 100 + dist * 0.2;
     if (score < bestScore) {
       bestScore = score;
       best = t;
-      void diff;
     }
   }
   if (!best) return { heading, targetId: null };
