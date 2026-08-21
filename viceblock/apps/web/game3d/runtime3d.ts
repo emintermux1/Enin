@@ -159,6 +159,28 @@ function clampPitch(p: number): number {
   return Math.max(CAMERA.minPitch, Math.min(CAMERA.maxPitch, p));
 }
 
+/**
+ * The world used to advance by at most 33ms per rendered frame, so anything
+ * under 30fps ran in slow motion: at 15fps a car took twice as long to reach
+ * the same corner and the controls felt like treacle. Time is now consumed in
+ * fixed steps, several per frame when the renderer is behind, which keeps the
+ * physics stable without tying the speed of the world to the frame rate.
+ */
+/**
+ * Collision half-width for a car against buildings. The old value of 12 made
+ * the box wider than the lane markings allow, so cars caught on kerbs that
+ * looked clear on screen.
+ */
+const CAR_RADIUS = 9;
+
+const SIM = {
+  stepSeconds: 1 / 60,
+  /** Ceiling on catch-up work per frame: 13fps still runs at full speed. */
+  maxStepsPerFrame: 8,
+  /** Anything longer is a stall or a backgrounded tab; do not simulate it. */
+  maxFrameSeconds: 0.25,
+};
+
 interface MissionRuntime {
   id: string;
   step: number;
@@ -307,6 +329,9 @@ export class ViceblockRuntime3D {
   camZoom = 1;
   /** Clock time of the last manual look, so driving does not snatch the view back. */
   private lookedAt = -99;
+  /** Real time owed to the simulation, paid off in fixed steps. */
+  private simDebt = 0;
+  private perf = { low: 0, dropped: false };
   private matCache = new Map<string, StandardMaterial>();
 
   constructor(canvas: HTMLCanvasElement) {
@@ -314,6 +339,10 @@ export class ViceblockRuntime3D {
     this.engine = new Engine(canvas, true, { preserveDrawingBuffer: false, stencil: false });
     this.scene = new Scene(this.engine);
     this.scene.clearColor = new Color4(0.42, 0.55, 0.62, 1);
+    // Nothing in the game picks with the mouse or relies on per-frame material
+    // recompiles; both cost real time in a scene this dense.
+    this.scene.skipPointerMovePicking = true;
+    this.scene.blockMaterialDirtyMechanism = true;
     this.world = buildSouthside();
     this.tex = new TextureKit(this.scene);
     this.city = buildCity(this.scene, this.world, this.tex);
@@ -403,14 +432,16 @@ export class ViceblockRuntime3D {
     let last = performance.now();
     this.engine.runRenderLoop(() => {
       const now = performance.now();
-      const dt = Math.min(0.033, (now - last) / 1000);
+      // Real elapsed time, capped only against the tab having been asleep.
+      const frame = Math.min(SIM.maxFrameSeconds, (now - last) / 1000);
       last = now;
       if (this.running) {
-        this.update(dt);
+        this.stepSim(frame);
         this.scene.render();
         this.drawMinimap();
         return;
       }
+      const dt = Math.min(SIM.stepSeconds, frame);
       this.clock += dt;
       this.time = 15.4;
       this.updateDayNight();
@@ -455,13 +486,33 @@ export class ViceblockRuntime3D {
   }
 
   applyQuality(): void {
-    const scale = this.quality === "low" ? 0.82 : this.quality === "medium" ? 0.92 : 1;
+    const scale = this.quality === "low" ? 0.68 : this.quality === "medium" ? 0.85 : 1;
     this.engine.setHardwareScalingLevel(1 / scale / Math.min(1.5, window.devicePixelRatio || 1));
   }
 
   setQuality(q: Quality): void {
     this.quality = q === "auto" ? (this.input.mobile ? "low" : "high") : q;
     this.applyQuality();
+    // A manual choice ends the automatic one, in both directions.
+    this.perf = { low: 0, dropped: true };
+  }
+
+  /**
+   * Drops render resolution once, if the machine plainly cannot hold a playable
+   * frame rate. Cars stay just as quick either way now that the simulation runs
+   * on its own clock, but a stuttering picture still reads as a slow car.
+   */
+  private updatePerf(dt: number): void {
+    if (this.perf.dropped) return;
+    const fps = this.engine.getFps();
+    if (!Number.isFinite(fps) || fps <= 0) return;
+    this.perf.low = fps < 42 ? this.perf.low + dt : 0;
+    if (this.perf.low < 4) return;
+    this.perf.dropped = true;
+    const next = this.quality === "high" ? "medium" : "low";
+    this.quality = next;
+    this.applyQuality();
+    this.flash(`PERFORMANCE  ·  dropped to ${next.toUpperCase()}  ·  change it in MENU > QUALITY`);
   }
 
   applySave(save: PlayerSave): void {
@@ -765,47 +816,141 @@ export class ViceblockRuntime3D {
     meta.legR.rotation.x = swing * 0.65;
   }
 
-  private makeCarMesh(name: string, hex: string, isPolice: boolean): Mesh {
+  /**
+   * Cars used to be one paint-coloured slab with a glass slab on top, which is
+   * why they read as untextured boxes. Each one is now built from real panels
+   * — bonnet, cabin, boot, bumpers, grille, lamps, plate, mirrors, rims — and
+   * the silhouette follows the vehicle class, so a Sahin sedan, a muscle car
+   * and a wedge sports car are told apart at a glance.
+   */
+  private makeCarMesh(name: string, hex: string, isPolice: boolean, defId = "sparrow"): Mesh {
     const root = MeshBuilder.CreateBox(`${name}-root`, { width: 0.4, depth: 0.4, height: 0.4 }, this.scene);
     root.isVisible = false;
-    const body = MeshBuilder.CreateBox(`${name}-b`, { width: 30, depth: 15, height: 7 }, this.scene);
-    body.material = this.surface("carPaint", hex);
-    body.position.y = 6.2;
-    body.parent = root;
-    const cabin = MeshBuilder.CreateBox(`${name}-c`, { width: 13, depth: 13, height: 6 }, this.scene);
-    cabin.material = this.surface("glass", isPolice ? "#4a6a88" : "#1c2630");
-    cabin.position = new Vector3(-3, 12.2, 0);
-    cabin.parent = root;
-    if (isPolice) {
-      const bar = MeshBuilder.CreateBox(`${name}-l`, { width: 6, depth: 10, height: 2 }, this.scene);
-      bar.material = this.material("#4a90d8", 0.9);
-      bar.position = new Vector3(-3, 16, 0);
-      bar.parent = root;
+    let n = 0;
+    const box = (w: number, d: number, h: number, x: number, y: number, z: number, mat: StandardMaterial): Mesh => {
+      const m = MeshBuilder.CreateBox(`${name}-p${n++}`, { width: w, depth: d, height: h }, this.scene);
+      m.material = mat;
+      m.position.set(x, y, z);
+      m.parent = root;
+      return m;
+    };
+    if (defId === "needle") return this.makeBikeMesh(name, hex, root, box);
+
+    const paint = this.surface("carPaint", hex);
+    const glass = this.surface("glass", isPolice ? "#40607e" : "#16202a");
+    const trim = this.surface("metal", "#20242a", 0.05);
+    const chrome = this.surface("metal", "#b8bcc4", 0.12);
+    const sedan = defId === "sahin";
+    const muscle = defId === "ironback";
+    const sports = defId === "mirage";
+
+    // Class silhouette: nose length, cabin position and how low it all sits.
+    const noseLen = sports ? 12 : muscle ? 13 : sedan ? 11 : 9;
+    const bootLen = sedan ? 9 : muscle ? 8 : sports ? 7 : 5;
+    const cabinLen = 30 - noseLen - bootLen;
+    const cabinX = 15 - noseLen - cabinLen / 2;
+    const sill = sports ? 4.2 : 4.8;
+    const roofH = sports ? 4 : sedan ? 5.4 : 4.8;
+    const noseY = sports ? sill + 1.6 : sill + 2.4;
+
+    box(30, 15, 1.6, 0, sill - 1.2, 0, trim);
+    box(30, 15.2, 4.4, 0, sill + 1.4, 0, paint);
+    box(noseLen, 14.6, sports ? 1.8 : 2.6, 15 - noseLen / 2, noseY + 1.6, 0, paint);
+    box(bootLen, 14.6, sedan ? 3.4 : 2.6, -15 + bootLen / 2, sill + 4.4, 0, paint);
+    // Cabin: glass band under a painted roof, plus pillars so it is not a fishbowl.
+    box(cabinLen, 14.2, roofH, cabinX, sill + 3.6 + roofH / 2, 0, glass);
+    box(cabinLen - (sports ? 3 : 1.5), 14.4, 1.4, cabinX - (sports ? 1 : 0), sill + 3.9 + roofH, 0, paint);
+    box(1.6, 14.4, roofH, cabinX + cabinLen / 2, sill + 3.6 + roofH / 2, 0, paint);
+    box(1.6, 14.4, roofH, cabinX - cabinLen / 2, sill + 3.6 + roofH / 2, 0, paint);
+    // Door shut lines and a shoulder crease down each flank.
+    box(0.8, 15.4, 3.6, cabinX + cabinLen / 2 - 1, sill + 1.6, 0, trim);
+    box(0.8, 15.4, 3.6, cabinX - cabinLen / 2 + 1, sill + 1.6, 0, trim);
+    box(26, 15.6, 0.8, -1, sill + 3.2, 0, trim);
+    // Bumpers, grille, lamps and a plate at each end.
+    box(1.8, 15.2, 3, 15.4, sill - 0.4, 0, sedan ? chrome : trim);
+    box(1.8, 15.2, 3, -15.4, sill - 0.4, 0, sedan ? chrome : trim);
+    box(1.4, 8, 2.4, 15.1, sill + 2.4, 0, trim);
+    box(5, 2.6, 0.9, 15.6, sill - 0.4, 0, chrome);
+    box(5, 2.6, 0.9, -15.6, sill - 0.4, 0, chrome);
+    const lamp = this.material("#f6ecd0", 0.85);
+    const tail = this.material("#d03a22", 0.8);
+    const lampD = sedan ? 3.2 : 4.2;
+    for (const z of [5.2, -5.2]) {
+      box(1.2, lampD, sedan ? 2.6 : 2, 15.2, sill + 2.4, z, lamp);
+      box(1.2, lampD + 0.6, 2.4, -15.2, sill + 2.4, z, tail);
     }
-    const lightF = MeshBuilder.CreateBox(`${name}-hf`, { width: 1.4, depth: 12, height: 2 }, this.scene);
-    lightF.material = this.material("#f2e6c0", 0.75);
-    lightF.position = new Vector3(15, 5.4, 0);
-    lightF.parent = root;
-    const lightR = MeshBuilder.CreateBox(`${name}-hr`, { width: 1.4, depth: 12, height: 2 }, this.scene);
-    lightR.material = this.material("#c43020", 0.75);
-    lightR.position = new Vector3(-15, 5.4, 0);
-    lightR.parent = root;
-    const wheelMat = this.surface("rubber", "#1a1614");
+    // Mirrors on stalks, because a car with none looks unfinished up close.
+    for (const z of [7.6, -7.6]) box(2.2, 1.8, 1.6, cabinX + cabinLen / 2 - 1, sill + 4.6, z, trim);
+    if (muscle) box(6, 8, 1.2, 8, sill + 5.4, 0, trim);
+    if (sports) box(3.4, 12, 1, -14, sill + 7.2, 0, trim);
+    if (sedan) box(1, 15, 1.2, -15.2, sill + 6.2, 0, chrome);
+    if (isPolice) {
+      const bar = box(6, 11, 2, cabinX, sill + 5.4 + roofH, 0, this.material("#101418"));
+      bar.parent = root;
+      box(2.4, 4, 1.8, cabinX, sill + 5.6 + roofH, 3.4, this.material("#4a90d8", 0.95));
+      box(2.4, 4, 1.8, cabinX, sill + 5.6 + roofH, -3.4, this.material("#d84040", 0.95));
+    }
+    const tyre = this.surface("rubber", "#15120f");
+    const rim = this.surface("metal", sports ? "#c8ccd2" : "#8e9298", 0.1);
     const wheels: Mesh[] = [];
     for (const [wx, wz] of [
-      [10, 7.2],
-      [10, -7.2],
-      [-10, 7.2],
-      [-10, -7.2],
+      [10, 7.4],
+      [10, -7.4],
+      [-10, 7.4],
+      [-10, -7.4],
     ] as const) {
-      const wheel = MeshBuilder.CreateCylinder(`${name}-w${wheels.length}`, { height: 3.2, diameter: 5.2, tessellation: 8 }, this.scene);
+      const wheel = MeshBuilder.CreateCylinder(`${name}-w${wheels.length}`, { height: 3.4, diameter: sports ? 6 : 6.4, tessellation: 10 }, this.scene);
       wheel.rotation.z = Math.PI / 2;
-      wheel.position.set(wx, 2.6, wz);
-      wheel.material = wheelMat;
+      wheel.position.set(wx, sports ? 2.9 : 3.1, wz);
+      wheel.material = tyre;
       wheel.parent = root;
+      const hub = MeshBuilder.CreateCylinder(`${name}-r${wheels.length}`, { height: 0.6, diameter: sports ? 3.6 : 3.8, tessellation: 10 }, this.scene);
+      hub.material = rim;
+      hub.position.z = wz > 0 ? 1.8 : -1.8;
+      hub.rotation.x = Math.PI / 2;
+      hub.parent = wheel;
       wheels.push(wheel);
     }
     const shadow = MeshBuilder.CreateCylinder(`${name}-sh`, { diameter: 28, height: 0.35, tessellation: 10 }, this.scene);
+    shadow.material = this.material("#0c0a08");
+    shadow.position.y = 0.18;
+    shadow.parent = root;
+    root.metadata = { wheels };
+    return root;
+  }
+
+  /** The Needle is a bike, not a saloon with the roof painted on. */
+  private makeBikeMesh(
+    name: string,
+    hex: string,
+    root: Mesh,
+    box: (w: number, d: number, h: number, x: number, y: number, z: number, mat: StandardMaterial) => Mesh,
+  ): Mesh {
+    const paint = this.surface("carPaint", hex);
+    const trim = this.surface("metal", "#22262c", 0.06);
+    const chrome = this.surface("metal", "#c0c4cc", 0.14);
+    box(16, 4.2, 3.4, 0, 7.4, 0, paint);
+    box(6, 4.6, 2.2, -3, 10.2, 0, this.surface("leather", "#191512"));
+    box(5, 3.4, 4, 6.4, 9.4, 0, paint);
+    box(1.6, 9, 1.2, 5.6, 11.4, 0, chrome);
+    box(2, 3, 2, 8.4, 9.6, 0, this.material("#f6ecd0", 0.85));
+    box(1.6, 3, 1.6, -8.4, 9, 0, this.material("#d03a22", 0.8));
+    box(8, 3.6, 3.6, 1, 5.6, 0, trim);
+    const tyre = this.surface("rubber", "#15120f");
+    const wheels: Mesh[] = [];
+    for (const wx of [8, -8]) {
+      const wheel = MeshBuilder.CreateCylinder(`${name}-w${wheels.length}`, { height: 2.4, diameter: 9.4, tessellation: 12 }, this.scene);
+      wheel.rotation.z = Math.PI / 2;
+      wheel.position.set(wx, 4.7, 0);
+      wheel.material = tyre;
+      wheel.parent = root;
+      const hub = MeshBuilder.CreateCylinder(`${name}-r${wheels.length}`, { height: 2.6, diameter: 4.6, tessellation: 10 }, this.scene);
+      hub.material = chrome;
+      hub.rotation.x = Math.PI / 2;
+      hub.parent = wheel;
+      wheels.push(wheel);
+    }
+    const shadow = MeshBuilder.CreateCylinder(`${name}-sh`, { diameter: 16, height: 0.35, tessellation: 10 }, this.scene);
     shadow.material = this.material("#0c0a08");
     shadow.position.y = 0.18;
     shadow.parent = root;
@@ -822,11 +967,14 @@ export class ViceblockRuntime3D {
       ["needle", 30 * TILE, 38 * TILE, 0.8, "#1f1a18"],
       ["sparrow", 84 * TILE, 40 * TILE, 4.7, "#8a8f6a"],
       ["ironback", 24 * TILE, 12 * TILE, 0, "#4a3a5a"],
+      ["sahin", 34 * TILE, 65.4 * TILE, 0, "#d8d2c4"],
+      ["sahin", 58 * TILE, 45.4 * TILE, Math.PI, "#3a5a8a"],
+      ["sahin", 20 * TILE, 30 * TILE, Math.PI / 2, "#8a2f28"],
     ];
     for (const [defId, x, z, h, color, id] of spots) {
       const rt = createVehicleRuntime(defId, x, z, h, color, id === "sparrow-job");
       if (id) rt.id = id;
-      this.cars.push({ rt, mesh: this.makeCarMesh(rt.id, color, false), smoke: 0, bump: 0 });
+      this.cars.push({ rt, mesh: this.makeCarMesh(rt.id, color, false, defId), smoke: 0, bump: 0 });
     }
     // Traffic
     const roads: Array<[number, number, number]> = [
@@ -842,10 +990,15 @@ export class ViceblockRuntime3D {
       [9.4 * TILE, 58 * TILE, Math.PI / 2],
       [23.4 * TILE, 48 * TILE, -Math.PI / 2],
     ];
+    // Mixed traffic, weighted to the cheap saloon everyone's uncle drives.
+    const trafficKinds = ["sahin", "sparrow", "sahin", "ironback", "sahin", "sparrow", "sahin", "mirage"];
+    const trafficColors = ["#d8d2c4", "#7a5a40", "#3a5a8a", "#4a3a32", "#8a2f28", "#8a8f6a", "#c8c2b0", "#2f6f78"];
     roads.forEach(([x, z, h], i) => {
-      const rt = createVehicleRuntime(i % 2 ? "ironback" : "sparrow", x, z, h, i % 2 ? "#4a3a32" : "#7a5a40");
+      const defId = trafficKinds[i % trafficKinds.length];
+      const color = trafficColors[i % trafficColors.length];
+      const rt = createVehicleRuntime(defId, x, z, h, color);
       rt.id = `traffic-${i}`;
-      this.cars.push({ rt, mesh: this.makeCarMesh(rt.id, i % 2 ? "#4a3a32" : "#7a5a40", false), smoke: 0, bump: 0 });
+      this.cars.push({ rt, mesh: this.makeCarMesh(rt.id, color, false, defId), smoke: 0, bump: 0 });
     });
 
     const named: Array<[string, string, number, number, string, string[]]> = [
@@ -1107,6 +1260,22 @@ export class ViceblockRuntime3D {
 
   // ---------------------------------------------------------------- update
 
+  /**
+   * Consumes real elapsed time in fixed steps so the world keeps its own pace
+   * whatever the renderer manages. The leftover is carried to the next frame.
+   */
+  private stepSim(frame: number): void {
+    this.simDebt = Math.min(this.simDebt + frame, SIM.stepSeconds * SIM.maxStepsPerFrame);
+    let steps = 0;
+    while (this.simDebt >= SIM.stepSeconds && steps < SIM.maxStepsPerFrame) {
+      this.simDebt -= SIM.stepSeconds;
+      steps++;
+      this.update(SIM.stepSeconds);
+    }
+    // A frame shorter than one step still needs the camera to track the world.
+    if (steps === 0) this.updateCamera(frame);
+  }
+
   private update(rawDt: number): void {
     // Hit stop runs on real time; everything else crawls while it lasts.
     let dt = rawDt;
@@ -1123,6 +1292,7 @@ export class ViceblockRuntime3D {
     }
     if (this.storm) this.weather = "rain";
     this.updateDayNight();
+    this.updatePerf(dt);
 
     if (this.newsT > 0) this.newsT -= dt;
     else this.news = "";
@@ -1570,6 +1740,61 @@ export class ViceblockRuntime3D {
     this.playerMesh.setEnabled(!this.player.vehicleId && camD > 26);
   }
 
+  /**
+   * Moves a car and lets it slide along whatever it clips. The old code threw
+   * away the whole move the moment either axis touched geometry, so brushing a
+   * kerb stopped the car dead and kept damaging it while you held the throttle
+   * — which read as "the car will not drive". Only a square-on hit stops you.
+   */
+  private advanceCar(v: VehicleRuntime, dt: number): { hit: boolean; headOn: boolean; speed: number } {
+    const speed = Math.hypot(v.vx, v.vy);
+    const nx = v.x + v.vx * dt;
+    const nz = v.y + v.vy * dt;
+    const r = CAR_RADIUS;
+    // A car shunted into a wall by a crash used to sit there grinding itself to
+    // death with the throttle pinned. If it is already overlapping, walk it out.
+    if (blocked(this.world, v.x, v.y, r)) {
+      this.unstickCar(v);
+      return { hit: false, headOn: false, speed };
+    }
+    if (!blocked(this.world, nx, nz, r)) {
+      v.x = nx;
+      v.y = nz;
+      return { hit: false, headOn: false, speed };
+    }
+    if (!blocked(this.world, nx, v.y, r)) {
+      v.x = nx;
+      v.vy *= -0.12;
+      return { hit: true, headOn: false, speed };
+    }
+    if (!blocked(this.world, v.x, nz, r)) {
+      v.y = nz;
+      v.vx *= -0.12;
+      return { hit: true, headOn: false, speed };
+    }
+    v.vx *= -0.2;
+    v.vy *= -0.2;
+    return { hit: true, headOn: true, speed };
+  }
+
+  /** Steps a trapped car toward the nearest clear ground and stops it dead. */
+  private unstickCar(v: VehicleRuntime): void {
+    v.vx = 0;
+    v.vy = 0;
+    for (let step = 14; step <= 84; step += 14) {
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2;
+        const x = v.x + Math.cos(a) * step;
+        const z = v.y + Math.sin(a) * step;
+        if (!blocked(this.world, x, z, CAR_RADIUS)) {
+          v.x = x;
+          v.y = z;
+          return;
+        }
+      }
+    }
+  }
+
   private updateCars(dt: number): void {
     const wet = this.weather === "rain" ? 0.86 : 1;
     for (const car of this.cars) {
@@ -1620,29 +1845,19 @@ export class ViceblockRuntime3D {
             this.flash("GPS TRACKER  ·  this car is snitching  ·  Maya can wipe it");
           }
         }
-        const s = Math.hypot(v.vx, v.vy);
-        const nx = v.x + v.vx * dt;
-        const nz = v.y + v.vy * dt;
-        if (blocked(this.world, nx, nz, 12)) {
-          // Cooldown gate: without it a car pinned against a wall takes damage
-          // every frame and burns out in about a second.
-          if (car.bump <= 0) {
-            const crash = s > VEHICLE_CONFIG.crashSpeedThreshold;
-            car.bump = VEHICLE_CONFIG.bumpCooldownSeconds;
-            v = applyVehicleDamage(v, collisionDamage(s), crash);
-            if (crash) {
-              this.impact("crash");
-              this.driftTime = 0;
-            } else if (this.settings.shake) {
-              this.shake = Math.max(this.shake, 2);
-            }
-            if (v.health <= 0) this.flash("ENGINE  ·  she's gonna go");
+        const move = this.advanceCar(v, dt);
+        // A scrape along a wall costs paint; only a square-on hit is a crash.
+        if (move.headOn && car.bump <= 0) {
+          const crash = move.speed > VEHICLE_CONFIG.crashSpeedThreshold;
+          car.bump = VEHICLE_CONFIG.bumpCooldownSeconds;
+          v = applyVehicleDamage(v, collisionDamage(move.speed), crash);
+          if (crash) {
+            this.impact("crash");
+            this.driftTime = 0;
+          } else if (this.settings.shake) {
+            this.shake = Math.max(this.shake, 2);
           }
-          v.vx *= -0.2;
-          v.vy *= -0.2;
-        } else {
-          v.x = nx;
-          v.y = nz;
+          if (v.health <= 0) this.flash("ENGINE  ·  she's gonna go");
         }
         this.player.x = v.x;
         this.player.z = v.y;
@@ -1669,21 +1884,15 @@ export class ViceblockRuntime3D {
         v.heading = drive.heading;
         v.vx = drive.vx;
         v.vy = drive.vy;
-        const nx = v.x + v.vx * dt;
-        const nz = v.y + v.vy * dt;
-        if (blocked(this.world, nx, nz, 12)) {
+        const move = this.advanceCar(v, dt);
+        if (move.headOn) {
           // Cruisers clout walls in the chase; they take it like the player does.
           if (car.bump <= 0) {
             car.bump = VEHICLE_CONFIG.bumpCooldownSeconds;
-            v = applyVehicleDamage(v, collisionDamage(Math.hypot(v.vx, v.vy)), false);
+            v = applyVehicleDamage(v, collisionDamage(move.speed), false);
           }
-          v.vx *= -0.25;
-          v.vy *= -0.25;
           // Pick a side to peel off toward instead of grinding the wall.
           v.heading = normalizeAngleTo(v.heading + Math.PI / 3);
-        } else {
-          v.x = nx;
-          v.y = nz;
         }
       } else if (v.id.startsWith("traffic-") && !v.stolen) {
         v.heading = this.trafficHeading(v);
@@ -1693,7 +1902,7 @@ export class ViceblockRuntime3D {
         v.vy = Math.sin(v.heading) * spd;
         const nx = v.x + v.vx * dt;
         const nz = v.y + v.vy * dt;
-        const moved = !blocked(this.world, nx, nz, 12);
+        const moved = !blocked(this.world, nx, nz, CAR_RADIUS);
         if (moved) {
           v.x = nx;
           v.y = nz;
@@ -1733,7 +1942,7 @@ export class ViceblockRuntime3D {
     const onRoad = (h: number, dist: number): boolean => {
       const px = v.x + Math.cos(h) * dist;
       const pz = v.y + Math.sin(h) * dist;
-      if (blocked(this.world, px, pz, 12)) return false;
+      if (blocked(this.world, px, pz, CAR_RADIUS)) return false;
       return cellAt(this.world, px, pz) === Cell.Road;
     };
     const straight = normalizeAngleTo(v.heading);
@@ -2090,7 +2299,7 @@ export class ViceblockRuntime3D {
       const rt = createVehicleRuntime("ironback", x, z, Math.atan2(this.player.z - z, this.player.x - x), "#22303e");
       rt.id = `cop-car-${this.copCarSeq++}`;
       rt.registered = true;
-      this.cars.push({ rt, mesh: this.makeCarMesh(rt.id, "#22303e", true), smoke: 0, bump: 0 });
+      this.cars.push({ rt, mesh: this.makeCarMesh(rt.id, "#22303e", true, "ironback"), smoke: 0, bump: 0 });
       return;
     }
   }
@@ -2678,14 +2887,14 @@ export class ViceblockRuntime3D {
         rt.id = `event-truck-${Math.random().toString(36).slice(2, 6)}`;
         rt.health = 420;
         this.eventCarIds.add(rt.id);
-        this.cars.push({ rt, mesh: this.makeCarMesh(rt.id, "#22303e", false), smoke: 0, bump: 0 });
+        this.cars.push({ rt, mesh: this.makeCarMesh(rt.id, "#22303e", false, "ironback"), smoke: 0, bump: 0 });
         break;
       }
       case "rare-car": {
         const rt = createVehicleRuntime("mirage", 68 * TILE, 11.5 * TILE, 0, "#c8a028");
         rt.id = `event-rare-${Math.random().toString(36).slice(2, 6)}`;
         this.eventCarIds.add(rt.id);
-        this.cars.push({ rt, mesh: this.makeCarMesh(rt.id, "#c8a028", false), smoke: 0, bump: 0 });
+        this.cars.push({ rt, mesh: this.makeCarMesh(rt.id, "#c8a028", false, "mirage"), smoke: 0, bump: 0 });
         this.flash("RUMOR  ·  gold Mirage left near Ansem's mural  ·  Maya pays cash");
         break;
       }
@@ -2704,7 +2913,7 @@ export class ViceblockRuntime3D {
       case "street-race": {
         const rt = createVehicleRuntime("needle", 50 * TILE, 63 * TILE, 0, "#b03a28");
         rt.id = `event-race-${Math.random().toString(36).slice(2, 6)}`;
-        this.cars.push({ rt, mesh: this.makeCarMesh(rt.id, "#b03a28", false), smoke: 0, bump: 0 });
+        this.cars.push({ rt, mesh: this.makeCarMesh(rt.id, "#b03a28", false, "needle"), smoke: 0, bump: 0 });
         this.flash("RACE NIGHT  ·  a Needle is waiting at the Midnight Line");
         break;
       }
@@ -2811,7 +3020,7 @@ export class ViceblockRuntime3D {
       const rt = createVehicleRuntime("mirage", 15 * TILE, 65.5 * TILE, 0, "#d8b430", true);
       rt.id = "chainline-mirage";
       rt.registered = true;
-      this.cars.push({ rt, mesh: this.makeCarMesh(rt.id, "#d8b430", false), smoke: 0, bump: 0 });
+      this.cars.push({ rt, mesh: this.makeCarMesh(rt.id, "#d8b430", false, "mirage"), smoke: 0, bump: 0 });
       this.flash("CHAINLINE MIRAGE  ·  your collector ride is parked by the walk-up");
       this.pushNews("A verified collector just rolled into Southside.");
     }
@@ -2984,7 +3193,7 @@ export class ViceblockRuntime3D {
       (c) => c.rt.exploded && Math.hypot(c.rt.x - this.player.x, c.rt.y - this.player.z) > 140 && !this.eventCarIds.has(c.rt.id),
     );
     if (!wreck) return;
-    const mesh = this.makeCarMesh(`tow-${Math.random().toString(36).slice(2, 6)}`, "#c8a028", false);
+    const mesh = this.makeCarMesh(`tow-${Math.random().toString(36).slice(2, 6)}`, "#c8a028", false, "ironback");
     const ang = Math.random() * Math.PI * 2;
     mesh.position = new Vector3(wreck.rt.x + Math.cos(ang) * 500, 5, wreck.rt.y + Math.sin(ang) * 500);
     this.tow = { mesh, targetId: wreck.rt.id };
@@ -3085,17 +3294,16 @@ export class ViceblockRuntime3D {
   }
 
   private debugSpawnToggle = false;
-  debugSpawnCar(): void {
+  debugSpawnCar(defId = this.debugSpawnToggle ? "sparrow" : "mirage"): void {
     // Alternate an open beater and a locked Mirage so both paths are testable.
     this.debugSpawnToggle = !this.debugSpawnToggle;
-    const defId = this.debugSpawnToggle ? "sparrow" : "mirage";
-    const color = this.debugSpawnToggle ? "#a05a2c" : "#2f6f78";
+    const color = defId === "sahin" ? "#d8d2c4" : this.debugSpawnToggle ? "#a05a2c" : "#2f6f78";
     // On the player's own tile: anywhere else risks dropping the car inside a
     // wall, where it is pinned and cannot pull away.
     const rt = createVehicleRuntime(defId, this.player.x, this.player.z, this.player.heading, color);
     rt.id = `debug-${Math.random().toString(36).slice(2, 6)}`;
     rt.stolen = true;
-    this.cars.push({ rt, mesh: this.makeCarMesh(rt.id, color, false), smoke: 0, bump: 0 });
+    this.cars.push({ rt, mesh: this.makeCarMesh(rt.id, color, false, defId), smoke: 0, bump: 0 });
     // This menu exists to get a stranded player moving, so hand them the keys.
     this.unlocked.add(rt.id);
     this.player.vehicleId = rt.id;

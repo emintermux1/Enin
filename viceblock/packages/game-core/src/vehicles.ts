@@ -16,6 +16,21 @@ export const VEHICLES: VehicleStats[] = [
     security: "none",
   },
   {
+    // A nod to the Tofas Sahin: a boxy rear-drive saloon that everyone's uncle
+    // drove. Slow off the line, no brakes to speak of, and built like a safe.
+    id: "sahin",
+    name: "Tofa Sahin 1.6",
+    category: "sedan",
+    topSpeed: 172,
+    acceleration: 96,
+    handling: 0.78,
+    braking: 150,
+    durability: 145,
+    traction: 0.72,
+    seats: 4,
+    security: "lock",
+  },
+  {
     id: "ironback",
     name: "Ironback 68",
     category: "muscle",
