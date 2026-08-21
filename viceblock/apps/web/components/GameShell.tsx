@@ -63,7 +63,7 @@ const EMPTY: HudSnapshot = {
   airSpeed: 0,
 };
 
-function slingerLabel(web: HudSnapshot["web"]): string {
+function slingerLabel(web: HudSnapshot["web"], altitude: number): string {
   switch (web) {
     case "swing":
       return "ON THE LINE";
@@ -76,7 +76,10 @@ function slingerLabel(web: HudSnapshot["web"]): string {
     case "aimed":
       return "ANCHOR";
     case "ready":
-      return "NO ANCHOR";
+      // On top of a tower there is genuinely nothing higher to catch, and the
+      // way off is over the edge. Saying so beats leaving the player pressing
+      // a button that will never do anything.
+      return altitude > 60 ? "NOTHING ABOVE · DIVE" : "NO ANCHOR";
     default: {
       const never: never = web;
       return never;
@@ -482,7 +485,7 @@ export function GameShell() {
               </div>
               <div className={`slinger ${hud.web}`}>
                 <b>
-                  {slingerLabel(hud.web)}
+                  {slingerLabel(hud.web, hud.altitude)}
                 </b>
                 <span>
                   {hud.altitude > 2 ? `${hud.altitude}m up · ` : ""}

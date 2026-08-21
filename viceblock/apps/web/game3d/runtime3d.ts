@@ -2625,7 +2625,9 @@ export class ViceblockRuntime3D {
     if (this.input.consumeZip()) this.zipToAnchor();
     const wantWeb = this.input.webbing();
     if (!wantWeb) this.webWarned = false;
-    if (wantWeb && !this.web && this.webCooldown <= 0) this.fireWeb();
+    // Not off a wall: a line fired the instant you land on one would peel you
+    // straight back off it, over and over. Space is how you leave a wall.
+    if (wantWeb && !this.web && !this.cling && this.webCooldown <= 0) this.fireWeb();
     else if (!wantWeb && this.web) this.releaseWeb();
 
     const jump = this.input.keys.has("Space");
@@ -2719,7 +2721,15 @@ export class ViceblockRuntime3D {
     if (Math.hypot(next.vx, next.vz) > 30) this.player.heading = Math.atan2(next.vz, next.vx);
     // Hit a wall with air under you: stick to it. That is the difference
     // between a building being an obstacle and a building being a route.
-    if (hitDir !== null && hitFace && this.climbable(hitFace[0], hitFace[1], y) && !this.web && this.player.y > 14) {
+    if (hitDir !== null && hitFace && this.climbable(hitFace[0], hitFace[1], y) && this.player.y > 14) {
+      // A line still attached leaves you pinned against the brickwork with
+      // nowhere to swing, so the wall takes over from the rope.
+      if (this.web) {
+        this.web = null;
+        this.swingT = 0;
+        this.webCooldown = 0.12;
+        this.webSplat?.setEnabled(false);
+      }
       this.cling = { dir: hitDir, t: 0 };
       this.flight = { vx: 0, vy: 0, vz: 0 };
       this.audio.foot(false, "concrete");
