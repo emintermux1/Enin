@@ -1265,7 +1265,11 @@ export class ViceblockRuntime3D {
     }
   }
 
-  /** Floor, four walls and a lid: the shell every interior room needs. */
+  /**
+   * Floor, four walls and a lid: the shell every interior room needs. The
+   * shell carries its own glow because the sun does not reach a room parked
+   * above the city — without it a night-time interior is a black void.
+   */
   private buildRoomShell(
     prefix: string,
     cx: number,
@@ -1275,11 +1279,12 @@ export class ViceblockRuntime3D {
     wallHex: string,
     ceilingHex: string,
     height = 90,
+    lit = 0.3,
   ): void {
     const floor = MeshBuilder.CreateBox(`${prefix}floor`, { width: half * 2, depth: half * 2, height: 2 }, this.scene);
-    floor.material = this.surface("concrete", floorHex);
+    floor.material = this.surface("concrete", floorHex, lit * 0.8);
     floor.position = new Vector3(cx, INTERIOR_Y - 1, cz);
-    const wallMat = this.surface("plaster", wallHex);
+    const wallMat = this.surface("plaster", wallHex, lit);
     const walls: Array<[number, number, number, number]> = [
       [cx, cz - half, half * 2, 6],
       [cx, cz + half, half * 2, 6],
@@ -1293,7 +1298,7 @@ export class ViceblockRuntime3D {
     });
     // Without a lid the room reads as a doll's house floating over the city.
     const ceiling = MeshBuilder.CreateBox(`${prefix}ceiling`, { width: half * 2, depth: half * 2, height: 3 }, this.scene);
-    ceiling.material = this.surface("plaster", ceilingHex);
+    ceiling.material = this.surface("plaster", ceilingHex, lit * 0.6);
     ceiling.position = new Vector3(cx, INTERIOR_Y + height, cz);
   }
 
@@ -1361,7 +1366,7 @@ export class ViceblockRuntime3D {
     const cx = 43 * TILE;
     const cz = 45 * TILE;
     const half = 96;
-    this.buildRoomShell("mart-", cx, cz, half, "#c8bca4", "#7a4a38", "#4a2e26");
+    this.buildRoomShell("mart-", cx, cz, half, "#c8bca4", "#7a4a38", "#4a2e26", 90, 0.34);
     const counter = MeshBuilder.CreateBox("mart-counter", { width: 90, depth: 18, height: 14 }, this.scene);
     counter.material = this.surface("metal", "#4a5a68");
     counter.position = new Vector3(cx, INTERIOR_Y + 7, cz - half + 34);
@@ -1392,7 +1397,7 @@ export class ViceblockRuntime3D {
     const cz = 59 * TILE;
     const half = 168;
     const P = "club-";
-    this.buildRoomShell(P, cx, cz, half, "#1a1220", "#3a2242", "#160c1e", 108);
+    this.buildRoomShell(P, cx, cz, half, "#241730", "#4a2a56", "#1e1228", 108, 0.5);
     // Neon coving on the side walls: a dark club still needs walls you can see,
     // otherwise the room reads as a black void with furniture floating in it.
     for (const side of [-1, 1]) {
@@ -1444,7 +1449,7 @@ export class ViceblockRuntime3D {
       pole.material = poleMat;
       pole.position = new Vector3(px, INTERIOR_Y + 61, stageZ);
       const dancer = this.makeHumanoid(`${P}dancer-${i}`, i === 0 ? "#ff3f8e" : "#39d8d0", "#e6c39a", "#1c1420");
-      dancer.position = new Vector3(px + 11, INTERIOR_Y + 14, stageZ);
+      dancer.position = new Vector3(px + 15, INTERIOR_Y + 14, stageZ);
       dancer.rotation.y = Math.PI;
       this.addClubDancer(dancer, i, i * 1.7);
     }
