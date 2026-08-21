@@ -1,0 +1,203 @@
+import { describe, expect, it } from "vitest";
+import { PLAYER_CONFIG } from "../src/config";
+import {
+  SPIDER_CONFIG,
+  anchorUsable,
+  initialLength,
+  lineCeiling,
+  reelToCeiling,
+  releaseSwing,
+  stepAirborne,
+  stepSwing,
+  stepZip,
+  type SwingState,
+  type WebLine,
+} from "../src/spider";
+
+const still = (x = 0, y = 100, z = 0): SwingState => ({ x, y, z, vx: 0, vy: 0, vz: 0 });
+const idle = { lean: 0, steer: 0, reel: false };
+
+function swing(steps: number, input = idle, state = still(120, 100, 0), line: WebLine = { x: 0, y: 260, z: 0, length: 200 }) {
+  let s = state;
+  let l = line;
+  for (let i = 0; i < steps; i++) {
+    const out = stepSwing(s, l, input, 0, 1 / 60);
+    s = out.state;
+    l = out.line;
+  }
+  return { s, l };
+}
+
+describe("standing jump", () => {
+  /** Where a jump tops out, simulated under the same gravity the game uses. */
+  function apex(launch: number): number {
+    let s: SwingState = { x: 0, y: 0, z: 0, vx: 0, vy: launch, vz: 0 };
+    let high = 0;
+    for (let i = 0; i < 600 && (s.vy > 0 || s.y > 0); i++) {
+      s = stepAirborne(s, idle, 0, 1 / 60);
+      high = Math.max(high, s.y);
+    }
+    return high;
+  }
+
+  it("clears the ledge the player already walks up for free", () => {
+    // Otherwise the jump key is decorative: everything it can reach was
+    // reachable by walking into it.
+    expect(apex(PLAYER_CONFIG.jumpVelocity)).toBeGreaterThan(PLAYER_CONFIG.stepUpHeight * 1.5);
+  });
+
+  it("stays well under a wall push-off, which is meant to be the big one", () => {
+    expect(apex(PLAYER_CONFIG.jumpVelocity)).toBeLessThan(apex(SPIDER_CONFIG.wallJump));
+  });
+});
+
+describe("web swinging", () => {
+  it("turns a fall into an arc instead of dropping straight down", () => {
+    const { s } = swing(60);
+    expect(Math.abs(s.vx)).toBeGreaterThan(40);
+  });
+
+  it("never lets the line stretch past its length", () => {
+    const line: WebLine = { x: 0, y: 260, z: 0, length: 200 };
+    let s = still(120, 100, 0);
+    let l = line;
+    for (let i = 0; i < 600; i++) {
+      const out = stepSwing(s, l, { lean: 1, steer: 0.4, reel: false }, 0, 1 / 60);
+      s = out.state;
+      l = out.line;
+      expect(Math.hypot(s.x - l.x, s.y - l.y, s.z - l.z)).toBeLessThanOrEqual(l.length + 0.01);
+    }
+  });
+
+  it("swings back up the far side rather than bleeding out at the bottom", () => {
+    const { s } = swing(45, { lean: 1, steer: 0, reel: false });
+    const climbing = swing(120, { lean: 1, steer: 0, reel: false });
+    expect(Math.hypot(s.vx, s.vz)).toBeGreaterThan(0);
+    expect(climbing.s.y).toBeGreaterThan(60);
+  });
+
+  it("reels the line in but never past the minimum", () => {
+    const { l } = swing(600, { lean: 0, steer: 0, reel: true });
+    expect(l.length).toBe(SPIDER_CONFIG.minLength);
+  });
+
+  it("holds a speed ceiling so the city stays readable", () => {
+    const { s } = swing(1200, { lean: 1, steer: 0, reel: true });
+    expect(Math.hypot(s.vx, s.vy, s.vz)).toBeLessThanOrEqual(SPIDER_CONFIG.maxSpeed + 0.01);
+  });
+
+  it("converts an upward arc into height when you let go, and does nothing when you are already falling", () => {
+    expect(releaseSwing({ ...still(), vy: 100 }).vy).toBe(100 + SPIDER_CONFIG.releaseBoost);
+    expect(releaseSwing({ ...still(), vy: -100 }).vy).toBe(-100);
+  });
+
+  it("falls when nothing is attached, and steers where it is pushed", () => {
+    let s = still(0, 400, 0);
+    for (let i = 0; i < 60; i++) s = stepAirborne(s, { lean: 1, steer: 0, reel: false }, 0, 1 / 60);
+    expect(s.y).toBeLessThan(400);
+    expect(s.vx).toBeGreaterThan(0);
+  });
+
+  it("refuses anchors that are level with you or out of reach", () => {
+    expect(anchorUsable(0, 0, 0, 100, 10, 0)).toBe(false);
+    expect(anchorUsable(0, 0, 0, 100, 120, 0)).toBe(true);
+    expect(anchorUsable(0, 0, 0, SPIDER_CONFIG.maxRange + 200, 120, 0)).toBe(false);
+  });
+
+  it("refuses a line so shallow it would tow you down the road", () => {
+    // 400 out, 90 up: a rope, not a pendulum.
+    expect(anchorUsable(0, 0, 0, 400, 90, 0)).toBe(false);
+    expect(anchorUsable(0, 0, 0, 200, 260, 0)).toBe(true);
+  });
+
+  it("takes a long low shot across a block, because the auto-reel saves it", () => {
+    // A tower roof most of a street away. Refusing this is what left whole
+    // directions in the city with nothing to shoot at.
+    expect(anchorUsable(0, 0, 0, 400, 180, 0)).toBe(true);
+  });
+
+  it("refuses the wall at your elbow once a swing asks for room to arc", () => {
+    const wall = [0, 0, 0, 30, 90, 0] as const;
+    // A grapple is happy with it; a pendulum would drive you straight into it.
+    expect(anchorUsable(...wall)).toBe(true);
+    expect(anchorUsable(...wall, { minReach: SPIDER_CONFIG.minSwingReach })).toBe(false);
+    expect(anchorUsable(0, 0, 0, 200, 260, 0, { minReach: SPIDER_CONFIG.minSwingReach })).toBe(true);
+  });
+
+  it("still lets a zip catch something low that a swing would not", () => {
+    const ledge = [0, 0, 0, 40, 30, 0] as const;
+    expect(anchorUsable(...ledge)).toBe(false);
+    expect(anchorUsable(...ledge, { rise: 24 })).toBe(true);
+  });
+
+  it("caps the line at what the drop below the anchor can take", () => {
+    expect(lineCeiling(300, 0)).toBe(300 - SPIDER_CONFIG.groundClearance);
+    expect(lineCeiling(300, 280)).toBe(SPIDER_CONFIG.minLength);
+  });
+
+  it("hauls an over-long line in until the arc clears the street", () => {
+    let line: WebLine = { x: 0, y: 300, z: 0, length: 520 };
+    const ceiling = lineCeiling(300, 0);
+    for (let i = 0; i < 240; i++) line = reelToCeiling(line, ceiling, 1 / 60);
+    expect(line.length).toBe(ceiling);
+    // A line already short enough is left alone.
+    const short: WebLine = { x: 0, y: 300, z: 0, length: 100 };
+    expect(reelToCeiling(short, ceiling, 1 / 60)).toBe(short);
+  });
+
+  it("keeps a street-level swing off the pavement once the line is capped", () => {
+    const anchor = { x: 0, y: 340, z: 0 };
+    const ceiling = lineCeiling(anchor.y, 0);
+    let s: SwingState = { x: -180, y: 4, z: 0, vx: 190, vy: 200, vz: 0 };
+    let l: WebLine = { ...anchor, length: Math.hypot(180, 336) };
+    let lowest = Infinity;
+    for (let i = 0; i < 180; i++) {
+      l = reelToCeiling(l, ceiling, 1 / 60);
+      const out = stepSwing(s, l, { lean: 1, steer: 0, reel: false }, 0, 1 / 60);
+      s = out.state;
+      l = out.line;
+      if (i > 30) lowest = Math.min(lowest, s.y);
+    }
+    expect(lowest).toBeGreaterThan(0);
+  });
+
+  it("starts the line taut at the distance to the anchor, within limits", () => {
+    expect(initialLength(0, 0, 0, 0, 300, 0)).toBe(300);
+    expect(initialLength(0, 0, 0, 0, 10, 0)).toBe(SPIDER_CONFIG.minLength);
+    expect(initialLength(0, 0, 0, 0, 5000, 0)).toBe(SPIDER_CONFIG.maxLength);
+  });
+
+  it("winches straight at the anchor rather than arcing at it", () => {
+    const out = stepZip(still(0, 0, 0), { x: 0, y: 300, z: 0 }, 0.1);
+    expect(out.arrived).toBe(false);
+    expect(out.state.vy).toBeCloseTo(SPIDER_CONFIG.zipSpeed, 3);
+    expect(Math.abs(out.state.vx)).toBeLessThan(0.001);
+    // No gravity while the line is hauling: a zip has to land where it aimed.
+    expect(out.state.y).toBeCloseTo(SPIDER_CONFIG.zipSpeed * 0.1, 3);
+  });
+
+  it("arrives at the anchor instead of overshooting through it", () => {
+    let s = still(0, 0, 0);
+    const target = { x: 0, y: 300, z: 0 };
+    let arrived = false;
+    for (let i = 0; i < 200 && !arrived; i++) {
+      const out = stepZip(s, target, 1 / 60);
+      s = out.state;
+      arrived = out.arrived;
+    }
+    expect(arrived).toBe(true);
+    expect(s.y).toBeLessThanOrEqual(300);
+    expect(300 - s.y).toBeLessThanOrEqual(SPIDER_CONFIG.zipArrive + 1);
+  });
+
+  it("reaches a roof across the street, which a thrown zip fell short of", () => {
+    let s = still(0, 0, 0);
+    const target = { x: 220, y: 290, z: 0 };
+    for (let i = 0; i < 300; i++) {
+      const out = stepZip(s, target, 1 / 60);
+      s = out.state;
+      if (out.arrived) break;
+    }
+    expect(Math.hypot(target.x - s.x, target.y - s.y, target.z - s.z)).toBeLessThanOrEqual(SPIDER_CONFIG.zipArrive + 1);
+  });
+});
