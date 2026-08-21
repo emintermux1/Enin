@@ -164,6 +164,16 @@ const GUN_Y = 12;
 /** How far you can step up, and how far a ledge can be below your feet. */
 const LEDGE_STEP = 14;
 
+/** How far a clinging body leans head-first into the wall it is holding. */
+const CLING_LEAN = 0.55;
+
+/**
+ * Gap between the facade and the feet of a clinging body. The lean carries the
+ * head about nine units further in than the feet, so this has to leave room
+ * for that on top of the depth of the chest.
+ */
+const CLING_STANDOFF = 13;
+
 /** Where a web shot looks first: a fan across the front of the camera. */
 const ANCHOR_CONE = [0, 0.2, -0.2, 0.42, -0.42, 0.68, -0.68, 0.98, -0.98] as const;
 
@@ -2446,8 +2456,10 @@ export class ViceblockRuntime3D {
     const bob = mag > 0.05 && this.player.grounded ? Math.abs(Math.sin(this.clock * (axis.sprint ? 14 : 9))) * 1.1 : 0;
     // Stand off the brickwork, or the tilted body sinks into the facade it is
     // holding. The lean puts the head furthest in, so the gap has to cover
-    // sin(tilt) times half a body, not just the depth of the chest.
-    const hug = this.cling ? -11 : 0;
+    // sin(tilt) times half a body, not just the depth of the chest. Measured
+    // from the wall rather than from the player, because a swing stops
+    // anywhere from a body's width to half a street short of what it hit.
+    const hug = this.cling ? this.wallGap(this.cling.dir) - CLING_STANDOFF : 0;
     this.playerMesh.position.set(
       this.player.x + Math.cos(this.cling?.dir ?? 0) * hug,
       elev + this.player.y + bob,
@@ -2458,8 +2470,9 @@ export class ViceblockRuntime3D {
     shadow?.setEnabled(this.player.grounded && !this.cling);
     if (this.cling) {
       // Belly to the brickwork. Standing bolt upright while sliding up a wall
-      // read as levitating, not climbing.
-      this.playerMesh.rotationQuaternion = Quaternion.RotationYawPitchRoll(-this.player.heading, -0.85, 0);
+      // read as levitating, not climbing. The lean is a roll, not a pitch: the
+      // body faces +x, so a pitch tipped it onto its side instead of forward.
+      this.playerMesh.rotationQuaternion = Quaternion.RotationYawPitchRoll(-this.player.heading, 0, -CLING_LEAN);
     } else {
       this.playerMesh.rotationQuaternion = null;
       this.playerMesh.rotation.y = -this.player.heading;
@@ -2524,6 +2537,20 @@ export class ViceblockRuntime3D {
    * A shoulder clips the corner of a tower more often than the chest hits it
    * square on, so this asks the whole footprint, same as the collision did.
    */
+  /**
+   * How far the face of the held wall is from the player's centre. The body is
+   * drawn back from the wall itself rather than from wherever the swing came
+   * to rest, so a climb looks the same however it was arrived at.
+   */
+  private wallGap(dir: number): number {
+    const cos = Math.cos(dir);
+    const sin = Math.sin(dir);
+    for (let d = 0; d <= CLING_STANDOFF + PLAYER_CONFIG.radius * 2; d += 1.5) {
+      if (this.airSolid(this.player.x + cos * d, this.player.z + sin * d, this.player.y, 0.5)) return d;
+    }
+    return PLAYER_CONFIG.radius;
+  }
+
   private climbable(x: number, z: number, y: number, rad = PLAYER_CONFIG.radius): boolean {
     for (const [px, pz] of this.footprint(x, z, rad)) {
       const top = this.topAt(px, pz);
@@ -3053,6 +3080,25 @@ export class ViceblockRuntime3D {
     return want;
   }
 
+  /**
+   * Keeps the boom on the open side of a wall the player is holding. Swinging
+   * the yaw round to face the brickwork is a legitimate thing to want to do
+   * mid-air, but the moment a hand lands on that wall the same yaw buries the
+   * lens in the building and the player vanishes off their own screen. Rather
+   * than take the camera away, this stops it crossing the wall: the free
+   * hemisphere is still the player's to look around in.
+   */
+  private clearOfWall(yaw: number, wallDir: number): number {
+    // The camera sits opposite the yaw, so sin(yaw + wallDir) is how far it
+    // leans to the open side. Negative means it has gone through the wall.
+    const margin = 0.26;
+    const swing = normalizeAngle(yaw + wallDir);
+    const limit = Math.asin(margin);
+    if (Math.sin(swing) >= margin) return yaw;
+    const near = Math.abs(normalizeAngle(swing - limit)) <= Math.abs(normalizeAngle(swing - (Math.PI - limit))) ? limit : Math.PI - limit;
+    return normalizeAngle(near - wallDir);
+  }
+
   private cameraPlace(dist: number): { x: number; z: number; y: number } {
     const pitch = this.player.camPitch;
     const elev = this.interiorMode ? INTERIOR_Y : 0;
@@ -3194,9 +3240,10 @@ export class ViceblockRuntime3D {
     // On a wall the boom has to end up out over the street. Left alone it
     // pointed straight into the brickwork the player was holding, and the
     // whole screen filled with the inside of the building.
-    if (this.cling && !looking) {
+    if (this.cling) {
       const want = normalizeAngle(Math.PI / 2 - this.cling.dir);
-      this.player.camYaw += normalizeAngle(want - this.player.camYaw) * Math.min(1, dt * 2.6);
+      if (!looking) this.player.camYaw += normalizeAngle(want - this.player.camYaw) * Math.min(1, dt * 2.6);
+      this.player.camYaw = this.clearOfWall(this.player.camYaw, this.cling.dir);
     }
     const elev = this.interiorMode ? INTERIOR_Y : 0;
     // Pull the camera in until the line back from the player is clear. Lifting
