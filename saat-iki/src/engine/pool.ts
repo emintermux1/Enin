@@ -11,6 +11,7 @@ const REPEAT_STEMS = [
   "su akıyo",
   "kirli kal",
   "itaat",
+  "sansur",
 ];
 
 export function usedThem(history: Message[]): Set<string> {

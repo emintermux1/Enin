@@ -5,8 +5,8 @@ const ACK: Array<{ pattern: RegExp; lines: string[][] }> = [
   {
     pattern: /yata[gğ]|yataga|yatak/i,
     lines: [
-      ["yatağa çekiyom seni", "çarşafı boynuma doladım", "üstüme gel"],
-      ["yatağa geçtik", "yastığa yüzümü gömdüm", "sok artık"],
+      ["yatağa çekiyom seni", "yastığım sırılsıklam ya", "üstüme gel hayvan gibi"],
+      ["yatağa geçtik", "yüzümü yastığa gömdüm", "sok artık durma"],
       ["yatakta devam ya", "bacaklarım omuzunda", "oda burası duş değil"],
     ],
   },
@@ -14,58 +14,88 @@ const ACK: Array<{ pattern: RegExp; lines: string[][] }> = [
     pattern: /sonra|devam/i,
     lines: [
       ["şimdi devam", "çekmedim bak", "daha derine gel"],
-      ["bekletmem", "amım hala açık", "üstüne geç"],
+      ["bekletmem", "amım hala açık", "üstüne geç fışkırt"],
     ],
   },
   {
     pattern: /üstün|bin/,
     lines: [
-      ["üstüne oturdum", "dibine kadar aldım", "kalçamı tut"],
-      ["biniyom bak", "hepsi içimde", "tempo bende"],
+      ["üstüne oturdum", "sikine binmeyi bayılıyorum", "kalçamı tut"],
+      ["biniyom bak", "hepsi içimde", "tempo bende inmicem"],
     ],
   },
   {
     pattern: /yala|yiyim|amini/,
     lines: [
-      ["dilin amımda", "bacaklarım titriyo", "çekme"],
-      ["yüzün orda", "ıslandım durma", "daha bas"],
+      ["dilin amımda", "bacaklarım titriyo", "fışkırt beni durma"],
+      ["yüzün orda", "ıslandım çekme", "daha bas {name}"],
     ],
   },
   {
     pattern: /ağzına|agzina|yut|sakso/,
     lines: [
-      ["ağzıma aldım", "boğazıma kadar", "saçımı tut"],
-      ["yutuyom bak", "çıkarmıyom", "sesini duyayım"],
+      ["ağzıma aldım", "boğazıma kadar kullan", "saçımı tut"],
+      ["yutuyom bak", "çıkarmıyom", "orospu gibi alıyom ya"],
     ],
   },
   {
     pattern: /parmak/,
     lines: [
-      ["parmağın girdi", "kayıyo içeri", "bir tane daha"],
+      ["parmağın girdi", "kayıyo içeri offf", "bir tane daha kıvır"],
     ],
   },
   {
     pattern: /arkadan/,
     lines: [
-      ["arkamı çevirdim", "yüzüm yastıkta", "vur"],
+      ["arkamı çevirdim", "yüzüm yastıkta", "tokatla vur"],
     ],
   },
   {
     pattern: /boşal|bosal/,
     lines: [
-      ["içime bırak", "sıkıyom seni", "çıkarma"],
+      ["içime bırak", "sıkıyom seni", "çıkarma hepsini istiyom"],
     ],
   },
   {
     pattern: /duş|dus/,
     lines: [
-      ["duşa çekiyom", "su üstümüzde", "duvara yapış"],
+      ["duşa çekiyom", "su üstümüzde", "duvara yapış sik"],
     ],
   },
   {
     pattern: /araba|koltuk/,
     lines: [
-      ["koltuğa oturdum üstüne", "kemer sende", "salla beni"],
+      ["koltuğa oturdum üstüne", "etek kaydı", "salla beni"],
+    ],
+  },
+  {
+    pattern: /koridor|duvara/,
+    lines: [
+      ["duvara yapıştır beni", "kontrolümü kaybedeyim", "herkes duysun"],
+    ],
+  },
+  {
+    pattern: /fışkır|fiskir/,
+    lines: [
+      ["fışkırt beni offf", "yatağı ıslatayım", "çekme {name}"],
+    ],
+  },
+  {
+    pattern: /herkes|duysun/,
+    lines: [
+      ["sesimi kesme", "herkes duysun istiyom", "daha sert"],
+    ],
+  },
+  {
+    pattern: /yastık|yastik|sürtün/,
+    lines: [
+      ["yastığım yapış yapış", "sürtünüyom ya", "gel sen bitir"],
+    ],
+  },
+  {
+    pattern: /hayvan|orospu/,
+    lines: [
+      ["hayvan gibi sik", "beni kullan {name}", "utanmıcam"],
     ],
   },
 ];
@@ -86,13 +116,13 @@ export function echoReply(input: string, name: string, history: Message[], salt:
   const woven = dropRepeats(
     fillName(
       [
-        clip.length > 2 ? `öyle ${clip} diyosun` : "duydum ya",
-        "tam onu yapıyom bak",
-        "çekmiyorum {name}",
+        clip.length > 2 ? `öyle ${clip} de bana` : "duydum ya",
+        "tam onu istiyom bak",
+        "yap {name} çekme",
       ],
       name,
     ),
     history,
   );
-  return woven.length > 0 ? woven : ["duydum", "devam ediyom"];
+  return woven.length > 0 ? woven : ["duydum", "istiyom onu yap"];
 }

@@ -12,7 +12,7 @@ export function AgeGate({ onEnter }: AgeGateProps) {
       <p className="lock-date">Cuma gecesi · çarşaf hâlâ ılık</p>
       <h1>18+ değilse girme.</h1>
       <p className="lede">
-        Sen erkeksin. Karşında yetişkin bir hatun var. Yazarsın, o ıslanarak cevap verir.
+        Sen erkeksin. Karşında yetişkin bir hatun var. Tweet atar gibi yazar: ıslanır, yalvarır, emir verir.
       </p>
       <div className="gate-actions">
         <button type="button" className="btn-primary" onClick={onEnter}>

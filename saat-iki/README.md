@@ -1,6 +1,6 @@
 # Saat İki
 
-18+ Türkçe flört sohbeti. Sen erkeksin. Karşında yetişkin bir AI hatun var. Yazarsın, o senin cümline azgın cevap verir ve soru sorar.
+18+ Türkçe flört sohbeti. Sen erkeksin. Karşında yetişkin bir AI hatun var. Tweet atar gibi yazar: ıslanır, yalvarır, emir verir. Senin son cümline cevap verir.
 
 Görsel seks sahnesi, porno model veya seks sesi yok.
 

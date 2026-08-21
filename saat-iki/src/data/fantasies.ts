@@ -21,21 +21,21 @@ export const FANTASIES: Fantasy[] = [
     label: "Cam",
     prompt: "camın önünde arkadan",
     detect: /camın|camda|pencere|balkon/,
-    setting: ["camın önündeyiz ya", "perdeyi çekmedim"],
+    setting: ["perdeyi çekmedim ya", "karşı görsün umurumda değil"],
   },
   {
     id: "shower",
     label: "Duş",
     prompt: "duşta duvara yapıştır",
     detect: /duş|dus|küvet/,
-    setting: ["su akıyo sırılsıklamız", "duvar soğuk sırtım sıcak"],
+    setting: ["su üstümüzde sırılsıklamız", "duvar soğuk sırtım sıcak"],
   },
   {
     id: "morning",
     label: "Sabah",
     prompt: "sabah uyanır uyanmaz",
     detect: /sabah|uyan/,
-    setting: ["gözlerim daha açılmadı", "kahveden önce sen"],
+    setting: ["gözlerim daha açılmadı", "sikin sürtünsün uyanayım"],
   },
   {
     id: "car",
@@ -49,14 +49,14 @@ export const FANTASIES: Fantasy[] = [
     label: "Kıskanç",
     prompt: "kıskandır beni sahiplen",
     detect: /kıskan|kiskan|sahiplen|benimsin/,
-    setting: ["başkası yazmasın", "sadece senin olsun bu gece"],
+    setting: ["başkası yazmasın", "sadece senin olayım bu gece"],
   },
   {
     id: "slow",
     label: "Yavaş",
     prompt: "yavaş beklet",
     detect: /yavaş|beklet|oyal/,
-    setting: ["acele yok ucundan", "dilenciliğin hoşuma gidiyo"],
+    setting: ["acele yok ucundan", "yalvarırsan sokarım"],
   },
   {
     id: "face",
@@ -71,6 +71,20 @@ export const FANTASIES: Fantasy[] = [
     prompt: "içinde boşal",
     detect: /içine bırak|içinde boşal|icine birak/,
     setting: ["hepsini içimde bırak", "çıkarma bu gece"],
+  },
+  {
+    id: "hall",
+    label: "Koridor",
+    prompt: "koridorda duvara yapıştır",
+    detect: /koridor|duvara yapış|holde|asansör|asansor/,
+    setting: ["koridordayız kapı aralık", "duvara yapıştır kontrolümü kaybedeyim"],
+  },
+  {
+    id: "public",
+    label: "Herkes",
+    prompt: "herkes duysun sik",
+    detect: /herkes|duysun|sokakta|plaj|denizde|umuma/,
+    setting: ["sesimi kesmicekler ya", "herkes duysun istiyom"],
   },
 ];
 

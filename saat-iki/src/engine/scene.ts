@@ -34,7 +34,7 @@ const ACT_PATTERNS: Array<{ act: Act; pattern: RegExp }> = [
   {
     act: "sex",
     pattern:
-      /sik|sok|içine|icine|içinde|icinde|üstüm|ustum|üstün|ustun|arkadan|sikiş|sikis|boşal|bosal|sert|göt|got|parmak|yata[gğ]|yataga/i,
+      /sik|sok|içine|icine|içinde|icinde|üstüm|ustum|üstün|ustun|arkadan|sikiş|sikis|boşal|bosal|sert|göt|got|parmak|yata[gğ]|yataga|fışkır|fiskir|hayvan|koridor|duvara/i,
   },
   {
     act: "kiss",
@@ -42,7 +42,7 @@ const ACT_PATTERNS: Array<{ act: Act; pattern: RegExp }> = [
   },
   {
     act: "body",
-    pattern: /göğüs|gogus|meme|kalça|kalca|bacak|belin|götün|gotun/i,
+    pattern: /göğüs|gogus|meme|kalça|kalca|bacak|belin|götün|gotun|ruj|etek|yastık|yastik|sürtün|surtun/i,
   },
   {
     act: "ask",
@@ -53,79 +53,79 @@ const ACT_PATTERNS: Array<{ act: Act; pattern: RegExp }> = [
 
 const SCENES: Record<Exclude<Act, "ask" | "complaint">, string[][]> = {
   oralHer: [
-    ["offf dilin amıma değdi", "bacaklarım titriyo açılıyo", "ıslandım durma yala"],
-    ["mm orasıı", "ellerim saçında seni bastırıyom", "sesim çıkıyo utanmıcam"],
-    ["yüzün bacaklarımın arasında", "kalçam oynuyo diline", "çekme offf"],
-    ["boşalıcam diline nerdeyse", "uyluklarım kilitlendi", "biraz daha {name}"],
-    ["klitorise bas offf", "yastığı ısırıyom", "parmak da sok yalarken"],
-    ["amım senin dilinde eriyo", "fantezim buydu ya", "yüzüne otururum izin ver"],
+    ["dilini amıma bas offf", "bacaklarım titriyo açılıyo", "çekme yala beni"],
+    ["yüzüne oturuyom bak", "ıslanmanı istiyom {name}", "nefesin içeri girsin"],
+    ["klitorise bas durma", "yastığı ısırıyom", "parmak da sok yalarken"],
+    ["boşalıcam diline az kaldı", "uyluklarım kilitlendi", "fışkırt beni böyle"],
+    ["amımı yala hayvan gibi", "ellerim saçında bastırıyom", "utanmıcam sesim çıksın"],
+    ["dilin orda eriyom ya", "yüzün sırılsıklam olsun", "kalkma {name} bitir"],
   ],
   oralHim: [
-    ["mm ağzıma aldım offf", "sıcaklığı dilimde eridi", "çıkarmıyom bakıyom sana"],
-    ["boğazıma kadar kaydı", "gözlerim doldu salmıycam", "tükürük aktı hoşuma gidiyo"],
+    ["ağzıma aldım bak offf", "sıcaklığı dilimde", "çıkarmıyom kullan beni"],
+    ["boğazıma kadar kaydı", "gözlerim doldu salmıycam", "saçımı tut it"],
+    ["sikini emiyom yavaş sonra derin", "tükürük aktı hoşuma gidiyo", "yutmamı istiyon dimi"],
     ["ellerim taşaklarında", "ağzım inip çıkıyo", "sesini duyayım {name}"],
-    ["diline doladım ucunu", "emiyorum yavaş sonra derin", "saçımı tut kullan"],
-    ["ağzım doldu ya", "yutcam gibi oldum offf", "kalkmıycam senden"],
-    ["sikini öpüyom önce", "sonra boğazıma alıyom", "yutmamı istiyon dimi"],
+    ["ucunu öpüyom sonra yutuyom", "orospu gibi alıyom ya", "kalkmıycam senden"],
+    ["ağzım doldu offf", "yutcam gibi oldum", "yüzüme de boşalt sonra yalarım"],
   ],
   sex: [
-    ["içime girdi offf", "ıslağım seni yuttu", "biraz öyle kal dolu olayım"],
-    ["her vuruşta amım şapırdıyo", "belimi kır bak", "daha sert sik beni"],
-    ["üstündeyim memelerim sallanıyo", "dibine oturdum ya", "kalçamla ezicem seni"],
-    ["arkadan derin offf", "yüzüm yastıkta inliyom", "saçımı çek vur"],
-    ["içimde boşalıcam az kaldı", "amım seni sıkıyo", "çıkarma {name} bırak içime"],
-    ["bacaklarım omuzunda", "bu açıda dibine kadar", "cam açık komşu duysun"],
-    ["fantezi gibi ya", "sen sikince aklım gidiyo", "sabaha kadar böyle kal"],
+    ["içime sok offf", "ıslağım seni yutsun", "hayvan gibi sik beni"],
+    ["her vuruşta şapırdıyom", "belimi kır bak", "daha sert vur durma"],
+    ["üstündeyim memelerim sallanıyo", "dibine oturdum ya", "sikine binmeyi bayılıyorum"],
+    ["arkadan yapıştır duvara", "yüzüm yastıkta inliyom", "saçımı çek tokatla"],
+    ["içimde boşal {name}", "amım seni sıkıyo", "çıkarma hepsini bırak"],
+    ["bacaklarım omuzunda", "bu açıda dibine kadar", "herkes duysun istiyom"],
+    ["kontrolümü kaybedeyim", "beni kullan bitir", "sabaha kadar böyle kal"],
   ],
   kiss: [
-    ["öpüşürken amım ıslandı", "dilini emiyom ya", "boynuna kayıcam ısırarak"],
-    ["dudağın tatlı offf", "kulağına fısıldıyom ne istiyooum", "ellerin külotumun içinde olsun"],
-    ["öpücük yetmez", "dilin ağzımda sikin bende olsun", "aşağı in durma"],
+    ["öpüşürken amım aktı", "dilini emiyom ya", "kırmızı rujum bitsin sende"],
+    ["dudağın yetmez offf", "kucağına oturuyom sürtünüyom", "ellerin külotumun içinde olsun"],
+    ["boynumu ısır öperken", "mini eteğim kaydı haberin yok", "aşağı in durma"],
   ],
   body: [
-    ["memelerim keskin senin yüzünden", "uçları sızlıyo offf", "ağzını koy em"],
-    ["kalçamı gezdir ellerinle", "aşağı inince ıslak bulursun", "parmaklarını kokla sonra"],
-    ["bacaklarımın arası sırılsıklam", "uyluğuma iz bırak", "amımı sen aç"],
+    ["memelerimi ısır offf", "uçları sızlıyo em", "sonra amıma in"],
+    ["kalçamı sık iz bırak", "aşağı inince sırılsıklam bulursun", "parmaklarını kokla sonra"],
+    ["yastığıma sürtünüyom ya", "bacaklarımın arası yapış yapış", "senin sikin olsa şuan içimde"],
   ],
   talk: [
-    ["yatağımdayım çıplağım", "parmaklarım amımda offf", "seni hayal edince aktı"],
-    ["külotum bir yana kaydı ya", "ıslak izi bacaklarımda", "ne yapardın şuan söyle kirli"],
-    ["fantezi kuruyom {name}", "sen otelde camın önünde arkadasın", "ben inliyom şehre bakarak"],
-    ["mesajın gelince boşalıyodum nerdeyse", "elimi çekmedim", "sen devam ettir ağzınla"],
-    ["saat ikide azgınım utanç yok", "memelerim açık sızlıyo", "gel de içime göm"],
+    ["kendime dokunuyom şuan 🥺", "parmaklarım kayıyo offf", "seni hayal edince aktı"],
+    ["yastığım sırılsıklam oldu ya", "sürtünmekten ıslandım", "gel de fışkırt {name}"],
+    ["isteğim net", "koridorda duvara yapıştır beni", "herkes duysun inleyeyim"],
+    ["mesajın gelince boşalıyodum nerdeyse", "elimi çekmedim", "kirli yaz ne yapıcan"],
+    ["saat ikide azgınım utanç yok", "orospu gibi sikilmek istiyom", "gel içime göm"],
   ],
 };
 
 const COMPLAINTS: string[][] = [
-  ["tmm susuyom", "amını yalıyorum şuan offf", "bakıyom sana çıkarmıyom"],
-  ["yapay konuşmicam", "sikini ağzıma aldım ya", "gel işe bak"],
-  ["bozdum fanteziye geçtim", "üstüne oturdum içimde", "çekme sik"],
-  ["tekrar etmicem", "ıslandım haberin yok", "parmakların amımda konuşsun"],
+  ["tmm susuyom", "amımı yalatıyom şuan offf", "senin cümlenle ıslandım"],
+  ["yapay konuşmicam", "sikini ağzıma aldım ya", "gel işe bak fışkırt"],
+  ["bozdum isteklerime geçtim", "üstüne oturdum içimde", "hayvan gibi sik"],
+  ["tekrar etmicem", "kendime dokunuyom haberin yok", "parmakların amımda konuşsun"],
 ];
 
 const ANSWERS: Array<{ pattern: RegExp; lines: string[] }> = [
-  { pattern: /ne giy|giyiyon|üzerinde/, lines: ["hiçbişi yok ya", "külot bile kaydı", "ıslak tenim senin için"] },
-  { pattern: /neredesin|nerdesin/, lines: ["yataktayım bacaklarım açık", "yanım boş offf", "senin sikin olsa şuan içimde"] },
-  { pattern: /nasılsın|napıyon|napion|naber/, lines: ["azgınım sırılsıklam", "parmaklarım amımda", "sen napıyon söyleme göster"] },
-  { pattern: /adın ne|adin ne|kimsin/, lines: ["{who}", "{age}", "seni yatağımda siktirmek istiyom"] },
+  { pattern: /ne giy|giyiyon|üzerinde/, lines: ["hiçbişi yok ya", "mini etek bile kaydı", "ıslak tenim senin için"] },
+  { pattern: /neredesin|nerdesin/, lines: ["yataktayım bacaklarım açık", "yastığım yapış yapış", "senin sikin olsa şuan içimde"] },
+  { pattern: /nasılsın|napıyon|napion|naber/, lines: ["azgınım sırılsıklam", "kendime dokunuyom şuan", "sen napıyon söyleme göster"] },
+  { pattern: /adın ne|adin ne|kimsin/, lines: ["{who}", "{age}", "beni yatağında hayvan gibi sik"] },
   { pattern: /kaç yaş|kac yas/, lines: ["{age}", "yeter yaş", "amım konuşsun yaş değil"] },
-  { pattern: /ıslak|islak|azgın|azgin/, lines: ["sırılsıklamım ya", "parmaklarım kayıyo offf", "dilini koysan akar"] },
-  { pattern: /ne yap|napak|ne istiyon/, lines: ["önce yala sonra sok", "fantezim kirli", "seçme de sik"] },
+  { pattern: /ıslak|islak|azgın|azgin/, lines: ["sırılsıklamım ya", "parmaklarım kayıyo offf", "fışkırt beni dilinle"] },
+  { pattern: /ne yap|napak|ne istiyon/, lines: ["önce yala sonra sok", "duvara yapıştır herkes duysun", "seçme de sik"] },
 ];
 
 const HOOKS: Record<Exclude<Act, "ask" | "complaint">, string[]> = {
-  oralHer: ["yüzüme oturayım mı", "parmak da sokayım mı", "boşalayım diline mi"],
+  oralHer: ["fışkırtayım mı diline", "yüzüne oturayım mı", "parmak da sokayım mı"],
   oralHim: ["boğazıma kadar mı", "yüzüne mi boşal", "yutayım mı offf"],
-  sex: ["içime mi bırakıyon", "daha sert mi", "üstüne binip ezeyim mi"],
-  kiss: ["külotumu kaydırayım mı", "amımı yalatayım mı", "boynuna mı iz bırakayım"],
-  body: ["memelerimi emeyim mi", "amımı göstereyim mi", "kalçama tokat mı"],
-  talk: ["kirli fantezi mi kuralım", "amımı mı yalatayım", "içine mi alayım seni"],
+  sex: ["hayvan gibi mi", "herkes duysun mu", "içime mi bırakıyon"],
+  kiss: ["rujum bitsin mi sende", "kucağına oturayım mı", "amımı yalatayım mı"],
+  body: ["memelerimi ısırayım mı", "yastığa sürtüneyim mi", "kalçama tokat mı"],
+  talk: ["koridorda mı yapıştırcan", "fışkırtayım mı", "orospu gibi mi sikicen"],
 };
 
 const START_CHOICES: Choice[] = [
   { label: "Yala", text: "amini yiyim" },
-  { label: "Ağzına al", text: "ağzına al" },
-  { label: "Fantezi", text: "kirli fantezi kur" },
+  { label: "Fışkırt", text: "fışkırt beni" },
+  { label: "Duvara yapıştır", text: "koridorda duvara yapıştır" },
 ];
 
 const TRACK: Record<Exclude<Act, "ask" | "complaint">, Choice[][]> = {
@@ -175,14 +175,14 @@ const TRACK: Record<Exclude<Act, "ask" | "complaint">, Choice[][]> = {
   ],
   sex: [
     [
-      { label: "Daha hızlı", text: "daha hızlı" },
+      { label: "Hayvan gibi", text: "hayvan gibi sik" },
       { label: "Üstüne geç", text: "üstüme geç" },
-      { label: "Ağzına al", text: "ağzına al" },
+      { label: "Fışkırt", text: "fışkırt beni" },
     ],
     [
       { label: "Üstüne geç", text: "üstüme geç" },
-      { label: "Arkadan", text: "arkadan" },
-      { label: "İçinde kal", text: "içinde kal" },
+      { label: "Duvara yapıştır", text: "duvara yapıştır" },
+      { label: "Herkes duysun", text: "herkes duysun" },
     ],
     [
       { label: "Arkadan", text: "arkadan çevir" },
@@ -227,12 +227,12 @@ const TRACK: Record<Exclude<Act, "ask" | "complaint">, Choice[][]> = {
   talk: [
     [
       { label: "Yala", text: "amini yiyim" },
-      { label: "Ağzına al", text: "ağzına al" },
-      { label: "Fantezi", text: "kirli fantezi kur" },
+      { label: "Fışkırt", text: "fışkırt beni" },
+      { label: "Duvara yapıştır", text: "koridorda duvara yapıştır" },
     ],
     [
-      { label: "Islak mısın", text: "ıslak mısın" },
-      { label: "Ne giyiyon", text: "ne giyiyon" },
+      { label: "Herkes duysun", text: "herkes duysun sik" },
+      { label: "Yastığa sürt", text: "yastığa sürtün" },
       { label: "Gel", text: "yanına geleyim" },
     ],
   ],

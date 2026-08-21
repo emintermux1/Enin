@@ -378,6 +378,17 @@ h2 {
   background: oklch(0.7 0.18 55 / 0.28);
 }
 
+.fan-hall .atm-lamp {
+  right: 18%;
+  background: oklch(0.78 0.14 85 / 0.22);
+}
+
+.fan-public .atm-wash {
+  background:
+    radial-gradient(40% 30% at 50% 0%, oklch(0.7 0.1 20 / 0.18), transparent 55%),
+    radial-gradient(80% 55% at 10% 100%, oklch(0.28 0.08 18 / 0.4), transparent 65%);
+}
+
 .phone-bar {
   display: flex;
   justify-content: space-between;

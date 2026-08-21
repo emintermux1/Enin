@@ -25,7 +25,7 @@ const VOICES: Record<CharacterId, Voice> = {
   defne: {
     stretch: "mid",
     maxBubbles: 3,
-    endings: ["kirli kal", "sansür yok"],
+    endings: ["istiyorum onu", "yazdım bak"],
     moan: ["mm", "ah"],
   },
   yasemin: {
@@ -37,7 +37,7 @@ const VOICES: Record<CharacterId, Voice> = {
   melis: {
     stretch: "none",
     maxBubbles: 3,
-    endings: ["söyledim", "itaat et"],
+    endings: ["söyledim", "şimdi"],
     moan: ["mm"],
   },
 };
@@ -53,7 +53,9 @@ function swapForVoice(line: string, id: CharacterId): string {
     case "elif":
       return line.replaceAll("yaaa", "hadi").replaceAll("lütfen", "hadi").replaceAll("anlarsın ya", "geç kalma");
     case "defne":
-      return line;
+      return line
+        .replaceAll("yapıyom bak", "istiyorum bak")
+        .replaceAll("anlarsın ya", "isteklerim bu");
     case "yasemin":
       return line.replaceAll("lütfen", "hemen").replaceAll("anlarsın ya", "konuşma");
     case "melis":

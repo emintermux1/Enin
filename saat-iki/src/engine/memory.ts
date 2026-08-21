@@ -12,6 +12,12 @@ const RECALL: Partial<Record<MoveId, string>> = {
   cum: "içime yine bırak",
   faster: "o sertliğe geri dön",
   shower: "duşa yine çek",
+  hall: "koridorda yine yapıştır",
+  squirt: "yine fışkırt beni",
+  public: "herkes yine duysun",
+  pillow: "yastığa yine sürtüneyim",
+  rough: "hayvan gibi yine",
+  touch: "yine kendime dokunuyom",
 };
 
 export function recentMoveIds(history: Message[]): MoveId[] {

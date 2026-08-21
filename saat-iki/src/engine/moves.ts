@@ -22,7 +22,15 @@ export type MoveId =
   | "tease"
   | "shower"
   | "bed"
-  | "again";
+  | "again"
+  | "hall"
+  | "wall"
+  | "pillow"
+  | "public"
+  | "squirt"
+  | "lipstick"
+  | "rough"
+  | "touch";
 
 type Move = {
   id: MoveId;
@@ -36,9 +44,9 @@ const MOVES: Move[] = [
     id: "bed",
     pattern: /yata[gğ]|yataga|yatak/i,
     lines: [
-      ["yatağa çekiyom seni", "çarşaf soğuk tenim sıcak", "üstüme gel"],
-      ["yatağa geçtik ya", "bacaklarım açık", "duş bitti burası yatak"],
-      ["yastığa gömüldüm", "odadasın artık", "sok {name}"],
+      ["yatağa çekiyom seni", "bacaklarım açık ıslandım", "üstüme gel hayvan gibi"],
+      ["yatağa geçtik ya", "yastığım sırılsıklam", "duş bitti burası yatak sok"],
+      ["yüzümü yastığa gömdüm", "kalçam havada {name}", "sok artık durma"],
     ],
     choices: [
       { label: "Sok", text: "içine sok" },
@@ -60,6 +68,104 @@ const MOVES: Move[] = [
     ],
   },
   {
+    id: "hall",
+    pattern: /koridor|holde|asansör|asansor/,
+    lines: [
+      ["koridorda duvara yapıştır beni", "bacaklarım belinde offf", "kontrolümü kaybedene kadar sik"],
+      ["holde kimse yok değil", "etek kaydı haberin yok", "ağzımı kapatma herkes duysun"],
+      ["duvar soğuk sırtım açık {name}", "mini eteğimi kaldır sok", "inleyene kadar bırakma"],
+    ],
+    choices: [
+      { label: "Sok", text: "içine sok" },
+      { label: "Herkes duysun", text: "herkes duysun sik" },
+      { label: "Saçını çek", text: "saçını çek" },
+    ],
+  },
+  {
+    id: "pillow",
+    pattern: /yastık|yastik|sürtün|surtun/,
+    lines: [
+      ["yastığıma sürtünüyom ya", "yapış yapış sırılsıklam oldu 🥺", "senin sikin olsa şuan içimde"],
+      ["yüzümü yastığa gömdüm", "kalçam havada sürtünüyom", "gel arkadan yapıştır"],
+      ["yastık ıslandı {name}", "kendime yetemiyom", "fışkırt da bitsin"],
+    ],
+    choices: [
+      { label: "Fışkırt", text: "fışkırt beni" },
+      { label: "Sok", text: "içine sok" },
+      { label: "Yala", text: "amini yiyim" },
+    ],
+  },
+  {
+    id: "public",
+    pattern: /herkes|duysun|sokakta|plaj|denizde|umuma/,
+    lines: [
+      ["herkes duysun istiyom", "sesimi kesme {name}", "orospu gibi inleyeyim"],
+      ["denizde tut beni", "bacaklarım belinde kayıyo", "acıdı tuz ama değdi ya"],
+      ["kapı aralık umurumda değil", "komşu duysun", "daha sert vur utanç yok"],
+    ],
+    choices: [
+      { label: "Hayvan gibi", text: "hayvan gibi sik" },
+      { label: "Duvara yapıştır", text: "duvara yapıştır" },
+      { label: "Sok", text: "içine sok" },
+    ],
+  },
+  {
+    id: "squirt",
+    pattern: /fışkır|fiskir|squir/,
+    lines: [
+      ["fışkırt beni offf", "bacaklarım titriyo durma", "yatağı ıslatayım senin için"],
+      ["parmakların kıvrılınca aktım", "utanmıcam {name}", "dilini de bas öyle sık"],
+      ["boşalıcam fışkırarak", "tut beni bırakma", "hepsini yüzüne istiyom"],
+    ],
+    choices: [
+      { label: "Yala", text: "amini yiyim" },
+      { label: "Parmak da", text: "parmak da sok" },
+      { label: "Sok", text: "içine sok" },
+    ],
+  },
+  {
+    id: "lipstick",
+    pattern: /ruj|mini etek|kucağ|kucagina|kucağına/,
+    lines: [
+      ["kırmızı rujumla kucağına oturdum", "öpüşürken bitsin ruj", "sürtünüyom mini eteğimle"],
+      ["etek kaydı {name}", "külot yok haberin yok", "kucağında ıslandım sok artık"],
+      ["rujum dudağında kaldı ya", "yalvarıyom bak", "kucağından inmicem sikilmeden"],
+    ],
+    choices: [
+      { label: "Öp", text: "öp beni rujum bitsin" },
+      { label: "Sok", text: "içine sok" },
+      { label: "Üstüne geç", text: "üstüme geç" },
+    ],
+  },
+  {
+    id: "rough",
+    pattern: /hayvan|boğazla|orospu|sürtük|aşağıla/,
+    lines: [
+      ["hayvan gibi sik beni", "tokatla boğazla {name}", "orospu gibi kullan utanç yok"],
+      ["sert istiyom nazik değil", "saçımı çek duvara yapıştır", "beni bitir bırakma"],
+      ["aşağıla farketmez", "amım zonkluyo böyle konuşunca", "daha kirli söyle sikerken"],
+    ],
+    choices: [
+      { label: "Tokatla", text: "kalçasına tokat at" },
+      { label: "Saçını çek", text: "saçını çek" },
+      { label: "Sok", text: "içine sok" },
+    ],
+  },
+  {
+    id: "touch",
+    pattern: /kendime dokun|parmaklarımda|azdırıyo|azdiriyo|elleme|eliyor/,
+    lines: [
+      ["kendime dokunuyom şuan 🥺", "parmaklarım kayıyo offf", "sen yazınca daha ıslandım"],
+      ["azdırıyon {name} duramıyom", "elimi çekmiyom", "gel de sen bitir"],
+      ["amım zonkluyo bak", "iki parmak oldu ya", "senin dilin olsa şuan"],
+    ],
+    choices: [
+      { label: "Yala", text: "amini yiyim" },
+      { label: "Fışkırt", text: "fışkırt beni" },
+      { label: "Sok", text: "içine sok" },
+    ],
+  },
+  {
     id: "finger",
     pattern: /parmak/,
     lines: [
@@ -77,8 +183,8 @@ const MOVES: Move[] = [
     id: "ride",
     pattern: /üstüm|üstüne geç|üstüne bin|bin üst/,
     lines: [
-      ["üstüne oturdum offf", "hepsi içimde kaydı", "kalçamı tut böyle inicem"],
-      ["dibine kadar aldım ya", "memelerim yüzünde sallanıyo", "dilini uçlara değdir"],
+      ["üstüne oturdum offf", "sikine binmeyi bayılıyorum", "kalçamı tut böyle inicem"],
+      ["dibine kadar aldım ya", "memelerim yüzünde sallanıyo", "ısır uçları inerken"],
       ["seni içimde eziyom {name}", "kendi zevkime kullanıyom", "boşalana kadar inmicem"],
     ],
     choices: [
@@ -105,9 +211,9 @@ const MOVES: Move[] = [
     id: "faster",
     pattern: /hızlı|sert\b|vur|sik\b/,
     lines: [
-      ["daha sert offf", "yatak vuruyo duvara", "amım seni sıkıyo bırakmıyo"],
-      ["öyle sik yaa", "bacaklarım kilitlendi", "adımı kirli söyle böyle"],
-      ["her vuruşta ıslak ses çıkıyo", "utanmıcam {name}", "boşalcam az kaldı durma"],
+      ["daha sert offf", "hayvan gibi vur", "amım seni sıkıyo bırakmıyo"],
+      ["öyle sik yaa", "bacaklarım kilitlendi", "orospu de bana böyle"],
+      ["her vuruşta şapırdıyom", "utanmıcam {name} herkes duysun", "boşalcam az kaldı durma"],
     ],
     choices: [
       { label: "Üstüne geç", text: "üstüme geç" },
@@ -185,8 +291,8 @@ const MOVES: Move[] = [
     id: "breast",
     pattern: /meme|göğüs|gogus|göğs/,
     lines: [
-      ["memelerim keskin offf", "uçları ağzında erisin", "dişle biraz"],
-      ["ellerin göğsümde sıkıyo", "aralarına koy istersen", "aşağı kayınca ıslak bulursun"],
+      ["memelerimi ısır offf", "uçları ağzında erisin", "dişle sonra yala"],
+      ["ellerin göğsümde sıkıyo", "aralarına koy istersen", "aşağı kayınca sırılsıklam bulursun"],
     ],
     choices: [
       { label: "Em", text: "memelerini em" },
@@ -263,9 +369,9 @@ const MOVES: Move[] = [
     id: "fantasy",
     pattern: /fantezi kur|hayal et|otel camı|camın önünde|balkon/,
     lines: [
-      ["fantezim: otel camı", "sen arkadan ben şehre bakıyom", "ellerin boğazımda offf"],
-      ["duşta duvara yapıştır", "bacağımı kaldır sik", "su aktıkça sesim çoğalır"],
-      ["sabah uyanır uyanmaz ağzındayım", "henüz kahve yok {name}", "önce sen boşal sonra ben"],
+      ["isteğim: koridorda duvar", "etek kalkık sen içimde", "ellerin boğazımda offf"],
+      ["duşta duvara yapıştır", "bacağımı kaldır sik", "su aktıkça inleyeyim herkes duysun"],
+      ["sabah uyanır uyanmaz sikin sürtünsün", "henüz kahve yok {name}", "önce sen boşal sonra ben"],
     ],
     choices: [
       { label: "Camın önünde", text: "camın önünde arkadan sik" },
@@ -310,6 +416,19 @@ const MOVES: Move[] = [
       { label: "Arkadan", text: "duşta arkadan sik" },
       { label: "Ağzına al", text: "ağzına al" },
       { label: "Sok", text: "içine sok" },
+    ],
+  },
+  {
+    id: "wall",
+    pattern: /duvara/,
+    lines: [
+      ["duvara yapıştır beni", "bacaklarım belinde offf", "kontrolümü kaybedene kadar sik"],
+      ["sırtım duvarda {name}", "etek kalkık sok", "ağzımı kapatma inleyeyim"],
+    ],
+    choices: [
+      { label: "Sok", text: "içine sok" },
+      { label: "Hayvan gibi", text: "hayvan gibi sik" },
+      { label: "Herkes duysun", text: "herkes duysun" },
     ],
   },
 ];

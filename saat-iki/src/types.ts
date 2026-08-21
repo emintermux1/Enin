@@ -9,7 +9,9 @@ export type FantasyId =
   | "jealous"
   | "slow"
   | "face"
-  | "inside";
+  | "inside"
+  | "hall"
+  | "public";
 
 export type NightPhase = "tease" | "wet" | "peak" | "after";
 

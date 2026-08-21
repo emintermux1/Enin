@@ -22,7 +22,7 @@ export function NameGate({ onSubmit }: NameGateProps) {
       <Atmosphere kind="lock" />
       <p className="eyebrow">kulağına fısıldasın</p>
       <h1>Adın ne?</h1>
-      <p className="lede">Erkek adı yaz. Öperken öyle seslenecek.</p>
+      <p className="lede">Erkek adı yaz. Islanırken, yalvarırken öyle seslenecek.</p>
       <form className="name-form" onSubmit={handleSubmit}>
         <label className="sr-only" htmlFor="player-name">
           Adın
