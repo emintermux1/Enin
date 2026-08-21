@@ -185,6 +185,9 @@ const CLING_LEAN = 0.55;
  */
 const CLING_STANDOFF = 13;
 
+/** What the man at the Red Pump wants for the piece he keeps under the till. */
+const UNDER_COUNTER_PISTOL = 120;
+
 /** Where a web shot looks first: a fan across the front of the camera. */
 const ANCHOR_CONE = [0, 0.2, -0.2, 0.42, -0.42, 0.68, -0.68, 0.98, -0.98] as const;
 
@@ -503,6 +506,8 @@ export class ViceblockRuntime3D {
   private shownWeapon: WeaponId | null = null;
   /** Bullet holes, scorch and blood left on the world, oldest recycled first. */
   private marks: Mesh[] = [];
+  /** Guns lying where their owner dropped them. Walk over one to pick it up. */
+  private drops: { mesh: Mesh; x: number; z: number; weapon: WeaponId; rounds: number; life: number }[] = [];
   private matCache = new Map<string, StandardMaterial>();
 
   constructor(canvas: HTMLCanvasElement) {
@@ -2388,6 +2393,7 @@ export class ViceblockRuntime3D {
     this.updateCars(dt);
     this.updateActors(dt);
     this.updateCops(dt);
+    this.updateDrops(dt);
     this.lastShot += dt;
     this.updateMissions(dt);
     this.updateCamera(dt);
@@ -4292,6 +4298,7 @@ export class ViceblockRuntime3D {
           // Shooting an officer is the one crime the city never shrugs off.
           this.raiseHeat(2);
           this.pushNews("Officer down in Southside. Every unit is rolling.");
+          this.dropWeapon(c.x, c.z, this.heat.level >= 3 ? "smg" : "pistol", 24);
         }
       });
     }
@@ -4364,6 +4371,44 @@ export class ViceblockRuntime3D {
 
   private markHit(kill: boolean): void {
     this.hitMark = { at: this.clock, kill };
+  }
+
+  /**
+   * A gun on the pavement where its owner fell. Until this existed the only
+   * way to be armed at all was to find the Coral Mart and rob it, so a player
+   * who started shoving people got shot at all afternoon with nothing but
+   * fists and no way to answer.
+   */
+  private dropWeapon(x: number, z: number, weapon: WeaponId, rounds: number): void {
+    if (this.drops.length > 8) this.drops.shift()?.mesh.dispose();
+    const mesh = this.makeGunMesh(`drop-${this.drops.length}-${Math.random().toString(36).slice(2, 6)}`, weapon === "smg" ? "smg" : "pistol");
+    mesh.position.set(x, 3.2, z);
+    mesh.rotation.z = Math.PI / 2;
+    this.drops.push({ mesh, x, z, weapon, rounds, life: 90 });
+  }
+
+  /** Turns the dropped guns, ages them out, and hands one over on contact. */
+  private updateDrops(dt: number): void {
+    for (let i = this.drops.length - 1; i >= 0; i--) {
+      const d = this.drops[i];
+      if (!d) continue;
+      d.life -= dt;
+      d.mesh.rotation.y += dt * 1.6;
+      d.mesh.position.y = 3.2 + Math.sin(this.clock * 2.4) * 0.7;
+      const reach = !this.player.vehicleId && !this.interiorMode && this.player.y < LEDGE_STEP && Math.hypot(d.x - this.player.x, d.z - this.player.z) < 16;
+      if (!reach && d.life > 0) continue;
+      if (reach) {
+        // An SMG beats a pistol; walking over the weaker one still tops you up.
+        const upgrade = d.weapon === "smg" && this.player.weapon !== "smg";
+        if (upgrade || this.player.weapon === "fists") this.player.weapon = d.weapon;
+        this.player.ammo += d.rounds;
+        this.refillMagazine();
+        this.audio.uiClick();
+        this.flash(`PICKED UP  ·  ${weaponById(d.weapon).name} + ${d.rounds} rounds`);
+      }
+      d.mesh.dispose();
+      this.drops.splice(i, 1);
+    }
   }
 
   private spawnTracer(x0: number, y0: number, z0: number, x1: number, y1: number, z1: number): void {
@@ -4635,7 +4680,21 @@ export class ViceblockRuntime3D {
         car.rt.burning = false;
         this.player.cash = Math.max(0, this.player.cash - ECONOMY_CONFIG.gasRepairCost);
         this.flash(`PUMP  ·  topped off, $${ECONOMY_CONFIG.gasRepairCost}`);
-      } else if (this.player.weapon !== "fists") {
+      } else if (this.player.weapon === "fists") {
+        // Somewhere to buy your first gun that is not "rob a shop first". The
+        // pistol used to be reachable only through the Coral Mart job, so a
+        // player who never found it spent the whole game throwing punches.
+        if (this.player.cash >= UNDER_COUNTER_PISTOL) {
+          this.player.cash -= UNDER_COUNTER_PISTOL;
+          this.player.weapon = "pistol";
+          this.player.ammo += 36;
+          this.refillMagazine();
+          this.audio.cash();
+          this.flash(`PUMP  ·  ${weaponById("pistol").name} + 36 rounds, $${UNDER_COUNTER_PISTOL}  ·  under the counter`);
+        } else {
+          this.flash(`PUMP  ·  piece under the counter is $${UNDER_COUNTER_PISTOL}, come back with it`);
+        }
+      } else {
         // Any gun can restock here — SMG boxes are just bigger.
         const rounds = this.player.weapon === "smg" ? 30 : 12;
         if (this.player.cash >= 25) {
