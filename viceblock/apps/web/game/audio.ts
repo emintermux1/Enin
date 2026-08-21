@@ -232,6 +232,12 @@ export class GameAudio {
     this.beep(sprint ? base * 1.25 : base, surface === "sand" ? 0.05 : 0.03, type, surface === "grass" ? 0.02 : 0.03);
   }
 
+  /** The web leaving the wrist: a short hiss with a snap on the end. */
+  thwip(): void {
+    this.noiseBurst(0.09, 3200, 0.1);
+    this.beep(520, 0.05, "triangle", 0.05);
+  }
+
   alarm(): void {
     this.beep(1200, 0.12, "square", 0.08);
     this.beep(900, 0.12, "square", 0.08);

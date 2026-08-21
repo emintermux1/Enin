@@ -933,6 +933,10 @@ export class ViceblockRuntime {
       speed: v ? Math.round(Math.hypot(v.vx, v.vy) * 0.62) : 0,
       drifting: false,
       failure: null,
+      // The 2D fallback runtime has no third dimension to swing through.
+      web: "ready",
+      altitude: 0,
+      airSpeed: 0,
     };
   }
 

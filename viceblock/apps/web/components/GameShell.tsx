@@ -58,6 +58,9 @@ const EMPTY: HudSnapshot = {
   speed: 0,
   drifting: false,
   failure: null,
+  web: "ready",
+  altitude: 0,
+  airSpeed: 0,
 };
 
 function xpPct(xp: number, level: number): number {
@@ -448,6 +451,26 @@ export function GameShell() {
               {hud.drifting ? <em>DRIFT</em> : null}
             </div>
           ) : null}
+          {!hud.inVehicle && hud.jailLeft <= 0 && !hud.interior ? (
+            <>
+              <div className={`web-reticle ${hud.web}`}>
+                <i />
+                <i />
+                <i />
+                <i />
+              </div>
+              <div className={`slinger ${hud.web}`}>
+                <b>
+                  {hud.web === "swing" ? "ON THE LINE" : hud.web === "wall" ? "ON THE WALL" : hud.web === "air" ? "FALLING" : hud.web === "aimed" ? "ANCHOR" : "NO ANCHOR"}
+                </b>
+                <span>
+                  {hud.altitude > 2 ? `${hud.altitude}m up · ` : ""}
+                  {hud.airSpeed > 0 ? `${hud.airSpeed} km/h · ` : ""}Q swing · C zip
+                </span>
+              </div>
+            </>
+          ) : null}
+          {hud.airSpeed > 240 ? <div className="rush" /> : null}
           {hud.combo > 0 ? (
             <div className="combo" key={hud.combo}>
               <b>x{hud.comboMultiplier.toFixed(1)}</b>
@@ -715,6 +738,22 @@ export function GameShell() {
           >
             {hud.inVehicle ? "BRAKE" : "JUMP"}
           </button>
+          {!hud.inVehicle ? (
+            <>
+              <button
+                type="button"
+                className={`sling${hud.web === "swing" ? " on" : ""}`}
+                onPointerDown={() => gameRef.current?.input.setTouchWeb(true)}
+                onPointerUp={() => gameRef.current?.input.setTouchWeb(false)}
+                onPointerCancel={() => gameRef.current?.input.setTouchWeb(false)}
+              >
+                WEB
+              </button>
+              <button type="button" className="zip" onPointerDown={() => gameRef.current && (gameRef.current.input.zipQueued = true)}>
+                ZIP
+              </button>
+            </>
+          ) : null}
 
           {hud.phoneOpen && (
             <div className="phone">
@@ -1244,6 +1283,126 @@ export function GameShell() {
           font-weight: 700;
           letter-spacing: 0.06em;
           touch-action: none;
+        }
+        .sling {
+          position: absolute;
+          right: 116px;
+          bottom: 100px;
+          width: 56px;
+          height: 56px;
+          border-radius: 50%;
+          border: 1px solid rgba(228, 60, 72, 0.6);
+          background: rgba(72, 20, 26, 0.85);
+          color: #ffd9dc;
+          font-size: 10px;
+          font-weight: 800;
+          letter-spacing: 0.08em;
+          touch-action: none;
+        }
+        .sling.on {
+          background: #c4202c;
+          color: #fff;
+        }
+        .zip {
+          position: absolute;
+          right: 44px;
+          bottom: 116px;
+          width: 48px;
+          height: 48px;
+          border-radius: 50%;
+          border: 1px solid rgba(120, 170, 255, 0.5);
+          background: rgba(22, 38, 82, 0.85);
+          color: #dce9ff;
+          font-size: 10px;
+          font-weight: 700;
+          letter-spacing: 0.08em;
+          touch-action: none;
+        }
+        /* Where a line would catch: four brackets that close up on a target. */
+        .web-reticle {
+          position: absolute;
+          left: 50%;
+          top: 50%;
+          width: 34px;
+          height: 34px;
+          margin: -17px 0 0 -17px;
+          pointer-events: none;
+          opacity: 0.35;
+          transition: opacity 140ms ease-out, transform 140ms ease-out;
+        }
+        .web-reticle i {
+          position: absolute;
+          width: 9px;
+          height: 9px;
+          border: 2px solid rgba(243, 230, 210, 0.75);
+        }
+        .web-reticle i:nth-child(1) {
+          left: 0;
+          top: 0;
+          border-right: 0;
+          border-bottom: 0;
+        }
+        .web-reticle i:nth-child(2) {
+          right: 0;
+          top: 0;
+          border-left: 0;
+          border-bottom: 0;
+        }
+        .web-reticle i:nth-child(3) {
+          left: 0;
+          bottom: 0;
+          border-right: 0;
+          border-top: 0;
+        }
+        .web-reticle i:nth-child(4) {
+          right: 0;
+          bottom: 0;
+          border-left: 0;
+          border-top: 0;
+        }
+        .web-reticle.aimed {
+          opacity: 0.95;
+          transform: scale(0.72);
+        }
+        .web-reticle.aimed i {
+          border-color: #ff5a66;
+        }
+        .web-reticle.swing {
+          opacity: 0.9;
+          transform: scale(1.25) rotate(45deg);
+        }
+        .web-reticle.swing i {
+          border-color: #ffffff;
+        }
+        .slinger {
+          position: absolute;
+          right: 24px;
+          bottom: 164px;
+          text-align: right;
+          line-height: 1.2;
+          pointer-events: none;
+          text-shadow: 0 2px 0 rgba(16, 10, 8, 0.85);
+        }
+        .slinger b {
+          display: block;
+          font-size: 13px;
+          letter-spacing: 0.14em;
+          color: #8b7f70;
+        }
+        .slinger.aimed b {
+          color: #ff5a66;
+        }
+        .slinger.swing b,
+        .slinger.wall b {
+          color: #f3e6d2;
+        }
+        .slinger.air b {
+          color: #ffcf5c;
+        }
+        .slinger span {
+          font-size: 10px;
+          letter-spacing: 0.12em;
+          color: #b7a68f;
         }
         .minimap {
           position: absolute;

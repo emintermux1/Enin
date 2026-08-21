@@ -16,6 +16,14 @@ export const GROUND_Y = 0;
 export interface CityMeshes {
   dispose: () => void;
   landmarkTops: Map<string, number>;
+  /**
+   * Roof height per grid tile, in world units. The mesh builder was the only
+   * thing that knew how tall it had made each block, so gameplay could not
+   * tell a two-storey shop from a tower: there were no rooftops to stand on
+   * and nothing to fire a web at. Zero means open sky above street level,
+   * which includes water — you can swing over the bay, just not stand on it.
+   */
+  tops: Float32Array;
 }
 
 function mat(scene: Scene, name: string, hex: string, emissive = 0): StandardMaterial {
@@ -273,6 +281,7 @@ export function buildCity(scene: Scene, world: WorldData, kit: TextureKit): City
   const disposables: Mesh[] = [];
   const textures: DynamicTexture[] = [];
   const landmarkTops = new Map<string, number>();
+  const tops = new Float32Array(MAP_W * MAP_H);
 
   const dirt = dirtTexture(scene);
   textures.push(dirt);
@@ -407,6 +416,7 @@ export function buildCity(scene: Scene, world: WorldData, kit: TextureKit): City
       }
       for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) seen[(y + j) * MAP_W + x + i] = 1;
       const height = 48 + ((x * 7 + y * 13) % 5) * 24;
+      for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) tops[(y + j) * MAP_W + x + i] = height;
       const bw = w * TILE - 4;
       const bd = h * TILE - 4;
       const cx = x * TILE + (w * TILE) / 2;
@@ -432,6 +442,12 @@ export function buildCity(scene: Scene, world: WorldData, kit: TextureKit): City
   for (const lm of world.landmarks) {
     const height = landmarkHeight(lm);
     landmarkTops.set(lm.id, height);
+    for (let j = 0; j < lm.h; j++) {
+      for (let i = 0; i < lm.w; i++) {
+        const t = (lm.y + j) * MAP_W + lm.x + i;
+        if (t >= 0 && t < tops.length && world.solid[t]) tops[t] = height;
+      }
+    }
     const win = windowTexture(scene, `tex-${lm.id}`, landmarkColor(lm.kind), trimColor(lm.kind));
     textures.push(win);
     const wall = mat(scene, `m-${lm.id}`, landmarkColor(lm.kind), 0.04);
@@ -641,6 +657,7 @@ export function buildCity(scene: Scene, world: WorldData, kit: TextureKit): City
 
   return {
     landmarkTops,
+    tops,
     dispose: () => {
       for (const d of disposables) d.dispose();
       for (const t of textures) t.dispose();

@@ -56,6 +56,13 @@ import {
   resolveCarCollision,
   scoreStunt,
   shootTire,
+  SPIDER_CONFIG,
+  anchorUsable,
+  initialLength,
+  releaseSwing,
+  stepAirborne,
+  stepSwing,
+  zipVelocity,
   speedCameraDistance,
   speedFov,
   speedoKmh,
@@ -78,6 +85,7 @@ import {
   type ImpactKind,
   type LockpickState,
   type LootItem,
+  type SwingState,
   type ThrillState,
   type VehicleRuntime,
   type WeaponId,
@@ -149,6 +157,9 @@ interface Tracer {
 
 /** Height of a standing actor's hands: where muzzle flashes and tracers live. */
 const GUN_Y = 12;
+
+/** How far you can step up, and how far a ledge can be below your feet. */
+const LEDGE_STEP = 14;
 
 /**
  * How far the camera can be swung and how close it can be pulled. The old
@@ -369,6 +380,19 @@ export class ViceblockRuntime3D {
   private surrenderT = 0;
   /** Distance to the closest officer still working the case, last tick. */
   private copGap = Infinity;
+  /** The line currently being hung from, in world units. */
+  private web: { x: number; y: number; z: number; length: number } | null = null;
+  private webMesh: Mesh | null = null;
+  private webSplat: Mesh | null = null;
+  /** Velocity while off the ground: swinging, falling or thrown. */
+  private flight = { vx: 0, vy: 0, vz: 0 };
+  /** Stuck to a wall: which way the wall lies, and how long you have hung there. */
+  private cling: { dir: number; t: number } | null = null;
+  private swingT = 0;
+  private airT = 0;
+  private webCooldown = 0;
+  /** Where a web would land right now, for the reticle. */
+  private anchorPreview: { x: number; y: number; z: number } | null = null;
   private gpsT = 0;
   /** Walkable interior state: rooms are built high above the city. */
   private interiorMode: { id: string; returnX: number; returnZ: number } | null = null;
@@ -459,7 +483,9 @@ export class ViceblockRuntime3D {
     this.player.x = this.world.spawnX;
     this.player.z = this.world.spawnY;
 
-    this.playerMesh = this.makeHumanoid("player", "#c45a32", "#e6c39a");
+    // Red over blue, lenses, gloves: you are the one in the city who can catch
+    // a building, so you should not look like the people on the pavement.
+    this.playerMesh = this.makeHumanoid("player", "#c4202c", "#e6c39a", "#1d3a8f", true);
     this.playerMesh.position.set(this.player.x, 0, this.player.z);
     this.input = new GameInput();
     this.audio = new GameAudio();
@@ -806,7 +832,11 @@ export class ViceblockRuntime3D {
     return m;
   }
 
-  private makeHumanoid(name: string, shirtHex: string, skinHex: string, pantsHex = "#2a2420"): Mesh {
+  /**
+   * `masked` swaps the face, hair and bare hands for a hood with lenses and
+   * gloves — the same body, wearing a suit rather than a shirt.
+   */
+  private makeHumanoid(name: string, shirtHex: string, skinHex: string, pantsHex = "#2a2420", masked = false): Mesh {
     const root = MeshBuilder.CreateBox(`${name}-root`, { width: 0.4, depth: 0.4, height: 0.4 }, this.scene);
     root.isVisible = false;
     const torso = MeshBuilder.CreateBox(`${name}-t`, { width: 7.2, depth: 4.6, height: 9.2 }, this.scene);
@@ -814,62 +844,87 @@ export class ViceblockRuntime3D {
     torso.position.y = 13.2;
     torso.parent = root;
     const neck = MeshBuilder.CreateCylinder(`${name}-nk`, { height: 1.8, diameter: 2.2, tessellation: 8 }, this.scene);
-    neck.material = this.surface("skin", skinHex);
+    neck.material = masked ? this.surface("cloth", shirtHex) : this.surface("skin", skinHex);
     neck.position.y = 18.4;
     neck.parent = root;
     const head = MeshBuilder.CreateBox(`${name}-h`, { width: 5.2, depth: 5.2, height: 5.4 }, this.scene);
-    head.material = this.surface("skin", skinHex);
+    head.material = masked ? this.surface("cloth", shirtHex) : this.surface("skin", skinHex);
     head.position.y = 21.4;
     head.parent = root;
-    const face = MeshBuilder.CreatePlane(`${name}-face`, { width: 5.1, height: 5.3 }, this.scene);
-    face.material = this.faceMaterial(skinHex);
-    face.position.set(2.65, 21.4, 0);
-    face.rotation.y = Math.PI / 2;
-    face.parent = root;
-    const brow = MeshBuilder.CreateBox(`${name}-brow`, { width: 1.1, depth: 3.8, height: 0.55 }, this.scene);
-    brow.material = this.surface("hair", "#1a1410");
-    brow.position.set(2.5, 22.7, 0);
-    brow.parent = root;
-    const eyeWhiteL = MeshBuilder.CreateSphere(`${name}-ewl`, { diameter: 1.35, segments: 8 }, this.scene);
-    eyeWhiteL.material = this.material("#f4efe6", 0.18);
-    eyeWhiteL.position.set(2.55, 21.65, 1.2);
-    eyeWhiteL.parent = root;
-    const eyeWhiteR = MeshBuilder.CreateSphere(`${name}-ewr`, { diameter: 1.35, segments: 8 }, this.scene);
-    eyeWhiteR.material = this.material("#f4efe6", 0.18);
-    eyeWhiteR.position.set(2.55, 21.65, -1.2);
-    eyeWhiteR.parent = root;
-    const pupilL = MeshBuilder.CreateSphere(`${name}-pl`, { diameter: 0.72, segments: 6 }, this.scene);
-    pupilL.material = this.material("#14110e", 0.08);
-    pupilL.position.set(3.15, 21.6, 1.2);
-    pupilL.parent = root;
-    const pupilR = MeshBuilder.CreateSphere(`${name}-pr`, { diameter: 0.72, segments: 6 }, this.scene);
-    pupilR.material = this.material("#14110e", 0.08);
-    pupilR.position.set(3.15, 21.6, -1.2);
-    pupilR.parent = root;
-    const nose = MeshBuilder.CreateBox(`${name}-nose`, { width: 1.1, depth: 1.15, height: 1.35 }, this.scene);
-    nose.material = this.surface("skin", skinHex);
-    nose.position.set(2.85, 20.85, 0);
-    nose.parent = root;
-    const mouth = MeshBuilder.CreateBox(`${name}-mouth`, { width: 0.55, depth: 2.1, height: 0.45 }, this.scene);
-    mouth.material = this.material("#6a3028", 0.06);
-    mouth.position.set(2.7, 19.85, 0);
-    mouth.parent = root;
-    const hair = MeshBuilder.CreateBox(`${name}-hair`, { width: 5.5, depth: 5.5, height: 2 }, this.scene);
-    hair.material = this.surface("hair", "#1a1410");
-    hair.position.y = 24.4;
-    hair.parent = root;
-    const hairBack = MeshBuilder.CreateBox(`${name}-hb`, { width: 1.2, depth: 5.3, height: 3.4 }, this.scene);
-    hairBack.material = this.surface("hair", "#1a1410");
-    hairBack.position.set(-2.2, 22.6, 0);
-    hairBack.parent = root;
-    const earL = MeshBuilder.CreateBox(`${name}-el`, { width: 1.1, depth: 1.4, height: 2 }, this.scene);
-    earL.material = this.surface("skin", skinHex);
-    earL.position.set(0, 21.4, 2.9);
-    earL.parent = root;
-    const earR = MeshBuilder.CreateBox(`${name}-er`, { width: 1.1, depth: 1.4, height: 2 }, this.scene);
-    earR.material = this.surface("skin", skinHex);
-    earR.position.set(0, 21.4, -2.9);
-    earR.parent = root;
+    if (masked) {
+      // Two big lenses and a spider on the chest: the whole silhouette of the
+      // costume at this scale is the mask, so it has to read from behind.
+      for (const s of [1, -1]) {
+        const lens = MeshBuilder.CreateBox(`${name}-lens${s}`, { width: 0.5, depth: 2.3, height: 1.7 }, this.scene);
+        lens.material = this.material("#f2f4f8", 0.42);
+        lens.position.set(2.62, 21.8, 1.25 * s);
+        lens.rotation.x = 0.22 * s;
+        lens.parent = root;
+        const rim = MeshBuilder.CreateBox(`${name}-rim${s}`, { width: 0.42, depth: 2.7, height: 2.1 }, this.scene);
+        rim.material = this.material("#14161c", 0.05);
+        rim.position.set(2.56, 21.8, 1.25 * s);
+        rim.rotation.x = 0.22 * s;
+        rim.parent = root;
+      }
+      const emblem = MeshBuilder.CreateBox(`${name}-emblem`, { width: 0.4, depth: 3, height: 3, }, this.scene);
+      emblem.material = this.material("#14161c", 0.05);
+      emblem.position.set(2.4, 14.4, 0);
+      emblem.parent = root;
+      const belt = MeshBuilder.CreateBox(`${name}-belt`, { width: 7.4, depth: 4.8, height: 1.1 }, this.scene);
+      belt.material = this.surface("cloth", pantsHex);
+      belt.position.y = 9;
+      belt.parent = root;
+    } else {
+      const face = MeshBuilder.CreatePlane(`${name}-face`, { width: 5.1, height: 5.3 }, this.scene);
+      face.material = this.faceMaterial(skinHex);
+      face.position.set(2.65, 21.4, 0);
+      face.rotation.y = Math.PI / 2;
+      face.parent = root;
+      const brow = MeshBuilder.CreateBox(`${name}-brow`, { width: 1.1, depth: 3.8, height: 0.55 }, this.scene);
+      brow.material = this.surface("hair", "#1a1410");
+      brow.position.set(2.5, 22.7, 0);
+      brow.parent = root;
+      const eyeWhiteL = MeshBuilder.CreateSphere(`${name}-ewl`, { diameter: 1.35, segments: 8 }, this.scene);
+      eyeWhiteL.material = this.material("#f4efe6", 0.18);
+      eyeWhiteL.position.set(2.55, 21.65, 1.2);
+      eyeWhiteL.parent = root;
+      const eyeWhiteR = MeshBuilder.CreateSphere(`${name}-ewr`, { diameter: 1.35, segments: 8 }, this.scene);
+      eyeWhiteR.material = this.material("#f4efe6", 0.18);
+      eyeWhiteR.position.set(2.55, 21.65, -1.2);
+      eyeWhiteR.parent = root;
+      const pupilL = MeshBuilder.CreateSphere(`${name}-pl`, { diameter: 0.72, segments: 6 }, this.scene);
+      pupilL.material = this.material("#14110e", 0.08);
+      pupilL.position.set(3.15, 21.6, 1.2);
+      pupilL.parent = root;
+      const pupilR = MeshBuilder.CreateSphere(`${name}-pr`, { diameter: 0.72, segments: 6 }, this.scene);
+      pupilR.material = this.material("#14110e", 0.08);
+      pupilR.position.set(3.15, 21.6, -1.2);
+      pupilR.parent = root;
+      const nose = MeshBuilder.CreateBox(`${name}-nose`, { width: 1.1, depth: 1.15, height: 1.35 }, this.scene);
+      nose.material = this.surface("skin", skinHex);
+      nose.position.set(2.85, 20.85, 0);
+      nose.parent = root;
+      const mouth = MeshBuilder.CreateBox(`${name}-mouth`, { width: 0.55, depth: 2.1, height: 0.45 }, this.scene);
+      mouth.material = this.material("#6a3028", 0.06);
+      mouth.position.set(2.7, 19.85, 0);
+      mouth.parent = root;
+      const hair = MeshBuilder.CreateBox(`${name}-hair`, { width: 5.5, depth: 5.5, height: 2 }, this.scene);
+      hair.material = this.surface("hair", "#1a1410");
+      hair.position.y = 24.4;
+      hair.parent = root;
+      const hairBack = MeshBuilder.CreateBox(`${name}-hb`, { width: 1.2, depth: 5.3, height: 3.4 }, this.scene);
+      hairBack.material = this.surface("hair", "#1a1410");
+      hairBack.position.set(-2.2, 22.6, 0);
+      hairBack.parent = root;
+      const earL = MeshBuilder.CreateBox(`${name}-el`, { width: 1.1, depth: 1.4, height: 2 }, this.scene);
+      earL.material = this.surface("skin", skinHex);
+      earL.position.set(0, 21.4, 2.9);
+      earL.parent = root;
+      const earR = MeshBuilder.CreateBox(`${name}-er`, { width: 1.1, depth: 1.4, height: 2 }, this.scene);
+      earR.material = this.surface("skin", skinHex);
+      earR.position.set(0, 21.4, -2.9);
+      earR.parent = root;
+    }
     const armL = MeshBuilder.CreateBox(`${name}-al`, { width: 2.1, depth: 2.2, height: 8.6 }, this.scene);
     armL.material = this.surface("cloth", shirtHex);
     armL.position.set(0, 13.4, 3.8);
@@ -879,11 +934,11 @@ export class ViceblockRuntime3D {
     armR.position.set(0, 13.4, -3.8);
     armR.parent = root;
     const handL = MeshBuilder.CreateBox(`${name}-hl`, { width: 1.8, depth: 1.8, height: 1.8 }, this.scene);
-    handL.material = this.surface("skin", skinHex);
+    handL.material = masked ? this.surface("cloth", shirtHex) : this.surface("skin", skinHex);
     handL.position.set(0, 8.6, 3.8);
     handL.parent = root;
     const handR = MeshBuilder.CreateBox(`${name}-hr`, { width: 1.8, depth: 1.8, height: 1.8 }, this.scene);
-    handR.material = this.surface("skin", skinHex);
+    handR.material = masked ? this.surface("cloth", shirtHex) : this.surface("skin", skinHex);
     handR.position.set(0, 8.6, -3.8);
     handR.parent = root;
     const legL = MeshBuilder.CreateBox(`${name}-ll`, { width: 2.8, depth: 2.6, height: 8 }, this.scene);
@@ -1000,6 +1055,31 @@ export class ViceblockRuntime3D {
     meta.armR.rotation.x = -swing;
     meta.legL.rotation.x = -swing * 0.65;
     meta.legR.rotation.x = swing * 0.65;
+  }
+
+  /**
+   * In the air: one arm up the line, the other trailing, legs tucked on the way
+   * up and kicked out over the top of an arc. Walking animation on a body
+   * three hundred units above the street looked like a bug.
+   */
+  private poseSling(mesh: Mesh): void {
+    const meta = mesh.metadata as { armL?: Mesh; armR?: Mesh; legL?: Mesh; legR?: Mesh } | undefined;
+    if (!meta?.armL || !meta.armR || !meta.legL || !meta.legR) return;
+    if (this.cling) {
+      // Spread on the wall, one hand reaching up the brickwork.
+      const reach = Math.sin(this.clock * 6) * 0.3;
+      meta.armR.rotation.x = -2.4 + reach;
+      meta.armL.rotation.x = -2.4 - reach;
+      meta.legL.rotation.x = 0.5 - reach;
+      meta.legR.rotation.x = 0.5 + reach;
+      return;
+    }
+    const rising = this.flight.vy > 0;
+    const tuck = rising ? 1 : 0.25;
+    meta.armR.rotation.x = this.web ? -2.6 : -1.5;
+    meta.armL.rotation.x = this.web ? -0.5 : -1.2;
+    meta.legL.rotation.x = -tuck + Math.sin(this.clock * 3) * 0.12;
+    meta.legR.rotation.x = -tuck * 0.4 - Math.sin(this.clock * 3) * 0.12;
   }
 
   /**
@@ -2216,7 +2296,10 @@ export class ViceblockRuntime3D {
     const mx = rx * axis.x + fx * -axis.y;
     const mz = rz * axis.x + fz * -axis.y;
     const mag = Math.hypot(mx, mz);
-    if (mag > 0.05) {
+    // Off the ground the player is a projectile on a rope, not a walker: the
+    // web takes the step and reports back whether the ground rules still apply.
+    const airborne = this.updateTraversal(dt, axis);
+    if (!airborne && mag > 0.05) {
       const nx = this.player.x + (mx / mag) * Math.min(1, mag) * speed * dt;
       const nz = this.player.z + (mz / mag) * Math.min(1, mag) * speed * dt;
       const inside = this.activeRoom();
@@ -2226,8 +2309,12 @@ export class ViceblockRuntime3D {
         this.player.x = Math.max(cx - half + 12, Math.min(cx + half - 12, nx));
         this.player.z = Math.max(cz - half + 12, Math.min(cz + half - 12, nz));
       } else {
-        if (!blocked(this.world, nx, this.player.z, PLAYER_CONFIG.radius)) this.player.x = nx;
-        if (!blocked(this.world, this.player.x, nz, PLAYER_CONFIG.radius)) this.player.z = nz;
+        if (!this.airSolid(nx, this.player.z, this.player.y)) this.player.x = nx;
+        if (!this.airSolid(this.player.x, nz, this.player.y)) this.player.z = nz;
+        // Carry walking speed into the air, so stepping off a roof is a leap
+        // rather than a stone dropping straight down.
+        this.flight.vx = (mx / mag) * speed;
+        this.flight.vz = (mz / mag) * speed;
       }
       if (!this.aiming) this.player.heading = Math.atan2(mz, mx);
       this.lastFoot += dt;
@@ -2236,20 +2323,6 @@ export class ViceblockRuntime3D {
         const cell = cellAt(this.world, this.player.x, this.player.z);
         const surface = cell === Cell.Sand ? "sand" : cell === Cell.Grass ? "grass" : cell === Cell.Dock ? "metal" : "concrete";
         this.audio.foot(axis.sprint, surface);
-      }
-    }
-    // Jump
-    if (this.input.keys.has("Space") && this.player.grounded) {
-      this.player.vy = PLAYER_CONFIG.jumpVelocity;
-      this.player.grounded = false;
-    }
-    if (!this.player.grounded) {
-      this.player.vy -= PLAYER_CONFIG.gravity * dt;
-      this.player.y += this.player.vy * dt * 10;
-      if (this.player.y <= 0) {
-        this.player.y = 0;
-        this.player.vy = 0;
-        this.player.grounded = true;
       }
     }
     if (this.input.consumeInteract()) {
@@ -2262,7 +2335,9 @@ export class ViceblockRuntime3D {
     this.playerMesh.position.set(this.player.x, elev + this.player.y + bob, this.player.z);
     this.playerMesh.rotation.y = -this.player.heading;
     if (mag > 0.05) this.danceT = 0;
-    if (this.danceT > 0) {
+    if (airborne) {
+      this.poseSling(this.playerMesh);
+    } else if (this.danceT > 0) {
       // Standing still on the club floor after hitting E: dance, don't idle.
       this.poseDance({ mesh: this.playerMesh, style: 1, phase: 0, baseY: elev, baseRotY: -this.player.heading }, this.clock);
     } else {
@@ -2271,6 +2346,348 @@ export class ViceblockRuntime3D {
       else this.posePunch(this.playerMesh, this.clock - this.lastFired);
     }
     this.separateFromBodies();
+  }
+
+  // -------------------------------------------------------- web-slinging
+  //
+  // The city is 96x80 tiles of grid, and until now gameplay only ever asked it
+  // one question: is this square solid? That is enough to walk around a block
+  // and nothing else. Roof heights come out of the mesh builder now, so the
+  // same grid can answer where a wall ends, what you are standing on, and what
+  // is high enough to hang a line from.
+
+  /** Roof height at a world position: 0 for open sky, Infinity off the map. */
+  private topAt(x: number, z: number): number {
+    const tx = Math.floor(x / TILE);
+    const tz = Math.floor(z / TILE);
+    if (tx < 0 || tz < 0 || tx >= MAP_W || tz >= MAP_H) return Number.POSITIVE_INFINITY;
+    return this.city.tops[tz * MAP_W + tx] ?? 0;
+  }
+
+  /**
+   * Whether a body of the player's size is inside something at this height.
+   * At street level the old 2D answer still stands, which keeps water, kerbs
+   * and map edges behaving exactly as they did; above it, only the part of a
+   * building below its roof is in the way.
+   */
+  private airSolid(x: number, z: number, y: number, rad = PLAYER_CONFIG.radius): boolean {
+    if (y <= LEDGE_STEP) return blocked(this.world, x, z, rad);
+    const pts: Array<[number, number]> = [
+      [x - rad, z - rad],
+      [x + rad, z - rad],
+      [x - rad, z + rad],
+      [x + rad, z + rad],
+      [x, z],
+    ];
+    for (const [px, pz] of pts) if (y < this.topAt(px, pz) - LEDGE_STEP) return true;
+    return false;
+  }
+
+  /** The surface under the player's feet: a rooftop if they are over one. */
+  private supportY(x: number, z: number, y: number, rad = PLAYER_CONFIG.radius): number {
+    let best = 0;
+    const pts: Array<[number, number]> = [
+      [x - rad, z - rad],
+      [x + rad, z - rad],
+      [x - rad, z + rad],
+      [x + rad, z + rad],
+      [x, z],
+    ];
+    for (const [px, pz] of pts) {
+      const top = this.topAt(px, pz);
+      if (!Number.isFinite(top) || top <= 0) continue;
+      if (top <= y + LEDGE_STEP && top > best) best = top;
+    }
+    return best;
+  }
+
+  /**
+   * The nearest thing worth webbing, looking where the camera looks. A narrow
+   * cone rather than a single ray, because a line that only attaches to what
+   * is dead ahead makes the city feel like it is refusing you.
+   */
+  private findAnchor(rise: number = SPIDER_CONFIG.minAnchorRise): { x: number; y: number; z: number } | null {
+    const base = headingFromCamera(this.player.camYaw);
+    let best: { x: number; y: number; z: number } | null = null;
+    let bestScore = Number.POSITIVE_INFINITY;
+    for (const off of [0, 0.2, -0.2, 0.42, -0.42, 0.68, -0.68]) {
+      const dir = base + off;
+      const cos = Math.cos(dir);
+      const sin = Math.sin(dir);
+      for (let d = 30; d <= SPIDER_CONFIG.maxRange; d += 9) {
+        const x = this.player.x + cos * d;
+        const z = this.player.z + sin * d;
+        const top = this.topAt(x, z);
+        if (!Number.isFinite(top) || top <= 0) continue;
+        // Just under the parapet, so the line reads as caught on the edge.
+        const y = top - 7;
+        if (anchorUsable(this.player.x, this.player.y, this.player.z, x, y, z, rise)) {
+          const score = d + Math.abs(off) * 260;
+          if (score < bestScore) {
+            bestScore = score;
+            best = { x, y, z };
+          }
+        }
+        break;
+      }
+    }
+    return best;
+  }
+
+  private fireWeb(): void {
+    const a = this.findAnchor();
+    if (!a) {
+      this.webCooldown = 0.35;
+      this.flash("NO ANCHOR  ·  aim at something tall");
+      return;
+    }
+    this.web = { x: a.x, y: a.y, z: a.z, length: initialLength(this.player.x, this.player.y, this.player.z, a.x, a.y, a.z) };
+    this.swingT = 0;
+    if (this.player.grounded) {
+      // Stepping off into the first swing needs a little lift or the line just
+      // drags you along the pavement.
+      this.flight.vy = Math.max(this.flight.vy, 110);
+      this.player.grounded = false;
+      this.player.y = Math.max(this.player.y, 2);
+    }
+    this.cling = null;
+    this.audio.thwip();
+    this.showSplat(a);
+  }
+
+  private releaseWeb(): void {
+    if (!this.web) return;
+    const s = releaseSwing({ x: this.player.x, y: this.player.y, z: this.player.z, ...this.flight });
+    this.flight = { vx: s.vx, vy: s.vy, vz: s.vz };
+    this.web = null;
+    this.swingT = 0;
+    this.webCooldown = 0.12;
+    this.webSplat?.setEnabled(false);
+  }
+
+  /** A yank straight to whatever you are looking at: the way onto a roof. */
+  private zipToAnchor(): void {
+    if (this.interiorMode || this.player.vehicleId) return;
+    const a = this.findAnchor(24);
+    if (!a) {
+      this.flash("NO ANCHOR  ·  aim at something tall");
+      return;
+    }
+    const v = zipVelocity(this.player.x, this.player.y, this.player.z, a.x, a.y, a.z);
+    this.flight = v;
+    this.web = null;
+    this.cling = null;
+    this.player.grounded = false;
+    this.player.y = Math.max(this.player.y, 2);
+    this.audio.thwip();
+    this.showSplat(a);
+    this.pulse(0.6);
+  }
+
+  /**
+   * One step of everything that happens off the pavement. Returns true when
+   * the walking code should stand down for this step.
+   */
+  private updateTraversal(dt: number, axis: { x: number; y: number; sprint: boolean }): boolean {
+    if (this.interiorMode) {
+      this.dropLine();
+      this.player.y = 0;
+      this.player.grounded = true;
+      return false;
+    }
+    if (this.webCooldown > 0) this.webCooldown -= dt;
+    this.anchorPreview = this.findAnchor();
+
+    if (this.input.consumeZip()) this.zipToAnchor();
+    const wantWeb = this.input.webbing();
+    if (wantWeb && !this.web && this.webCooldown <= 0) this.fireWeb();
+    else if (!wantWeb && this.web) this.releaseWeb();
+
+    const jump = this.input.keys.has("Space");
+    if (jump && this.cling) {
+      const away = this.cling.dir + Math.PI;
+      this.flight = { vx: Math.cos(away) * SPIDER_CONFIG.wallJump, vy: SPIDER_CONFIG.wallJump, vz: Math.sin(away) * SPIDER_CONFIG.wallJump };
+      this.cling = null;
+      this.player.grounded = false;
+      this.audio.foot(true, "concrete");
+    } else if (jump && this.player.grounded && !this.web) {
+      this.player.grounded = false;
+      this.flight.vy = PLAYER_CONFIG.jumpVelocity * 10;
+    }
+
+    if (this.player.grounded && !this.web && !this.cling) {
+      this.flight.vy = 0;
+      this.airT = 0;
+      this.swingT = 0;
+      // Walked off a ledge: no jump, no web, just air under your feet.
+      const support = this.supportY(this.player.x, this.player.z, this.player.y);
+      if (this.player.y - support > LEDGE_STEP) this.player.grounded = false;
+      else this.player.y = support;
+      this.drawLine();
+      return this.player.grounded ? false : true;
+    }
+
+    if (this.cling) {
+      this.updateCling(dt, axis);
+      this.drawLine();
+      return true;
+    }
+
+    const state: SwingState = { x: this.player.x, y: this.player.y, z: this.player.z, ...this.flight };
+    const input = { lean: -axis.y, steer: axis.x, reel: axis.sprint };
+    let next: SwingState;
+    if (this.web) {
+      const out = stepSwing(state, this.web, input, this.player.heading, dt);
+      next = out.state;
+      this.web = out.line;
+      this.swingT += dt;
+    } else {
+      next = stepAirborne(state, input, this.player.heading, dt);
+    }
+    this.airT += dt;
+    this.settleFlight(next);
+    this.drawLine();
+    return true;
+  }
+
+  /** Move to where the step wants to go, minus whatever the city is in the way of. */
+  private settleFlight(next: SwingState): void {
+    const y = Math.max(0, next.y);
+    let hitDir: number | null = null;
+    if (!this.airSolid(next.x, this.player.z, y)) this.player.x = next.x;
+    else {
+      hitDir = next.vx > 0 ? 0 : Math.PI;
+      next.vx = 0;
+    }
+    if (!this.airSolid(this.player.x, next.z, y)) this.player.z = next.z;
+    else {
+      hitDir = next.vz > 0 ? Math.PI / 2 : -Math.PI / 2;
+      next.vz = 0;
+    }
+
+    const support = this.supportY(this.player.x, this.player.z, Math.max(this.player.y, y));
+    if (next.vy <= 0 && y <= support + 1) {
+      this.land(support, next);
+      return;
+    }
+    this.player.y = y;
+    this.flight = { vx: next.vx, vy: next.vy, vz: next.vz };
+    // Face where you are going; a swinger who keeps staring north looks broken.
+    if (Math.hypot(next.vx, next.vz) > 30) this.player.heading = Math.atan2(next.vz, next.vx);
+    // Hit a wall with air under you: stick to it. That is the difference
+    // between a building being an obstacle and a building being a route.
+    if (hitDir !== null && !this.web && this.player.y > 14) {
+      this.cling = { dir: hitDir, t: 0 };
+      this.flight = { vx: 0, vy: 0, vz: 0 };
+      this.audio.foot(false, "concrete");
+    }
+  }
+
+  private land(support: number, state: SwingState): void {
+    const drop = Math.abs(state.vy);
+    this.player.y = support;
+    this.player.grounded = true;
+    this.player.vy = 0;
+    this.flight = { vx: 0, vy: 0, vz: 0 };
+    this.cling = null;
+    if (this.web) this.releaseWeb();
+    if (this.airT > 0.4) {
+      this.audio.foot(true, "concrete");
+      if (drop > 260) {
+        this.pulse(Math.min(1.4, drop / 420));
+        for (let i = 0; i < 4; i++) this.spawnPuff(this.player.x, support + 3, this.player.z, "#c8c0b0");
+      }
+    }
+    this.airT = 0;
+  }
+
+  /** Hanging on a wall: climb it, sidle along it, or top out onto the roof. */
+  private updateCling(dt: number, axis: { x: number; y: number; sprint: boolean }): void {
+    if (!this.cling) return;
+    this.cling.t += dt;
+    const climb = SPIDER_CONFIG.climbSpeed * (axis.sprint ? 1.5 : 1);
+    this.player.y = Math.max(0, this.player.y + -axis.y * climb * dt);
+    const side = this.cling.dir + Math.PI / 2;
+    const sx = this.player.x + Math.cos(side) * axis.x * climb * dt;
+    const sz = this.player.z + Math.sin(side) * axis.x * climb * dt;
+    if (!this.airSolid(sx, sz, this.player.y)) {
+      this.player.x = sx;
+      this.player.z = sz;
+    }
+    this.player.heading = this.cling.dir;
+
+    // Topped out: pull yourself over the parapet instead of hovering at it.
+    const fx = this.player.x + Math.cos(this.cling.dir) * (PLAYER_CONFIG.radius + 10);
+    const fz = this.player.z + Math.sin(this.cling.dir) * (PLAYER_CONFIG.radius + 10);
+    const top = this.topAt(fx, fz);
+    if (Number.isFinite(top) && top > 0 && this.player.y >= top - LEDGE_STEP) {
+      if (!this.airSolid(fx, fz, top + 2)) {
+        this.player.x = fx;
+        this.player.z = fz;
+        this.player.y = top;
+        this.player.grounded = true;
+        this.cling = null;
+        this.audio.foot(true, "concrete");
+        return;
+      }
+    }
+    if (this.player.y <= 0.5) {
+      this.player.y = 0;
+      this.player.grounded = true;
+      this.cling = null;
+    }
+    // Sidled off the end of the wall: nothing left to hold.
+    if (!this.airSolid(fx, fz, this.player.y) && this.player.y > 4) {
+      this.cling = null;
+      this.player.grounded = false;
+    }
+  }
+
+  /** The rope itself, plus the splat where it caught. */
+  private drawLine(): void {
+    if (!this.webMesh) {
+      const m = MeshBuilder.CreateBox("web-line", { width: 1.6, height: 1.6, depth: 1 }, this.scene);
+      m.material = this.material("#ffffff", 0.55);
+      m.isPickable = false;
+      m.applyFog = false;
+      this.webMesh = m;
+    }
+    const line = this.web;
+    if (!line) {
+      this.webMesh.setEnabled(false);
+      return;
+    }
+    const hand = new Vector3(this.player.x, this.player.y + 26, this.player.z);
+    const anchor = new Vector3(line.x, line.y, line.z);
+    const span = Vector3.Distance(hand, anchor);
+    this.webMesh.setEnabled(true);
+    this.webMesh.position = Vector3.Center(hand, anchor);
+    this.webMesh.lookAt(anchor);
+    this.webMesh.scaling.z = span;
+  }
+
+  private showSplat(a: { x: number; y: number; z: number }): void {
+    if (!this.webSplat) {
+      const m = MeshBuilder.CreateBox("web-splat", { width: 9, height: 9, depth: 9 }, this.scene);
+      m.material = this.material("#ffffff", 0.5);
+      m.isPickable = false;
+      m.applyFog = false;
+      this.webSplat = m;
+    }
+    this.webSplat.setEnabled(true);
+    this.webSplat.position.set(a.x, a.y, a.z);
+  }
+
+  /** Drop everything: used by interiors, arrest and death. */
+  private dropLine(): void {
+    this.web = null;
+    this.cling = null;
+    this.flight = { vx: 0, vy: 0, vz: 0 };
+    this.swingT = 0;
+    this.airT = 0;
+    this.anchorPreview = null;
+    this.webMesh?.setEnabled(false);
+    this.webSplat?.setEnabled(false);
   }
 
   private armed(): boolean {
@@ -2326,7 +2743,14 @@ export class ViceblockRuntime3D {
   }
 
   private separateFromBodies(): void {
+    // Nobody on the pavement can shove a player who is thirty units above it,
+    // and hiding them would make the crowd blink out as you swing over.
+    const overhead = this.player.y > 24;
     for (const a of [...this.actors, ...this.cops]) {
+      if (overhead) {
+        a.mesh.setEnabled(true);
+        continue;
+      }
       // A cop has to be able to get his hands on you, or a foot chase has no
       // ending: held at a civilian's arm's length he could never make the
       // arrest and simply walked behind the player forever.
@@ -2383,7 +2807,10 @@ export class ViceblockRuntime3D {
     let last = min;
     for (let d = min; d <= want; d += 12) {
       const p = this.cameraPlace(d);
-      if (blocked(this.world, p.x, p.z, 10)) return last;
+      // Height-aware: over the rooftops the boom has clear air behind it, and
+      // the flat 2D test used to jam it against buildings the player had
+      // already climbed past.
+      if (this.airSolid(p.x, p.z, p.y - 6, 10)) return last;
       last = d;
     }
     return want;
@@ -2398,10 +2825,14 @@ export class ViceblockRuntime3D {
     // The shoulder offset closes up as the view goes overhead, where an
     // off-centre camera just looks like a mistake.
     const side = 34 * Math.max(0, 1 - Math.max(0, pitch - 0.8) / 0.65);
+    // Altitude is part of where the camera goes now. Tied to the ground, the
+    // boom stayed in the street while the player was three hundred units up a
+    // tower, filming the underside of their own feet.
+    const air = this.interiorMode ? 0 : this.player.y;
     const place = {
       x: this.player.x + backX + Math.cos(yaw) * side,
       z: this.player.z + backZ - Math.sin(yaw) * side,
-      y: Math.max(elev + CAMERA.minHeight, elev + 26 + Math.sin(pitch) * dist),
+      y: Math.max(elev + air + CAMERA.minHeight, elev + air + 26 + Math.sin(pitch) * dist),
     };
     const room = this.activeRoom();
     if (room) {
@@ -2491,7 +2922,10 @@ export class ViceblockRuntime3D {
       ? Math.max(1, maxSpeedFor({ acceleration: def.acceleration, topSpeed: def.topSpeed, handling: def.handling, braking: def.braking, grip: 1, power: 1 }))
       : 1;
     // Sighting up pulls the camera in over the shoulder.
-    let dist = (car ? speedCameraDistance(165, speed, topSpeed) : 175) * this.camZoom * (this.aiming ? AIM_CONFIG.zoomScale : 1);
+    // A swing reads as fast only if the lens gives it room, so the boom opens
+    // out with airspeed the same way it does with a car.
+    const air = this.player.grounded || this.player.vehicleId ? 0 : Math.min(150, Math.hypot(this.flight.vx, this.flight.vz) * 0.32);
+    let dist = (car ? speedCameraDistance(165, speed, topSpeed) : 175 + air) * this.camZoom * (this.aiming ? AIM_CONFIG.zoomScale : 1);
     // The lens opens as you wind the car out, so speed reads on screen, and
     // closes down over the sights, which is what selling "aiming" takes when
     // the shoulder camera has a wall behind it and cannot pull in.
@@ -2532,7 +2966,7 @@ export class ViceblockRuntime3D {
     const desired = new Vector3(p.x, p.y, p.z);
     this.camera.position = Vector3.Lerp(this.camera.position, desired, 1 - Math.pow(0.00008, dt));
     this.camera.setTarget(this.cameraTarget(elev));
-    const camD = Vector3.Distance(this.camera.position, new Vector3(this.player.x, elev + 20, this.player.z));
+    const camD = Vector3.Distance(this.camera.position, new Vector3(this.player.x, elev + this.player.y + 20, this.player.z));
     this.playerMesh.setEnabled(!this.player.vehicleId && camD > 26);
   }
 
@@ -3254,6 +3688,9 @@ export class ViceblockRuntime3D {
     for (const c of this.cops) c.mesh.dispose();
     this.cops = [];
     this.copGap = Infinity;
+    this.player.y = 0;
+    this.player.grounded = true;
+    this.dropLine();
     // Contraband is confiscated but you keep your cash minus processing.
     this.loot = [];
     this.player.vehicleId = null;
@@ -3860,6 +4297,9 @@ export class ViceblockRuntime3D {
 
   private enterCar(car: CarEntity): void {
     this.player.vehicleId = car.rt.id;
+    this.player.y = 0;
+    this.player.grounded = true;
+    this.dropLine();
     if (!car.rt.stolen) {
       car.rt.stolen = true;
       this.reportCrime("car-theft");
@@ -4043,6 +4483,9 @@ export class ViceblockRuntime3D {
     this.player.armor = 0;
     this.player.x = this.world.spawnX;
     this.player.z = this.world.spawnY;
+    this.player.y = 0;
+    this.player.grounded = true;
+    this.dropLine();
     this.player.vehicleId = null;
     this.player.cash = Math.max(0, this.player.cash - PLAYER_CONFIG.respawnMedicalFee);
     this.player.crate = false;
@@ -4472,6 +4915,17 @@ export class ViceblockRuntime3D {
       speed: drive ? speedoKmh(Math.hypot(drive.rt.vx, drive.rt.vy)) : 0,
       drifting: this.driftTime > 0,
       failure: this.failure,
+      web: this.web
+        ? "swing"
+        : this.cling
+          ? "wall"
+          : !this.player.grounded && !this.player.vehicleId
+            ? "air"
+            : this.anchorPreview && !this.player.vehicleId
+              ? "aimed"
+              : "ready",
+      altitude: this.player.vehicleId ? 0 : Math.round(this.player.y),
+      airSpeed: this.player.grounded || this.player.vehicleId ? 0 : speedoKmh(Math.hypot(this.flight.vx, this.flight.vz)),
     };
   }
 

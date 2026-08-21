@@ -29,6 +29,13 @@ export class GameInput {
   reloadQueued = false;
   /** Right mouse / left trigger: aim down the sights. */
   aim = false;
+  /** Held: shoot a web at the skyline and hang off it. */
+  web = false;
+  /** Tapped: yank yourself to whatever you are looking at. */
+  zipQueued = false;
+  /** Held on a touchscreen, where there is no Q key to hold. */
+  private touchWeb = false;
+  private padWeb = false;
   private padFire = false;
   private padAim = false;
   private padButtons = new Set<number>();
@@ -49,6 +56,7 @@ export class GameInput {
       if (e.code === "KeyR") this.reloadQueued = true;
       if (e.code === "KeyB") this.radioQueued = true;
       if (e.code === "KeyH") this.assistQueued = true;
+      if (e.code === "KeyC") this.zipQueued = true;
       if (e.code === "KeyG") this.surrenderQueued = true;
       if (e.code === "KeyV") this.resetViewQueued = true;
       if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"].includes(e.code)) e.preventDefault();
@@ -129,6 +137,8 @@ export class GameInput {
     this.keys.clear();
     this.fire = false;
     this.aim = false;
+    this.web = false;
+    this.touchWeb = false;
     this.stick = releaseStick(this.stick);
     this.aimStick = releaseStick(this.aimStick);
   }
@@ -171,6 +181,9 @@ export class GameInput {
     if (edge(2)) this.reloadQueued = true;
     if (edge(3)) this.phoneQueued = true;
     if (edge(5)) this.radioQueued = true;
+    // LB swings, dpad-up zips: the triggers are already spoken for by the gun.
+    this.padWeb = Boolean(pad.buttons[4]?.pressed);
+    if (edge(12)) this.zipQueued = true;
     if (Math.hypot(x, y) < 0.02) return null;
     return { x, y, sprint: Math.hypot(x, y) > 0.85 };
   }
@@ -201,6 +214,21 @@ export class GameInput {
 
   firing(): boolean {
     return this.fire || this.padFire;
+  }
+
+  /** Q, the touch WEB pad, or LB: hold to stay on the line. */
+  webbing(): boolean {
+    return this.web || this.touchWeb || this.padWeb || this.keys.has("KeyQ");
+  }
+
+  setTouchWeb(on: boolean): void {
+    this.touchWeb = on;
+  }
+
+  consumeZip(): boolean {
+    if (!this.zipQueued) return false;
+    this.zipQueued = false;
+    return true;
   }
 
   aiming(): boolean {

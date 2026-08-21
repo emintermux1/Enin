@@ -14,4 +14,5 @@ export * from "./thrill";
 export * from "./driving";
 export * from "./collision";
 export * from "./pursuit";
+export * from "./spider";
 export { sanitizeText, looksLikeMarkup } from "@viceblock/shared";
