@@ -108,7 +108,7 @@ export function Chat({
         <div className="choices">
           {choices.map((choice) => (
             <button
-              key={choice.label}
+              key={`${choice.label}-${choice.text}`}
               type="button"
               disabled={waiting}
               onClick={() => onSend(choice.text)}

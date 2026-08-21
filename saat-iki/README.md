@@ -6,7 +6,7 @@ Görsel seks sahnesi, porno model veya seks sesi yok.
 
 ## Canlı
 
-https://restless-moon-4249.zerodeploy.app
+https://dry-smoke-7366.zerodeploy.app
 
 Geçici yayın (yaklaşık 72 saat). Yerelde:
 

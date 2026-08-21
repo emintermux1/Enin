@@ -1,4 +1,4 @@
-import type { Message } from "../types";
+import type { Choice, Message } from "../types";
 
 export type Act =
   | "complaint"
@@ -25,7 +25,8 @@ const ACT_PATTERNS: Array<{ act: Act; pattern: RegExp }> = [
   },
   {
     act: "sex",
-    pattern: /sik|sok|içine|icine|içinde|icinde|sikiş|sikis|boşal|bosal|sert|göt|got/i,
+    pattern:
+      /sik|sok|içine|icine|içinde|icinde|üstüm|ustum|üstün|ustun|arkadan|sikiş|sikis|boşal|bosal|sert|göt|got/i,
   },
   {
     act: "kiss",
@@ -109,6 +110,133 @@ function unusedPair(pairs: string[][], history: Message[]): string[] {
   const used = new Set(history.filter((item) => item.role === "them").map((item) => item.text));
   const fresh = pairs.find((pair) => pair.every((line) => !used.has(line)));
   return fresh ?? pairs[pairs.length - 1] ?? ["gel"];
+}
+
+const START_CHOICES: Choice[] = [
+  { label: "Öp", text: "öp beni" },
+  { label: "Yala", text: "amini yiyim" },
+  { label: "Ağzına al", text: "ağzına al" },
+];
+
+const TRACK: Record<Exclude<Act, "ask" | "complaint">, Choice[][]> = {
+  oralHer: [
+    [
+      { label: "Daha derin", text: "daha derin yala durma" },
+      { label: "Parmak da", text: "parmak da sok yala" },
+      { label: "Ağzına al", text: "ağzına al" },
+    ],
+    [
+      { label: "Yüzüne otur", text: "yüzüme otur yala" },
+      { label: "Boşal", text: "boşalana kadar yala" },
+      { label: "Sok artık", text: "içine sok" },
+    ],
+    [
+      { label: "Çekme", text: "dilini çekme boşalıcam" },
+      { label: "Sok", text: "içine sok" },
+      { label: "Ağzına al", text: "ağzına al" },
+    ],
+    [
+      { label: "Sok", text: "içine sok sert" },
+      { label: "Bir daha yala", text: "bir daha yala" },
+      { label: "Üstüne geç", text: "üstüme geç" },
+    ],
+  ],
+  oralHim: [
+    [
+      { label: "Daha derine", text: "daha derine al" },
+      { label: "Saçını tut", text: "saçını tut boğazına kadar" },
+      { label: "Yala beni", text: "amini yiyim" },
+    ],
+    [
+      { label: "Boğazına", text: "boğazına kadar al" },
+      { label: "Yut", text: "ağzına al yut" },
+      { label: "Sok", text: "içine sok" },
+    ],
+    [
+      { label: "Yut", text: "yut" },
+      { label: "İçine gir", text: "içine sok" },
+      { label: "Tekrar al", text: "ağzına al durma" },
+    ],
+    [
+      { label: "Sok", text: "içine sok" },
+      { label: "Üstüne geç", text: "üstüme geç" },
+      { label: "Bir daha al", text: "ağzına al bir daha" },
+    ],
+  ],
+  sex: [
+    [
+      { label: "Daha sert", text: "daha sert sik çıkarma" },
+      { label: "Üstüne geç", text: "üstüme geç" },
+      { label: "Ağzına al", text: "ağzına al" },
+    ],
+    [
+      { label: "Üstüne geç", text: "üstüme geç al" },
+      { label: "Arkadan", text: "arkadan sik" },
+      { label: "İçinde kal", text: "içinde kal çıkarma" },
+    ],
+    [
+      { label: "Arkadan", text: "arkadan çevir sik" },
+      { label: "Saçını çek", text: "saçını çek vur" },
+      { label: "Boşal", text: "içinde boşal" },
+    ],
+    [
+      { label: "Boşal içimde", text: "içinde boşal" },
+      { label: "Bir daha", text: "bir daha sik" },
+      { label: "Ağzına al", text: "ağzına al" },
+    ],
+    [
+      { label: "Bir daha", text: "bir daha içine sok" },
+      { label: "Yala", text: "amini yiyim" },
+      { label: "Ağzına al", text: "ağzına al" },
+    ],
+  ],
+  kiss: [
+    [
+      { label: "Yala", text: "amini yiyim" },
+      { label: "Ağzına al", text: "ağzına al" },
+      { label: "Boynunu ısır", text: "boynunu ısır" },
+    ],
+    [
+      { label: "Yala", text: "amini yiyim" },
+      { label: "Sok", text: "içine sok" },
+      { label: "Ağzına al", text: "ağzına al" },
+    ],
+  ],
+  body: [
+    [
+      { label: "Yala", text: "amini yiyim" },
+      { label: "Sık", text: "memelerini sık" },
+      { label: "Aşağı in", text: "aşağı in yala" },
+    ],
+    [
+      { label: "Yala", text: "amini yiyim" },
+      { label: "Sok", text: "içine sok" },
+      { label: "Ağzına al", text: "ağzına al" },
+    ],
+  ],
+  talk: [
+    [
+      { label: "Yala", text: "amini yiyim" },
+      { label: "Ağzına al", text: "ağzına al" },
+      { label: "Sok", text: "içine sok" },
+    ],
+  ],
+};
+
+export function openingChoices(): Choice[] {
+  return START_CHOICES;
+}
+
+export function nextChoices(input: string, history: Message[]): Choice[] {
+  const act = detectAct(input);
+  const key: Exclude<Act, "ask" | "complaint"> =
+    act === "ask" || act === "complaint" ? "talk" : act;
+  const rows = TRACK[key];
+  const count = sceneCount(history, act === "ask" || act === "complaint" ? "talk" : act);
+  const row = rows[Math.min(rows.length - 1, Math.max(0, count - 1))] ?? START_CHOICES;
+  const last = input.trim().toLocaleLowerCase("tr-TR");
+  const fresh = row.filter((item) => item.text.toLocaleLowerCase("tr-TR") !== last);
+  return fresh.length > 0 ? fresh : row;
 }
 
 export function playScene(input: string, history: Message[]): string[] {
