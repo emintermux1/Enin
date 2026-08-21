@@ -415,7 +415,8 @@ export class ViceblockRuntime3D {
   private crackdown = false;
   private storm = false;
   private eventCarIds = new Set<string>();
-  contract: { def: ContractDef; stage: "pickup" | "drop" } | null = null;
+  /** `left` counts down only for templates that set a `timeLimit`; 0 means untimed. */
+  contract: { def: ContractDef; stage: "pickup" | "drop"; left: number } | null = null;
   private surrenderT = 0;
   /** Distance to the closest officer still working the case, last tick. */
   private copGap = Infinity;
@@ -2374,7 +2375,7 @@ export class ViceblockRuntime3D {
     this.updateActors(dt);
     this.updateCops(dt);
     this.lastShot += dt;
-    this.updateMissions();
+    this.updateMissions(dt);
     this.updateCamera(dt);
     this.updateRemotes();
 
@@ -4916,21 +4917,33 @@ export class ViceblockRuntime3D {
 
   /** Called by the shell after the server issues a contract. */
   startContract(def: ContractDef): void {
-    this.contract = { def, stage: "pickup" };
+    this.contract = { def, stage: "pickup", left: def.timeLimit };
     this.say("Burner phone", `${def.title}: ${def.brief}`);
     this.flash(`CONTRACT  ·  ${def.title}  ·  $${def.reward}`);
   }
 
-  private updateContract(): void {
+  private updateContract(dt: number): void {
     if (!this.contract) return;
     const { def, stage } = this.contract;
+    // A timed job that never ran its clock down was just an untimed job with a
+    // number printed on the brief.
+    if (def.timeLimit > 0) {
+      this.contract.left -= dt;
+      if (this.contract.left <= 0) {
+        this.contract = null;
+        this.audio.uiClick();
+        this.flash(`CONTRACT LOST  ·  ${def.title}  ·  they stopped waiting`);
+        this.say("Burner phone", "Too slow. Package went to somebody who owns a watch.");
+        return;
+      }
+    }
     const targetId = stage === "pickup" ? def.pickupLandmark : def.dropLandmark;
     const mark = this.world.landmarks.find((l) => l.id === targetId);
     if (!mark) return;
     const d = Math.hypot(this.player.x - (mark.doorX + 0.5) * TILE, this.player.z - (mark.doorY + 0.5) * TILE);
     if (d > 50) return;
     if (stage === "pickup") {
-      this.contract = { def, stage: "drop" };
+      this.contract = { def, stage: "drop", left: this.contract.left };
       this.audio.uiClick();
       this.flash(`PICKED UP  ·  now get it to the drop`);
     } else {
@@ -4947,8 +4960,8 @@ export class ViceblockRuntime3D {
     }
   }
 
-  private updateMissions(): void {
-    this.updateContract();
+  private updateMissions(dt: number): void {
+    this.updateContract(dt);
     const m = nextMission(this.completed);
     if (m && m.id !== this.mission.id && this.completed.includes(this.mission.id)) {
       this.mission = { id: m.id, step: 0, raceHits: 0 };
@@ -5208,6 +5221,7 @@ export class ViceblockRuntime3D {
       const targetId = this.contract.stage === "pickup" ? this.contract.def.pickupLandmark : this.contract.def.dropLandmark;
       const name = this.world.landmarks.find((l) => l.id === targetId)?.name ?? targetId;
       obj = `CONTRACT  ·  ${this.contract.stage === "pickup" ? "pickup" : "drop"}: ${name}`;
+      if (this.contract.def.timeLimit > 0) obj += `  ·  ${Math.max(0, Math.ceil(this.contract.left))}s`;
     }
     if (this.race) obj = `RACE  ·  ${this.race.checkpoint}/${RACE_CPS.length}  ·  ${this.race.t.toFixed(1)}s`;
     const wp = this.waypointPos();
