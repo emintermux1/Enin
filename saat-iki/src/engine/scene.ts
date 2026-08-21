@@ -43,54 +43,53 @@ const ACT_PATTERNS: Array<{ act: Act; pattern: RegExp }> = [
   },
 ];
 
-/** WhatsApp-style lines, based on how people actually sext in TR: short, spoken, no novel. */
 const SCENES: Record<Exclude<Act, "ask" | "complaint">, string[][]> = {
   oralHer: [
-    ["yala o zaman", "bacaklarımı açtım. ıslandım zaten"],
-    ["dilini koy kaçırma", "parmak da sok. ikisini birden istiyom"],
-    ["yüzüme oturtcam seni az daha", "durma ya offf"],
-    ["boşalıcam nerdeyse", "çekme dilini"],
+    ["offf dilin değdi ya", "bacaklarım titriyo", "ıslandım haberin yok durma"],
+    ["mm orasııı", "ellerim saçında sıkıyom", "daha böyle yap sesim çıkıyo"],
+    ["yüzün orda iyi duruyo", "kalçam oynuyo durduramıycam", "offf çekme"],
+    ["boşalıcam nerdeyse", "bacaklarım kilitlendi", "biraz daha lütfen"],
   ],
   oralHim: [
-    ["alıyom", "dizlerimin üstündeyim bakıyorum sana"],
-    ["daha derine çekiyom", "tükürük aktı salmıycam"],
-    ["saçımı tut", "boğazıma kadar ver"],
-    ["yutcam söylecen mi", "hâlâ ağzımdayım kalkmıycam"],
+    ["mm ağzıma aldım", "bakıyom sana çıkarmıyom", "sıcak geldi offf"],
+    ["daha derine kaçtı", "gözlerim doldu salmıycam", "boğazım zonkluyo"],
+    ["tükürük aktı farketmez", "ellerim de çalışıyo", "senin sesini duymak istiyom"],
+    ["hâlâ ağzımdayım", "yutcam gibi oldum", "kalkmıycam senden"],
   ],
   sex: [
-    ["sok", "ıslağım zaten kaycak. içime gir"],
-    ["içindesin", "belimi tut daha sert çıkarma"],
-    ["üstüne geçtim", "dibine kadar alıyom seni"],
-    ["arkadan istiyosan çevir", "saçımı çek vur"],
-    ["boşalma içimde", "sıkıyom bırakmıycam"],
+    ["içime girdi offf", "kaydı zaten ıslağım", "biraz öyle kal"],
+    ["her vuruşta sesim çıkıyo", "belimi tut", "daha hızlı yapamıyorum kendimi"],
+    ["üstündeyim titriyom", "dibine oturdum", "ellerin göğsümde olsun"],
+    ["arkamdan tuttun ya", "yüzümü yastığa gömdüm", "daha vur offf"],
+    ["içimde boşalıcam az kaldı", "sıkıyom seni", "çıkarma lütfen"],
   ],
   kiss: [
-    ["gel öpeyim", "dudağını çekiyom dilini ver"],
-    ["boynuna indim", "dişledim iz bırakıyom"],
+    ["gel öpeyim bakim", "dudağın tatlı ya", "boynuna kayıcam şimdi"],
+    ["dişledim özür dilemicem", "kulağına nefesimi verdim", "ellerin belimde kalsın"],
   ],
   body: [
-    ["memelerimi sık", "askı kaydı zaten"],
-    ["kalçamı tut çek", "aşağı in ıslaklığımı bul"],
+    ["memelerim keskinleşti senin yüzünden", "askı zaten durmuyodu", "ellerin orda iyi durur"],
+    ["kalçamı sıktın mı aklım gidiyo", "aşağı inersen söylemem", "ıslaklığımı sen bul"],
   ],
   talk: [
-    ["yatağımdayım çıplağım", "ellerim kendi üstümde senin yüzünden"],
-    ["yanımda olsan şuan ne yapacağını biliyon", "gel buraya"],
-    ["çok azgınım ya", "yazma da yap"],
+    ["yatağımdayım", "ellerim kayıyo senin yüzünden", "yanımda olsan ne yapardım biliyon mu"],
+    ["çok azgınım ya", "aklım sende kaldı", "gel burda ol biraz"],
+    ["çıplağım haberin yok", "nefesim kesildi seni düşününce", "yazma da durma"],
   ],
 };
 
 const COMPLAINTS: string[][] = [
-  ["tmm susuyom", "ağzıma alıyom şuan. saçımı tut"],
-  ["yapay konuşmicam", "dilini koy ya da sok. ikisinden biri"],
+  ["tmm susuyom", "ağzımdayım şuan", "offf bakıyom sana"],
+  ["yapay konuşmicam", "ellerim titriyo zaten", "gel işe bak"],
 ];
 
 const ANSWERS: Array<{ pattern: RegExp; lines: string[] }> = [
-  { pattern: /ne giy|giyiyon|üzerinde/, lines: ["üstümde bişi yok", "çarşaf belimde o kadar"] },
-  { pattern: /neredesin|nerdesin/, lines: ["yataktayım", "yanım boş senin yerin"] },
-  { pattern: /nasılsın|napıyon|napion|naber/, lines: ["azgınım", "sen napıyon elin nerde"] },
-  { pattern: /adın ne|adin ne|kimsin/, lines: ["leyla", "27. yataktayım yaz ne yapıcaz"] },
-  { pattern: /kaç yaş|kac yas/, lines: ["27", "yeter yaş konuşmak"] },
-  { pattern: /ıslak|islak|azgın|azgin/, lines: ["ıslandım ya", "parmaklarım kayıyo kontrol et"] },
+  { pattern: /ne giy|giyiyon|üzerinde/, lines: ["üstümde bişi yok", "çarşaf belimde", "üşümüyo vücudum senin yüzünden"] },
+  { pattern: /neredesin|nerdesin/, lines: ["yataktayım", "yanım boş", "senin kokun olsa şuan"] },
+  { pattern: /nasılsın|napıyon|napion|naber/, lines: ["azgınım", "ellerim kendi üstümde", "sen napıyon söyleme de göster"] },
+  { pattern: /adın ne|adin ne|kimsin/, lines: ["leyla", "27", "yatağımdayım seninle kalıcam"] },
+  { pattern: /kaç yaş|kac yas/, lines: ["27", "yeter yaş", "ellerin konuşsun"] },
+  { pattern: /ıslak|islak|azgın|azgin/, lines: ["ıslandım ya", "parmaklarım kayıyo", "kontrol etmezsen ben ederim"] },
 ];
 
 export function detectAct(input: string): Act {
@@ -121,67 +120,67 @@ const START_CHOICES: Choice[] = [
 const TRACK: Record<Exclude<Act, "ask" | "complaint">, Choice[][]> = {
   oralHer: [
     [
-      { label: "Daha derin", text: "daha derin yala durma" },
-      { label: "Parmak da", text: "parmak da sok yala" },
+      { label: "Daha böyle", text: "daha böyle yala durma" },
+      { label: "Parmak da", text: "parmak da sok" },
       { label: "Ağzına al", text: "ağzına al" },
     ],
     [
-      { label: "Yüzüne otur", text: "yüzüme otur yala" },
+      { label: "Durma", text: "durma yala" },
       { label: "Boşal", text: "boşalana kadar yala" },
-      { label: "Sok artık", text: "içine sok" },
+      { label: "Sok", text: "içine sok" },
     ],
     [
-      { label: "Çekme", text: "dilini çekme boşalıcam" },
+      { label: "Çekme", text: "dilini çekme" },
       { label: "Sok", text: "içine sok" },
       { label: "Ağzına al", text: "ağzına al" },
     ],
     [
-      { label: "Sok", text: "içine sok sert" },
-      { label: "Bir daha yala", text: "bir daha yala" },
+      { label: "Sok", text: "içine sok" },
+      { label: "Bir daha", text: "bir daha yala" },
       { label: "Üstüne geç", text: "üstüme geç" },
     ],
   ],
   oralHim: [
     [
       { label: "Daha derine", text: "daha derine al" },
-      { label: "Saçını tut", text: "saçını tut boğazına kadar" },
+      { label: "Saçını tut", text: "saçını tut" },
       { label: "Yala beni", text: "amini yiyim" },
     ],
     [
       { label: "Boğazına", text: "boğazına kadar al" },
-      { label: "Yut", text: "ağzına al yut" },
+      { label: "Yut", text: "yut" },
       { label: "Sok", text: "içine sok" },
     ],
     [
       { label: "Yut", text: "yut" },
       { label: "İçine gir", text: "içine sok" },
-      { label: "Tekrar al", text: "ağzına al durma" },
+      { label: "Durma", text: "ağzına al durma" },
     ],
     [
       { label: "Sok", text: "içine sok" },
       { label: "Üstüne geç", text: "üstüme geç" },
-      { label: "Bir daha al", text: "ağzına al bir daha" },
+      { label: "Bir daha", text: "ağzına al bir daha" },
     ],
   ],
   sex: [
     [
-      { label: "Daha sert", text: "daha sert sik çıkarma" },
+      { label: "Daha hızlı", text: "daha hızlı" },
       { label: "Üstüne geç", text: "üstüme geç" },
       { label: "Ağzına al", text: "ağzına al" },
     ],
     [
-      { label: "Üstüne geç", text: "üstüme geç al" },
-      { label: "Arkadan", text: "arkadan sik" },
-      { label: "İçinde kal", text: "içinde kal çıkarma" },
+      { label: "Üstüne geç", text: "üstüme geç" },
+      { label: "Arkadan", text: "arkadan" },
+      { label: "İçinde kal", text: "içinde kal" },
     ],
     [
-      { label: "Arkadan", text: "arkadan çevir sik" },
-      { label: "Saçını çek", text: "saçını çek vur" },
+      { label: "Arkadan", text: "arkadan çevir" },
+      { label: "Saçını çek", text: "saçını çek" },
       { label: "Boşal", text: "içinde boşal" },
     ],
     [
-      { label: "Boşal içimde", text: "içinde boşal" },
-      { label: "Bir daha", text: "bir daha sik" },
+      { label: "Boşal", text: "içinde boşal" },
+      { label: "Bir daha", text: "bir daha" },
       { label: "Ağzına al", text: "ağzına al" },
     ],
     [
@@ -206,7 +205,7 @@ const TRACK: Record<Exclude<Act, "ask" | "complaint">, Choice[][]> = {
     [
       { label: "Yala", text: "amini yiyim" },
       { label: "Sık", text: "memelerini sık" },
-      { label: "Aşağı in", text: "aşağı in yala" },
+      { label: "Aşağı in", text: "aşağı in" },
     ],
     [
       { label: "Yala", text: "amini yiyim" },

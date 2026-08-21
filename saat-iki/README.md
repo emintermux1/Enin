@@ -6,7 +6,7 @@ Görsel seks sahnesi, porno model veya seks sesi yok.
 
 ## Canlı
 
-https://dry-smoke-7366.zerodeploy.app
+https://snowy-firefly-2099.zerodeploy.app
 
 Geçici yayın (yaklaşık 72 saat). Yerelde:
 

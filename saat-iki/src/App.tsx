@@ -58,7 +58,7 @@ export function App() {
       ...(result.beat ? [createMessage("beat", result.beat)] : []),
       ...result.bubbles.map((line) => createMessage("them", personalize(line, playerName))),
     ];
-    let delay = 480;
+    let delay = 420;
     incoming.forEach((item, index) => {
       window.setTimeout(() => {
         setMessages((current) => [...current, item]);
@@ -69,7 +69,7 @@ export function App() {
           setWaiting(false);
         }
       }, delay);
-      delay += 380;
+      delay += 520;
     });
   }
 
