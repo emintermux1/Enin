@@ -6,7 +6,7 @@ Görsel seks sahnesi, porno model veya seks sesi yok.
 
 ## Canlı
 
-https://sparkling-sun-3975.zerodeploy.app
+https://autumn-night-8141.zerodeploy.app
 
 Geçici yayın (yaklaşık 72 saat). Yerelde:
 
