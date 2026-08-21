@@ -683,6 +683,10 @@ export class ViceblockRuntime3D {
     this.perf.low = fps < 42 ? this.perf.low + dt : 0;
     if (this.perf.low < 4) return;
     this.perf.dropped = true;
+    // Already at the bottom: there is nothing left to give up, and announcing
+    // a drop that did not happen just tells the player their machine is the
+    // problem twice.
+    if (this.quality === "low") return;
     const next = this.quality === "high" ? "medium" : "low";
     this.quality = next;
     this.applyQuality();
