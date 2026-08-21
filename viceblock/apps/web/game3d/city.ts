@@ -409,11 +409,29 @@ function stripUV(mesh: Mesh, w: number, d: number, per: number): void {
   mesh.setVerticesData("uv", uv);
 }
 
+/**
+ * Waste ground: the vacant lots and verges between the built blocks.
+ *
+ * Grain alone is not enough here. Fine noise averages out to its own mean a
+ * few paces away, so a lot painted only in speckle reads as a flat brown wash
+ * against the paving slabs beside it. What stops that is structure at a size
+ * you can still make out from across the street — broad patches of bare and
+ * darker earth, gravel spilling off them, weeds along the seams.
+ */
 function dirtTexture(scene: Scene): DynamicTexture {
   const tex = new DynamicTexture("tex-dirt", { width: 128, height: 128 }, scene, true);
   const ctx = canvas2d(tex.getContext());
   ctx.fillStyle = "#5a4b3c";
   ctx.fillRect(0, 0, 128, 128);
+  // Broad patches first: damp hollows and dried-out scrapes.
+  for (let i = 0; i < 14; i++) {
+    const r = 12 + hash01(i * 5.3) * 22;
+    ctx.fillStyle = hash01(i * 1.7) < 0.5 ? "rgba(58,46,34,0.5)" : "rgba(126,108,84,0.35)";
+    ctx.beginPath();
+    ctx.ellipse(hash01(i * 3.3) * 128, hash01(i * 7.1 + 2) * 128, r, r * (0.5 + hash01(i * 9.1) * 0.6), hash01(i * 2.3) * 3.14, 0, 6.284);
+    ctx.fill();
+  }
+  // Gravel and grit over the top.
   for (let i = 0; i < 900; i++) {
     const n = 72 + hash01(i * 2.1) * 40;
     ctx.fillStyle = `rgba(${Math.round(n + 10)},${Math.round(n - 4)},${Math.round(n - 20)},0.7)`;
@@ -422,6 +440,16 @@ function dirtTexture(scene: Scene): DynamicTexture {
   for (let i = 0; i < 120; i++) {
     ctx.fillStyle = "rgba(40,33,26,0.35)";
     ctx.fillRect(hash01(i * 6.9 + 3) * 128, hash01(i * 3.1 + 8) * 128, 4, 3);
+  }
+  // Weeds, which is what actually grows on ground nobody is looking after.
+  for (let i = 0; i < 90; i++) {
+    const x = hash01(i * 11.3 + 4) * 128;
+    const y = hash01(i * 4.1 + 9) * 128;
+    const g = 70 + hash01(i * 6.7) * 40;
+    ctx.fillStyle = `rgba(${Math.round(g * 0.62)},${Math.round(g)},${Math.round(g * 0.5)},0.55)`;
+    for (let b = 0; b < 3; b++) {
+      ctx.fillRect(x + b - 1, y - hash01(i * 3.7 + b) * 4, 1, 3 + hash01(i + b) * 3);
+    }
   }
   tex.update();
   tex.wrapU = 1;
@@ -470,6 +498,16 @@ function grassTexture(scene: Scene): DynamicTexture {
   for (let y = 0; y < 128; y += 16) {
     ctx.fillStyle = (y / 16) % 2 === 0 ? "rgba(255,255,220,0.05)" : "rgba(0,0,0,0.07)";
     ctx.fillRect(0, y, 128, 16);
+  }
+  // Patches of scorched and shaded grass, big enough to still read from across
+  // the street. Individual blades are gone by then — they average back to the
+  // base colour and the whole verge goes flat, which is what this used to do.
+  for (let i = 0; i < 11; i++) {
+    const r = 10 + hash01(i * 4.9 + 21) * 20;
+    ctx.fillStyle = hash01(i * 2.7 + 5) < 0.45 ? "rgba(122,116,62,0.4)" : "rgba(24,52,30,0.34)";
+    ctx.beginPath();
+    ctx.ellipse(hash01(i * 3.7 + 13) * 128, hash01(i * 8.9 + 6) * 128, r, r * (0.45 + hash01(i * 5.1) * 0.7), hash01(i * 1.9) * 3.14, 0, 6.284);
+    ctx.fill();
   }
   for (let i = 0; i < 1600; i++) {
     const t = hash01(i * 1.9);
@@ -986,8 +1024,12 @@ export function buildCity(scene: Scene, world: WorldData, kit: TextureKit): City
   ground.isPickable = false;
   const groundMat = mat(scene, "m-ground", "#ffffff");
   groundMat.diffuseTexture = dirt;
-  (dirt as Texture).uScale = MAP_W / 2;
-  (dirt as Texture).vScale = MAP_H / 2;
+  // One repeat per tile, the same as every strip laid on top of it. At half
+  // that — one repeat per two tiles — the vacant lots and verges ran at half
+  // the texel density of the pavement beside them, and the difference showed:
+  // kerb-sharp paving butting straight onto a flat brown wash.
+  (dirt as Texture).uScale = MAP_W;
+  (dirt as Texture).vScale = MAP_H;
   ground.material = groundMat;
   disposables.push(ground);
 
