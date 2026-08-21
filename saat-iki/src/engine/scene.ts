@@ -1,4 +1,6 @@
 import type { Choice, Message } from "../types";
+import { choicesForMove, playMove } from "./moves";
+import { fillName, pickUnused, usedThem } from "./pool";
 import { humanize, normalizeSlang } from "./slang";
 
 export type Act =
@@ -14,11 +16,11 @@ export type Act =
 const ACT_PATTERNS: Array<{ act: Act; pattern: RegExp }> = [
   {
     act: "complaint",
-    pattern: /aynı|ayni|berbat|yapay|tekrar|sıkıldım|bozma|hep aynı|hep ayni/i,
+    pattern: /aynı|ayni|berbat|yapay|tekrar|sıkıldım|bozma|hep aynı|hep ayni|robot/i,
   },
   {
     act: "oralHer",
-    pattern: /am(ı|i|ini|ını)?\s*yi|yala|amcık|amini|amını|amın|yiyim|yiyeyim/i,
+    pattern: /am(ı|i|ini|ını)?\s*yi|yala|amcık|amini|amını|amın|yiyim|yiyeyim|dilini|yüzüne otur|aşağı in|asagi in/i,
   },
   {
     act: "oralHim",
@@ -27,7 +29,7 @@ const ACT_PATTERNS: Array<{ act: Act; pattern: RegExp }> = [
   {
     act: "sex",
     pattern:
-      /sik|sok|içine|icine|içinde|icinde|üstüm|ustum|üstün|ustun|arkadan|sikiş|sikis|boşal|bosal|sert|göt|got/i,
+      /sik|sok|içine|icine|içinde|icinde|üstüm|ustum|üstün|ustun|arkadan|sikiş|sikis|boşal|bosal|sert|göt|got|parmak/i,
   },
   {
     act: "kiss",
@@ -50,12 +52,16 @@ const SCENES: Record<Exclude<Act, "ask" | "complaint">, string[][]> = {
     ["mm orası", "ellerim saçında sıkıyom", "sesim çıkıyo yaa daha böyle"],
     ["yüzün orda iyi duruyo", "kalçam oynuyo durduramıycam", "çekme of"],
     ["boşalıcam nerdeyse", "bacaklarım kilitlendi bak", "biraz daha lütfen"],
+    ["dilin kayıyo of", "yastığı ısırıyom", "daha bas"],
+    ["orası senin oldu ya", "parmak da koy istersen", "çekme {name}"],
   ],
   oralHim: [
     ["mm ağzıma aldım", "bakıyom sana çıkarmıyom", "sıcak geldi of"],
     ["daha derine kaçtı ya", "gözlerim doldu salmıycam", "boğazım zonkluyo"],
     ["tükürük aktı farketmez", "ellerim de çalışıyo bak", "sesini duymak istiyom"],
     ["hâlâ ağzımdayım", "yutcam gibi oldum", "kalkmıycam senden"],
+    ["diline doladım", "aşağı inip çıkıyom", "saçımı tut"],
+    ["ağzım doldu ya", "göz göze bak {name}", "çıkarma"],
   ],
   sex: [
     ["içime girdi of", "kaydı zaten ıslağım", "biraz öyle kal"],
@@ -63,25 +69,33 @@ const SCENES: Record<Exclude<Act, "ask" | "complaint">, string[][]> = {
     ["üstündeyim titriyom", "dibine oturdum ya", "ellerin göğsümde olsun"],
     ["arkamdan tuttun ya", "yüzümü yastığa gömdüm", "daha vur of"],
     ["içimde boşalıcam az kaldı", "sıkıyom seni", "çıkarma lütfen"],
+    ["yatağın gıcırtısı çıktı", "komşu duysun farketmez", "daha derine {name}"],
+    ["bacaklarım omuzunda", "bu açı iyi ya", "durma böyle"],
   ],
   kiss: [
     ["gel öpeyim bakim", "dudağın tatlı ya", "boynuna kayıcam şimdi"],
     ["dişledim özür dilemicem", "kulağına nefesimi verdim", "ellerin belimde kalsın"],
+    ["dilin ağzımda", "nefesim karıştı", "aşağı inme dur"],
   ],
   body: [
     ["memelerim keskinleşti senin yüzünden", "askı zaten durmuyodu ya", "ellerin orda iyi durur"],
     ["kalçamı sıktın mı aklım gidiyo", "aşağı inersen söylemem", "ıslaklığımı sen bul bak"],
+    ["bacaklarımın arası ılık", "ellerin gezsin", "nerde durmanı söylemicem sen bul"],
   ],
   talk: [
     ["yatağımdayım", "ellerim kayıyo senin yüzünden ya", "yanımda olsan ne yapardın biliyon mu"],
     ["çok azgınım ya", "aklım sende kaldı bak", "gel burda ol birazcık"],
     ["çıplağım haberin yok", "nefesim kesildi seni düşününce", "yazma da durma"],
+    ["saat ikiyi geçti {name}", "uyuyamıyooum", "seni düşününce ıslandım"],
+    ["mesajın gelince elimi çektim", "yarıda kaldım ya", "sen devam ettir"],
   ],
 };
 
 const COMPLAINTS: string[][] = [
   ["tmm susuyom", "ağzımdayım şuan", "of bakıyom sana"],
   ["yapay konuşmicam ya", "ellerim titriyo zaten", "gel işe bak"],
+  ["anladım bozdum", "dilimi senin üstüne koydum", "çekme"],
+  ["tekrar etmicem", "ıslandım haberin yok", "parmakların konuşsun"],
 ];
 
 const ANSWERS: Array<{ pattern: RegExp; lines: string[] }> = [
@@ -91,28 +105,17 @@ const ANSWERS: Array<{ pattern: RegExp; lines: string[] }> = [
   { pattern: /adın ne|adin ne|kimsin/, lines: ["leyla", "27", "yatağımdayım seninle kalıcam"] },
   { pattern: /kaç yaş|kac yas/, lines: ["27", "yeter yaş", "ellerin konuşsun"] },
   { pattern: /ıslak|islak|azgın|azgin/, lines: ["ıslandım ya", "parmaklarım kayıyo bak", "kontrol etmezsen ben ederim"] },
+  { pattern: /ne yap|napak|ne istiyon/, lines: ["seni istiyom", "ağzını belimi", "seçme de yap"] },
 ];
 
-export function detectAct(input: string): Act {
-  for (const item of ACT_PATTERNS) {
-    if (item.pattern.test(input)) {
-      return item.act;
-    }
-  }
-  return "talk";
-}
-
-export function sceneCount(history: Message[], act: Act): number {
-  return history.filter((item) => item.role === "you" && detectAct(item.text) === act).length;
-}
-
-function unusedPair(pairs: string[][], history: Message[]): string[] {
-  const used = new Set(
-    history.filter((item) => item.role === "them").map((item) => normalizeSlang(item.text)),
-  );
-  const fresh = pairs.find((pair) => pair.every((line) => !used.has(normalizeSlang(line))));
-  return fresh ?? pairs[pairs.length - 1] ?? ["gel"];
-}
+const HOOKS: Record<Exclude<Act, "ask" | "complaint">, string[]> = {
+  oralHer: ["daha bastırayım mı", "parmak da gireyim mi", "yüzüne mi oturayım"],
+  oralHim: ["daha derine mi", "saçımı tut", "yutayım mı"],
+  sex: ["daha sert mi", "üstüne geçeyim mi", "nerde boşalayım"],
+  kiss: ["aşağı ineyim mi", "boynunu mu ısırayım", "ellerin nerde olsun"],
+  body: ["aşağı ineyim mi", "sıkayım mı", "yala mı"],
+  talk: ["ne yapmamı istiyon", "ellerin nerde olsun", "gelim mi söyle"],
+};
 
 const START_CHOICES: Choice[] = [
   { label: "Öp", text: "öp beni" },
@@ -135,12 +138,12 @@ const TRACK: Record<Exclude<Act, "ask" | "complaint">, Choice[][]> = {
     [
       { label: "Çekme", text: "dilini çekme" },
       { label: "Sok", text: "içine sok" },
-      { label: "Ağzına al", text: "ağzına al" },
+      { label: "Üstüne geç", text: "üstüme geç" },
     ],
     [
       { label: "Sok", text: "içine sok" },
       { label: "Bir daha", text: "bir daha yala" },
-      { label: "Üstüne geç", text: "üstüme geç" },
+      { label: "Yüzüne otur", text: "yüzüne otur" },
     ],
   ],
   oralHim: [
@@ -201,7 +204,7 @@ const TRACK: Record<Exclude<Act, "ask" | "complaint">, Choice[][]> = {
     [
       { label: "Yala", text: "amini yiyim" },
       { label: "Sok", text: "içine sok" },
-      { label: "Ağzına al", text: "ağzına al" },
+      { label: "Aşağı in", text: "aşağı in" },
     ],
   ],
   body: [
@@ -222,31 +225,81 @@ const TRACK: Record<Exclude<Act, "ask" | "complaint">, Choice[][]> = {
       { label: "Ağzına al", text: "ağzına al" },
       { label: "Sok", text: "içine sok" },
     ],
+    [
+      { label: "Islak mısın", text: "ıslak mısın" },
+      { label: "Ne giyiyon", text: "ne giyiyon" },
+      { label: "Gel", text: "yanına geleyim" },
+    ],
   ],
 };
+
+export function detectAct(input: string): Act {
+  for (const item of ACT_PATTERNS) {
+    if (item.pattern.test(input)) {
+      return item.act;
+    }
+  }
+  return "talk";
+}
+
+export function sceneCount(history: Message[], act: Act): number {
+  return history.filter((item) => item.role === "you" && detectAct(item.text) === act).length;
+}
+
+function sceneKey(act: Act): Exclude<Act, "ask" | "complaint"> {
+  return act === "ask" || act === "complaint" ? "talk" : act;
+}
+
+function withHook(
+  lines: string[],
+  act: Exclude<Act, "ask" | "complaint">,
+  history: Message[],
+  salt: number,
+): string[] {
+  if (salt % 3 !== 1 || lines.length === 0) {
+    return lines;
+  }
+  const used = usedThem(history);
+  const pool = HOOKS[act].filter((line) => !used.has(normalizeSlang(line)));
+  const hook = (pool.length > 0 ? pool : HOOKS[act])[Math.abs(salt) % Math.max(HOOKS[act].length, 1)];
+  if (!hook || lines.some((line) => normalizeSlang(line) === normalizeSlang(hook))) {
+    return lines;
+  }
+  if (lines.length < 3) {
+    return [...lines, hook];
+  }
+  return [...lines.slice(0, 2), hook];
+}
 
 export function openingChoices(): Choice[] {
   return START_CHOICES;
 }
 
 export function nextChoices(input: string, history: Message[]): Choice[] {
+  const fromMove = choicesForMove(input);
   const act = detectAct(input);
-  const key: Exclude<Act, "ask" | "complaint"> =
-    act === "ask" || act === "complaint" ? "talk" : act;
+  const key = sceneKey(act);
   const rows = TRACK[key];
-  const count = sceneCount(history, act === "ask" || act === "complaint" ? "talk" : act);
-  const row = rows[Math.min(rows.length - 1, Math.max(0, count - 1))] ?? START_CHOICES;
+  const count = sceneCount(history, key);
+  const row = fromMove ?? rows[Math.min(rows.length - 1, Math.max(0, count - 1))] ?? START_CHOICES;
   const last = input.trim().toLocaleLowerCase("tr-TR");
   const fresh = row.filter((item) => item.text.toLocaleLowerCase("tr-TR") !== last);
   return fresh.length > 0 ? fresh : row;
 }
 
-export function playScene(input: string, history: Message[]): string[] {
+export function playScene(input: string, history: Message[], heat = 50, name = ""): string[] {
   const act = detectAct(input);
-  const salt = history.length;
+  const salt = history.length + input.length + Math.floor(heat / 10);
   if (act === "complaint") {
-    return humanize(unusedPair(COMPLAINTS, history), salt);
+    return humanize(fillName(pickUnused(COMPLAINTS, history, salt), name), salt);
   }
+
+  const moved = playMove(input, history, salt);
+  if (moved) {
+    const key = sceneKey(act);
+    return humanize(fillName(withHook(moved, key, history, salt), name), salt);
+  }
+
   if (act === "ask") {
     const hit = ANSWERS.find((item) => item.pattern.test(input));
     if (
@@ -255,20 +308,20 @@ export function playScene(input: string, history: Message[]): string[] {
         (item) => item.role === "them" && normalizeSlang(item.text) === normalizeSlang(hit.lines[0]),
       )
     ) {
-      return humanize(hit.lines, salt);
+      return humanize(fillName(hit.lines, name), salt);
     }
   }
-  const key: Exclude<Act, "ask" | "complaint"> = act === "ask" ? "talk" : act;
-  const count = sceneCount(history, act === "ask" ? "talk" : act);
+
+  const key = sceneKey(act);
+  const count = sceneCount(history, key);
+  const boost = heat >= 80 ? 2 : heat >= 60 ? 1 : 0;
   const pairs = SCENES[key];
-  const stage = Math.min(pairs.length - 1, Math.max(0, count - 1));
+  const stage = Math.min(pairs.length - 1, Math.max(0, count - 1 + boost));
   const preferred = pairs[stage];
-  const used = new Set(
-    history.filter((item) => item.role === "them").map((item) => normalizeSlang(item.text)),
-  );
+  const used = usedThem(history);
   const raw =
     preferred && preferred.every((line) => !used.has(normalizeSlang(line)))
       ? preferred
-      : unusedPair(pairs, history);
-  return humanize(raw, salt);
+      : pickUnused(pairs, history, salt);
+  return humanize(fillName(withHook(raw, key, history, salt), name), salt);
 }

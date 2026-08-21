@@ -13,10 +13,7 @@ export function Cast({ playerName, onPick }: CastProps) {
       <header className="cast-head">
         <p className="eyebrow">{playerName}, seç</p>
         <h1>Başka hatun?</h1>
-        <p className="lede">
-          Leyla seni bekliyor. İstersen başka yetişkin bir kadınla da konuşursun.
-          Hepsi seninle, bir erkekle, açık ve azgın konuşur.
-        </p>
+        <p className="lede">Leyla bekliyor. İstersen başka biriyle yazış.</p>
       </header>
       <ul className="cast-grid">
         {CHARACTERS.map((person) => (
@@ -32,10 +29,8 @@ export function Cast({ playerName, onPick }: CastProps) {
                   {person.age} · {person.city}
                 </p>
                 <h2>{person.name}</h2>
-                <p className="cast-title">{person.title}</p>
                 <p className="cast-hook">{person.hook}</p>
                 <p className="cast-bio">{person.bio}</p>
-                <p className="cast-scent">{person.scent}</p>
               </div>
             </button>
           </li>

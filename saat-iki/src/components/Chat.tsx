@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { locationLabel } from "../engine/reply";
+import { locationLabel, nightClock } from "../engine/reply";
 import type { Character, Choice, LocationId, Message } from "../types";
 import { Portrait } from "./Portrait";
 
@@ -55,7 +55,14 @@ export function Chat({
   }
 
   return (
-    <section className={`chat-shell loc-${location} tone-${character.id}`}>
+    <section
+      className={`chat-shell loc-${location} tone-${character.id}`}
+      style={{ ["--heat" as string]: String(heat / 100) }}
+    >
+      <p className="phone-bar">
+        <time>{nightClock(heat)}</time>
+        <span>LTE</span>
+      </p>
       <header className="chat-top">
         <button type="button" className="back" onClick={onBack}>
           Başka
@@ -70,7 +77,7 @@ export function Chat({
           </div>
         </div>
         <div className="heat" aria-label={`Yakınlık ${heat}`}>
-          <span>Yakınlık</span>
+          <span>ateş</span>
           <b>{heat}</b>
         </div>
       </header>
@@ -80,18 +87,27 @@ export function Chat({
       </div>
 
       <div className="thread" ref={scroller}>
-        {messages.map((item) => (
-          <article key={item.id} className={`bubble ${item.role}`}>
-            {item.role === "beat" ? (
-              <p>{item.text}</p>
-            ) : (
-              <>
-                <span>{item.role === "you" ? playerName : character.name}</span>
+        {messages.map((item, index) => {
+          const prev = messages[index - 1];
+          const stacked = Boolean(prev && prev.role === item.role && item.role !== "beat");
+          return (
+            <article
+              key={item.id}
+              className={`bubble ${item.role}${stacked ? " stacked" : ""}`}
+            >
+              {item.role === "beat" ? (
                 <p>{item.text}</p>
-              </>
-            )}
-          </article>
-        ))}
+              ) : (
+                <>
+                  {stacked ? null : (
+                    <span>{item.role === "you" ? playerName : character.name}</span>
+                  )}
+                  <p>{item.text}</p>
+                </>
+              )}
+            </article>
+          );
+        })}
         {waiting ? (
           <article className="bubble them typing" aria-live="polite">
             <span>{character.name}</span>
@@ -127,8 +143,10 @@ export function Chat({
             autoFocus
             disabled={waiting}
             value={draft}
+            enterKeyHint="send"
+            autoComplete="off"
             onChange={(event) => setDraft(event.target.value)}
-            placeholder={waiting ? `${character.name} yazıyor…` : "Yaz, gönder. O cevaplar."}
+            placeholder={waiting ? `${character.name} yazıyor…` : "yaz, gönder"}
             maxLength={280}
           />
           <button type="submit" className="btn-primary" disabled={!draft.trim() || waiting}>

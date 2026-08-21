@@ -82,16 +82,21 @@ export function locationForHeat(heat: number): LocationId {
   return "yatak";
 }
 
+export function nightClock(heat: number): string {
+  const minute = Math.min(59, 8 + Math.floor(heat / 4));
+  return `02:${String(minute).padStart(2, "0")}`;
+}
+
 export function locationLabel(location: LocationId): string {
   switch (location) {
     case "bar":
-      return "İlk masa";
+      return "ısınma";
     case "taxi":
-      return "Yol";
+      return "eller";
     case "suite":
-      return "Oda";
+      return "oda";
     case "yatak":
-      return "Yatak";
+      return "yatak";
     default: {
       const _exhaustive: never = location;
       return _exhaustive;
@@ -104,13 +109,13 @@ export function nextReply(
   input: string,
   heat: number,
   history: Message[],
-  _playerName: string,
+  playerName: string,
 ): EngineResult {
   const act = detectAct(input);
   const nextHeat = Math.min(100, heat + (act === "talk" || act === "ask" ? 8 : 16));
   const nextLocation = locationForHeat(nextHeat);
   return {
-    bubbles: playScene(input, history),
+    bubbles: playScene(input, history, heat, playerName),
     heatDelta: nextHeat - heat,
     beat: null,
     location: nextLocation,

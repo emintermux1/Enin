@@ -100,6 +100,11 @@ export function slangify(text: string, salt: number, index: number, total: numbe
   }
 
   const word = lastWord(next);
+  const named =
+    word.length >= 3 && word[0] === word[0]?.toLocaleUpperCase("tr-TR") && /[a-zçğıöşü]/i.test(word);
+  if (named) {
+    return next;
+  }
   if (
     last &&
     roll <= 2 &&

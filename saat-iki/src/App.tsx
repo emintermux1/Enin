@@ -58,8 +58,16 @@ export function App() {
       ...(result.beat ? [createMessage("beat", result.beat)] : []),
       ...result.bubbles.map((line) => createMessage("them", personalize(line, playerName))),
     ];
-    let delay = 420;
+    if (incoming.length === 0) {
+      setChoices(result.choices);
+      setHeat(nextHeat);
+      setLocation(result.location);
+      setWaiting(false);
+      return;
+    }
+    let delay = 0;
     incoming.forEach((item, index) => {
+      delay += bubbleWait(item.text, index);
       window.setTimeout(() => {
         setMessages((current) => [...current, item]);
         if (index === incoming.length - 1) {
@@ -69,7 +77,6 @@ export function App() {
           setWaiting(false);
         }
       }, delay);
-      delay += 520;
     });
   }
 
@@ -133,4 +140,9 @@ export function App() {
 
 function personalize(text: string, name: string): string {
   return text.replaceAll("{name}", name);
+}
+
+function bubbleWait(text: string, index: number): number {
+  const start = index === 0 ? 260 : 300;
+  return start + Math.min(380, text.length * 14);
 }

@@ -4,16 +4,17 @@ type AgeGateProps = {
 
 export function AgeGate({ onEnter }: AgeGateProps) {
   return (
-    <section className="panel gate">
-      <p className="eyebrow">Saat ikiyi geçti</p>
-      <h1>Bu gece 18 yaşından küçüklere kapalı.</h1>
+    <section className="lock">
+      <p className="lock-clock">02:14</p>
+      <p className="lock-date">Cuma gecesi</p>
+      <h1>18+ değilse girme.</h1>
       <p className="lede">
-        Saat İki: sen erkeksin, karşında yetişkin bir AI hatun var. Türkçe, azgın,
-        senin yazdığına cevap veren sohbet. Porno videosu yok; konuşma var, istek var.
+        Sen erkeksin. Karşında yetişkin bir hatun var. Yazarsın, o azgın cevap verir.
+        Video yok. Sohbet var.
       </p>
       <div className="gate-actions">
         <button type="button" className="btn-primary" onClick={onEnter}>
-          18 yaşından büyüğüm, içeri al
+          18’den büyüğüm
         </button>
         <a className="btn-ghost" href="https://www.google.com">
           Değilim
