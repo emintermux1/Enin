@@ -92,7 +92,7 @@ import {
   type PlayerSave,
   type PresencePlayer,
 } from "@viceblock/shared";
-import { GameAudio } from "../game/audio";
+import { GameAudio, type StationId } from "../game/audio";
 import { GameInput } from "../game/input";
 import type { HudSnapshot } from "../game/hud";
 import { blocked, buildSouthside, Cell, cellAt, hideSpotNear, landmarkAt, type Landmark, type WorldData } from "../game/world";
@@ -210,6 +210,63 @@ const RACE_CPS = [
 /** Interiors are separate rooms built high above the city grid. */
 const INTERIOR_Y = 400;
 
+/**
+ * A walkable room behind a landmark door. Everything is keyed off the mesh
+ * name prefix, which is what lets a room be hidden until you are standing in
+ * it — a camera pulled right back over the street would otherwise catch the
+ * furniture hanging in the sky.
+ */
+interface InteriorRoom {
+  id: string;
+  name: string;
+  prefix: string;
+  cx: number;
+  cz: number;
+  half: number;
+  meshes: AbstractMesh[];
+  /** Where the player is put down on entry, relative to the room centre. */
+  entryZ: number;
+}
+
+type SpotKind = "rob" | "meal" | "coffee" | "vest" | "leave" | "bar" | "tip" | "vip" | "dance";
+
+/** What a night at the Malibu costs, and what it buys. */
+const CLUB = {
+  cover: 25,
+  drink: 12,
+  tip: 20,
+  vip: 150,
+  /** Tips that still earn rep in one visit — after that you are just spending. */
+  paidTips: 3,
+  tipRep: 2,
+  vipRep: 8,
+  vipXp: 40,
+  /** Seconds the player keeps dancing after hitting the floor. */
+  danceSeconds: 7,
+  danceCooldown: 20,
+  danceXp: 6,
+};
+
+/** A body on the club floor: stage dancer, bartender, DJ or punter. */
+interface ClubDancer {
+  mesh: Mesh;
+  /** 0-2 pick a dance; 3 is the standing-still-behind-a-counter bob. */
+  style: number;
+  phase: number;
+  baseY: number;
+  baseRotY: number;
+}
+
+interface InteriorSpot {
+  x: number;
+  z: number;
+  r: number;
+  color: string;
+  tag: string;
+  prompt: string;
+  kind: SpotKind;
+}
+
 export class ViceblockRuntime3D {
   canvas: HTMLCanvasElement;
   minimap: HTMLCanvasElement | null = null;
@@ -309,8 +366,19 @@ export class ViceblockRuntime3D {
   private gpsT = 0;
   /** Walkable interior state: rooms are built high above the city. */
   private interiorMode: { id: string; returnX: number; returnZ: number } | null = null;
-  private martRoom: { cx: number; cz: number; half: number } | null = null;
-  private martMeshes: AbstractMesh[] = [];
+  /** Every walkable room, keyed by the landmark you walk in through. */
+  private rooms = new Map<string, InteriorRoom>();
+  private clubDancers: ClubDancer[] = [];
+  private clubTiles: Array<{ mat: StandardMaterial; phase: number }> = [];
+  private clubWashes: Array<{ mesh: Mesh; mat: StandardMaterial; phase: number }> = [];
+  private clubBall: Mesh | null = null;
+  /** Per-visit club state: tips already paid rep, whether VIP has been bought. */
+  private clubVisit = { tips: 0, vip: false };
+  /** Seconds of player dancing left, and the clock time of the last payout. */
+  private danceT = 0;
+  private lastDance = -99;
+  /** The station playing before the club took the decks over. */
+  private preClubStation: StationId | null = null;
   private tow: { mesh: Mesh; targetId: string } | null = null;
   private towCooldown = 20;
   private race: { checkpoint: number; t: number; marker: Mesh } | null = null;
@@ -1153,6 +1221,8 @@ export class ViceblockRuntime3D {
       });
     }
     this.buildMartInterior();
+    this.buildMalibuInterior();
+    this.dressClubDoor();
 
     const count = 52;
     for (let i = 0; i < count; i++) {
@@ -1195,16 +1265,21 @@ export class ViceblockRuntime3D {
     }
   }
 
-  /** A walkable Coral Mart room: shelves, a clerk behind the counter, a till. */
-  private buildMartInterior(): void {
-    const cx = 43 * TILE;
-    const cz = 45 * TILE;
-    const half = 96;
-    this.martRoom = { cx, cz, half };
-    const floor = MeshBuilder.CreateBox("mart-floor", { width: half * 2, depth: half * 2, height: 2 }, this.scene);
-    floor.material = this.surface("concrete", "#c8bca4");
+  /** Floor, four walls and a lid: the shell every interior room needs. */
+  private buildRoomShell(
+    prefix: string,
+    cx: number,
+    cz: number,
+    half: number,
+    floorHex: string,
+    wallHex: string,
+    ceilingHex: string,
+    height = 90,
+  ): void {
+    const floor = MeshBuilder.CreateBox(`${prefix}floor`, { width: half * 2, depth: half * 2, height: 2 }, this.scene);
+    floor.material = this.surface("concrete", floorHex);
     floor.position = new Vector3(cx, INTERIOR_Y - 1, cz);
-    const wallMat = this.surface("plaster", "#7a4a38");
+    const wallMat = this.surface("plaster", wallHex);
     const walls: Array<[number, number, number, number]> = [
       [cx, cz - half, half * 2, 6],
       [cx, cz + half, half * 2, 6],
@@ -1212,14 +1287,41 @@ export class ViceblockRuntime3D {
       [cx + half, cz, 6, half * 2],
     ];
     walls.forEach(([x, z, w, d], i) => {
-      const wall = MeshBuilder.CreateBox(`mart-wall-${i}`, { width: w, depth: d, height: 90 }, this.scene);
+      const wall = MeshBuilder.CreateBox(`${prefix}wall-${i}`, { width: w, depth: d, height }, this.scene);
       wall.material = wallMat;
-      wall.position = new Vector3(x, INTERIOR_Y + 45, z);
+      wall.position = new Vector3(x, INTERIOR_Y + height / 2, z);
     });
-    // Without a lid the shop reads as a doll's house floating over the city.
-    const ceiling = MeshBuilder.CreateBox("mart-ceiling", { width: half * 2, depth: half * 2, height: 3 }, this.scene);
-    ceiling.material = this.surface("plaster", "#4a2e26");
-    ceiling.position = new Vector3(cx, INTERIOR_Y + 90, cz);
+    // Without a lid the room reads as a doll's house floating over the city.
+    const ceiling = MeshBuilder.CreateBox(`${prefix}ceiling`, { width: half * 2, depth: half * 2, height: 3 }, this.scene);
+    ceiling.material = this.surface("plaster", ceilingHex);
+    ceiling.position = new Vector3(cx, INTERIOR_Y + height, cz);
+  }
+
+  /** Emissive material for neon, dance-floor tiles and spot discs. */
+  private glow(name: string, hex: string, alpha = 1): StandardMaterial {
+    const m = new StandardMaterial(name, this.scene);
+    m.emissiveColor = Color3.FromHexString(hex);
+    m.diffuseColor = Color3.Black();
+    m.specularColor = Color3.Black();
+    m.disableLighting = true;
+    m.alpha = alpha;
+    return m;
+  }
+
+  /** Collects a room's meshes by prefix and registers it, hidden. */
+  private registerRoom(room: Omit<InteriorRoom, "meshes">): void {
+    const meshes = this.scene.meshes.filter((m) => m.name.startsWith(room.prefix));
+    const full: InteriorRoom = { ...room, meshes };
+    this.rooms.set(room.id, full);
+    for (const m of meshes) m.setEnabled(false);
+  }
+
+  /** A walkable Coral Mart room: shelves, a clerk behind the counter, a till. */
+  private buildMartInterior(): void {
+    const cx = 43 * TILE;
+    const cz = 45 * TILE;
+    const half = 96;
+    this.buildRoomShell("mart-", cx, cz, half, "#c8bca4", "#7a4a38", "#4a2e26");
     const counter = MeshBuilder.CreateBox("mart-counter", { width: 90, depth: 18, height: 14 }, this.scene);
     counter.material = this.surface("metal", "#4a5a68");
     counter.position = new Vector3(cx, INTERIOR_Y + 7, cz - half + 34);
@@ -1233,18 +1335,253 @@ export class ViceblockRuntime3D {
     const till = MeshBuilder.CreateBox("mart-till", { width: 14, depth: 10, height: 8 }, this.scene);
     till.material = this.surface("metal", "#2a2c30", 0.2);
     till.position = new Vector3(cx + 34, INTERIOR_Y + 18, cz - half + 34);
-    this.martSpots().forEach((spot, i) => {
-      const disc = MeshBuilder.CreateCylinder(`mart-spot-${i}`, { diameter: 34, height: 1.6, tessellation: 14 }, this.scene);
-      const dmat = new StandardMaterial(`mart-spot-mat-${i}`, this.scene);
-      dmat.emissiveColor = Color3.FromHexString(spot.color);
-      dmat.diffuseColor = Color3.Black();
-      dmat.disableLighting = true;
-      dmat.alpha = 0.85;
-      disc.material = dmat;
+    this.buildSpotMarkers("mart-", this.spotsFor("coral-mart", { cx, cz, half }));
+    // The room sits high above the city so the street cannot see into it, but a
+    // camera pulled right back could still catch it hanging in the sky.
+    this.registerRoom({ id: "coral-mart", name: "Coral Mart", prefix: "mart-", cx, cz, half, entryZ: half - 24 });
+  }
+
+  /**
+   * The Malibu Club floor: a lit stage with poles and dancers, a pulsing dance
+   * floor with a crowd on it, a bar, a DJ, and a VIP booth in the corner. The
+   * room is deliberately bigger than the mart — there has to be somewhere to
+   * walk to once you are inside.
+   */
+  private buildMalibuInterior(): void {
+    const cx = 43 * TILE;
+    const cz = 59 * TILE;
+    const half = 168;
+    const P = "club-";
+    this.buildRoomShell(P, cx, cz, half, "#1a1220", "#2a1830", "#120a18", 108);
+
+    // Stage: raised deck at the back, two poles, three dancers on it.
+    const stageZ = cz - half + 54;
+    const stage = MeshBuilder.CreateBox(`${P}stage`, { width: 190, depth: 78, height: 14 }, this.scene);
+    stage.material = this.surface("wood", "#2e1424");
+    stage.position = new Vector3(cx, INTERIOR_Y + 7, stageZ);
+    const stageLip = MeshBuilder.CreateBox(`${P}stage-lip`, { width: 190, depth: 3, height: 3 }, this.scene);
+    stageLip.material = this.glow(`${P}m-lip`, "#ff2f9a");
+    stageLip.position = new Vector3(cx, INTERIOR_Y + 15, stageZ + 39);
+    const poleMat = this.surface("metal", "#d8d0c0", 0.6);
+    for (let i = 0; i < 2; i++) {
+      const px = cx + (i === 0 ? -52 : 52);
+      const pole = MeshBuilder.CreateCylinder(`${P}pole-${i}`, { height: 94, diameter: 4, tessellation: 10 }, this.scene);
+      pole.material = poleMat;
+      pole.position = new Vector3(px, INTERIOR_Y + 61, stageZ);
+      const dancer = this.makeHumanoid(`${P}dancer-${i}`, i === 0 ? "#ff3f8e" : "#39d8d0", "#e6c39a", "#1c1420");
+      dancer.position = new Vector3(px + 11, INTERIOR_Y + 14, stageZ);
+      dancer.rotation.y = Math.PI;
+      this.addClubDancer(dancer, i, i * 1.7);
+    }
+    const lead = this.makeHumanoid(`${P}dancer-2`, "#f0d060", "#8a6a54", "#241626");
+    lead.position = new Vector3(cx, INTERIOR_Y + 14, stageZ - 12);
+    lead.rotation.y = Math.PI;
+    this.addClubDancer(lead, 2, 0.8);
+
+    // Backdrop neon: MALIBU in strip lights above the stage.
+    const backTex = new DynamicTexture(`${P}sign-tex`, { width: 512, height: 128 }, this.scene, false);
+    const bctx = backTex.getContext();
+    bctx.fillStyle = "#140a18";
+    bctx.fillRect(0, 0, 512, 128);
+    bctx.fillStyle = "#ff4aa8";
+    bctx.font = "bold 74px Impact, sans-serif";
+    const bt = bctx as unknown as CanvasRenderingContext2D;
+    bt.textAlign = "center";
+    bt.textBaseline = "middle";
+    bctx.fillText("MALIBU", 256, 60);
+    bctx.fillStyle = "#4ad8c8";
+    bctx.font = "bold 26px Impact, sans-serif";
+    bctx.fillText("C L U B", 256, 106);
+    backTex.update();
+    const backMat = new StandardMaterial(`${P}sign-mat`, this.scene);
+    backMat.diffuseTexture = backTex;
+    backMat.emissiveTexture = backTex;
+    backMat.emissiveColor = new Color3(1, 0.8, 0.95);
+    backMat.specularColor = Color3.Black();
+    const backSign = MeshBuilder.CreatePlane(`${P}sign`, { width: 150, height: 38 }, this.scene);
+    backSign.material = backMat;
+    backSign.position = new Vector3(cx, INTERIOR_Y + 74, stageZ - 34);
+
+    // Dance floor: a checker of emissive tiles that the update loop cycles.
+    const tileSize = 26;
+    for (let gz = 0; gz < 5; gz++) {
+      for (let gx = 0; gx < 5; gx++) {
+        const t = MeshBuilder.CreateBox(`${P}tile-${gz}-${gx}`, { width: tileSize, depth: tileSize, height: 1.4 }, this.scene);
+        const m = this.glow(`${P}tile-mat-${gz}-${gx}`, "#301840", 0.95);
+        t.material = m;
+        t.isPickable = false;
+        t.position = new Vector3(cx + (gx - 2) * (tileSize + 2), INTERIOR_Y + 0.4, cz + (gz - 2) * (tileSize + 2) + 4);
+        this.clubTiles.push({ mat: m, phase: (gx * 3 + gz * 5) % 8 });
+      }
+    }
+
+    // Mirror ball over the floor, plus four coloured wash lights on the truss.
+    const ball = MeshBuilder.CreateSphere(`${P}ball`, { diameter: 22, segments: 6 }, this.scene);
+    ball.material = this.surface("metal", "#cfd6e0", 0.9);
+    ball.position = new Vector3(cx, INTERIOR_Y + 90, cz + 4);
+    this.clubBall = ball;
+    const washHexes = ["#ff2f9a", "#4ad8c8", "#f0c040", "#8a4aff"];
+    washHexes.forEach((hex, i) => {
+      const ang = (i / washHexes.length) * Math.PI * 2;
+      const beam = MeshBuilder.CreateCylinder(
+        `${P}wash-${i}`,
+        { height: 76, diameterTop: 6, diameterBottom: 54, tessellation: 10 },
+        this.scene,
+      );
+      const m = this.glow(`${P}wash-mat-${i}`, hex, 0.16);
+      beam.material = m;
+      beam.isPickable = false;
+      beam.position = new Vector3(cx + Math.cos(ang) * 74, INTERIOR_Y + 62, cz + Math.sin(ang) * 60);
+      beam.rotation.z = Math.cos(ang) * 0.22;
+      beam.rotation.x = Math.sin(ang) * 0.22;
+      this.clubWashes.push({ mesh: beam, mat: m, phase: i * 1.4 });
+    });
+
+    // Bar along the west wall: counter, bottle shelf, bartender, stools.
+    const barX = cx - half + 40;
+    const bar = MeshBuilder.CreateBox(`${P}bar`, { width: 26, depth: 150, height: 24 }, this.scene);
+    bar.material = this.surface("wood", "#40202e");
+    bar.position = new Vector3(barX, INTERIOR_Y + 12, cz + 10);
+    const barTop = MeshBuilder.CreateBox(`${P}bar-top`, { width: 32, depth: 154, height: 2.4 }, this.scene);
+    barTop.material = this.glow(`${P}m-bartop`, "#4ad8c8", 0.9);
+    barTop.position = new Vector3(barX, INTERIOR_Y + 25, cz + 10);
+    const shelf = MeshBuilder.CreateBox(`${P}bar-shelf`, { width: 10, depth: 140, height: 44 }, this.scene);
+    shelf.material = this.surface("wood", "#2a1620");
+    shelf.position = new Vector3(barX - 22, INTERIOR_Y + 34, cz + 10);
+    const bottleHexes = ["#e0b040", "#7ad080", "#e06060", "#70b0e0", "#d090e0"];
+    for (let i = 0; i < 14; i++) {
+      const b = MeshBuilder.CreateCylinder(`${P}bottle-${i}`, { height: 9, diameter: 3.2, tessellation: 6 }, this.scene);
+      b.material = this.glow(`${P}bottle-mat-${i}`, bottleHexes[i % bottleHexes.length] ?? "#e0b040", 0.85);
+      b.position = new Vector3(barX - 22, INTERIOR_Y + 60, cz - 58 + i * 9);
+    }
+    const tender = this.makeHumanoid(`${P}tender`, "#1c1c22", "#c4a07a", "#12121a");
+    tender.position = new Vector3(barX - 12, INTERIOR_Y, cz + 10);
+    tender.rotation.y = -Math.PI / 2;
+    this.addClubDancer(tender, 3, 2.4);
+    for (let i = 0; i < 4; i++) {
+      const stool = MeshBuilder.CreateCylinder(`${P}stool-${i}`, { height: 16, diameter: 11, tessellation: 8 }, this.scene);
+      stool.material = this.surface("metal", "#3a2a34");
+      stool.position = new Vector3(barX + 26, INTERIOR_Y + 8, cz - 40 + i * 30);
+    }
+
+    // DJ booth in the far corner, speakers stacked either side.
+    const djX = cx + half - 52;
+    const booth = MeshBuilder.CreateBox(`${P}dj`, { width: 54, depth: 22, height: 26 }, this.scene);
+    booth.material = this.surface("metal", "#241a2c");
+    booth.position = new Vector3(djX, INTERIOR_Y + 13, cz - half + 46);
+    const deck = MeshBuilder.CreateBox(`${P}dj-deck`, { width: 50, depth: 18, height: 2 }, this.scene);
+    deck.material = this.glow(`${P}m-deck`, "#8a4aff", 0.9);
+    deck.position = new Vector3(djX, INTERIOR_Y + 27, cz - half + 46);
+    const dj = this.makeHumanoid(`${P}dj-guy`, "#8a4aff", "#8a6a54", "#1a1420");
+    dj.position = new Vector3(djX, INTERIOR_Y, cz - half + 62);
+    dj.rotation.y = Math.PI;
+    this.addClubDancer(dj, 3, 1.1);
+    for (let i = 0; i < 2; i++) {
+      const stack = MeshBuilder.CreateBox(`${P}speaker-${i}`, { width: 20, depth: 18, height: 52 }, this.scene);
+      stack.material = this.surface("plastic", "#15121a");
+      stack.position = new Vector3(djX + (i ? 42 : -42), INTERIOR_Y + 26, cz - half + 46);
+      const cone = MeshBuilder.CreateCylinder(`${P}speaker-cone-${i}`, { height: 2, diameter: 13, tessellation: 10 }, this.scene);
+      cone.material = this.surface("plastic", "#2a2430");
+      cone.rotation.x = Math.PI / 2;
+      cone.position = new Vector3(djX + (i ? 42 : -42), INTERIOR_Y + 34, cz - half + 36);
+    }
+
+    // VIP booth: a roped-off corner with a curved bench and a low table.
+    const vipX = cx + half - 56;
+    const vipZ = cz + 52;
+    const vipFloor = MeshBuilder.CreateBox(`${P}vip-floor`, { width: 96, depth: 88, height: 4 }, this.scene);
+    vipFloor.material = this.surface("cloth", "#4a1030");
+    vipFloor.position = new Vector3(vipX, INTERIOR_Y + 1.5, vipZ);
+    for (let i = 0; i < 3; i++) {
+      const bench = MeshBuilder.CreateBox(`${P}vip-bench-${i}`, { width: 30, depth: 16, height: 16 }, this.scene);
+      bench.material = this.surface("leather", "#7a1840");
+      bench.position = new Vector3(vipX - 30 + i * 30, INTERIOR_Y + 11, vipZ - 32);
+    }
+    const table = MeshBuilder.CreateCylinder(`${P}vip-table`, { height: 12, diameter: 30, tessellation: 12 }, this.scene);
+    table.material = this.surface("metal", "#2a1c26");
+    table.position = new Vector3(vipX, INTERIOR_Y + 7, vipZ);
+    const bucket = MeshBuilder.CreateCylinder(`${P}vip-bucket`, { height: 10, diameter: 12, tessellation: 10 }, this.scene);
+    bucket.material = this.glow(`${P}m-bucket`, "#f0c040", 0.9);
+    bucket.position = new Vector3(vipX, INTERIOR_Y + 18, vipZ);
+    for (let i = 0; i < 4; i++) {
+      const post = MeshBuilder.CreateCylinder(`${P}rope-post-${i}`, { height: 22, diameter: 5, tessellation: 8 }, this.scene);
+      post.material = this.glow(`${P}m-post-${i}`, "#f0c040", 0.9);
+      post.position = new Vector3(vipX - 48 + i * 4, INTERIOR_Y + 11, vipZ - 44 + i * 30);
+    }
+
+    // Punters: a few standing at the rail, a few moving on the floor.
+    const crowd: Array<[number, number, string, string]> = [
+      [cx - 46, cz - 40, "#d84a6a", "#c4a07a"],
+      [cx + 40, cz - 34, "#4a90d8", "#8a6a54"],
+      [cx - 20, cz + 46, "#d8a040", "#e6c39a"],
+      [cx + 26, cz + 40, "#7ad080", "#6a4a3a"],
+      [cx - 70, cz - 60, "#b070e0", "#c4a07a"],
+      [cx + 74, cz - 8, "#e07050", "#8a6a54"],
+    ];
+    crowd.forEach(([x, z, shirt, skin], i) => {
+      const p = this.makeHumanoid(`${P}punter-${i}`, shirt, skin, "#221a26");
+      p.position = new Vector3(x, INTERIOR_Y, z);
+      p.rotation.y = Math.atan2(cz - half + 54 - z, cx - x);
+      this.addClubDancer(p, i % 3, i * 0.9);
+    });
+
+    this.buildSpotMarkers(P, this.spotsFor("malibu-club", { cx, cz, half }));
+    this.registerRoom({ id: "malibu-club", name: "Malibu Club", prefix: P, cx, cz, half, entryZ: half - 30 });
+  }
+
+  /**
+   * The street side of the Malibu: a lit awning, a roped queue and a bouncer
+   * who is clearly not going anywhere. Without this the club is just another
+   * door on a block of doors.
+   */
+  private dressClubDoor(): void {
+    const mark = this.world.landmarks.find((l) => l.id === "malibu-club");
+    if (!mark) return;
+    const dx = (mark.doorX + 0.5) * TILE;
+    const dz = (mark.doorY + 0.5) * TILE;
+    const carpet = MeshBuilder.CreateBox("clubdoor-carpet", { width: 40, depth: 46, height: 0.8 }, this.scene);
+    carpet.material = this.surface("cloth", "#7a1030");
+    carpet.position = new Vector3(dx, 0.6, dz + 16);
+    const glow = MeshBuilder.CreateBox("clubdoor-glow", { width: 34, depth: 2, height: 3 }, this.scene);
+    glow.material = this.glow("clubdoor-glow-mat", "#ff2f9a");
+    glow.position = new Vector3(dx, 26, dz + 2);
+    for (let i = 0; i < 4; i++) {
+      const post = MeshBuilder.CreateCylinder(`clubdoor-post-${i}`, { height: 20, diameter: 4, tessellation: 8 }, this.scene);
+      post.material = this.glow(`clubdoor-post-mat-${i}`, "#f0c040", 0.95);
+      post.position = new Vector3(dx + (i < 2 ? -22 : 22), 10, dz + (i % 2 ? 34 : 6));
+      const rope = MeshBuilder.CreateBox(`clubdoor-rope-${i}`, { width: 2.4, depth: 28, height: 2.4 }, this.scene);
+      rope.material = this.surface("cloth", "#8a1030");
+      rope.position = new Vector3(dx + (i < 2 ? -22 : 22), 16, dz + 20);
+    }
+    const bouncer = this.makeHumanoid("clubdoor-bouncer", "#14141a", "#6a4a3a", "#101018");
+    bouncer.position = new Vector3(dx + 18, 0, dz + 8);
+    bouncer.rotation.y = -Math.PI / 2;
+    // Two hopefuls in the queue, so the door reads as somewhere worth being.
+    const queue: Array<[number, number, string, string]> = [
+      [dx - 16, dz + 26, "#d84a6a", "#c4a07a"],
+      [dx - 6, dz + 38, "#4a90d8", "#8a6a54"],
+    ];
+    queue.forEach(([x, z, shirt, skin], i) => {
+      const g = this.makeHumanoid(`clubdoor-guest-${i}`, shirt, skin, "#221a26");
+      g.position = new Vector3(x, 0, z);
+      g.rotation.y = Math.PI / 2;
+    });
+  }
+
+  /** Records where a body stands so its dance can be an offset from it. */
+  private addClubDancer(mesh: Mesh, style: number, phase: number): void {
+    this.clubDancers.push({ mesh, style, phase, baseY: mesh.position.y, baseRotY: mesh.rotation.y });
+  }
+
+  /** A lit disc and a floating tag for every place E does something. */
+  private buildSpotMarkers(prefix: string, spots: InteriorSpot[]): void {
+    spots.forEach((spot, i) => {
+      const disc = MeshBuilder.CreateCylinder(`${prefix}spot-${i}`, { diameter: 34, height: 1.6, tessellation: 14 }, this.scene);
+      disc.material = this.glow(`${prefix}spot-mat-${i}`, spot.color, 0.85);
       disc.isPickable = false;
       disc.position = new Vector3(spot.x, INTERIOR_Y + 1, spot.z);
-      const label = MeshBuilder.CreatePlane(`mart-spot-lbl-${i}`, { width: 40, height: 10 }, this.scene);
-      const ltex = new DynamicTexture(`mart-spot-lt-${i}`, { width: 256, height: 64 }, this.scene, false);
+      const label = MeshBuilder.CreatePlane(`${prefix}spot-lbl-${i}`, { width: 40, height: 10 }, this.scene);
+      const ltex = new DynamicTexture(`${prefix}spot-lt-${i}`, { width: 256, height: 64 }, this.scene, false);
       const lctx = ltex.getContext();
       lctx.fillStyle = "#120e0c";
       lctx.fillRect(0, 0, 256, 64);
@@ -1255,7 +1592,7 @@ export class ViceblockRuntime3D {
       lt.textBaseline = "middle";
       lctx.fillText(spot.tag, 128, 32);
       ltex.update();
-      const lmat = new StandardMaterial(`mart-spot-lm-${i}`, this.scene);
+      const lmat = new StandardMaterial(`${prefix}spot-lm-${i}`, this.scene);
       lmat.diffuseTexture = ltex;
       lmat.emissiveTexture = ltex;
       lmat.emissiveColor = new Color3(0.8, 0.7, 0.5);
@@ -1266,21 +1603,26 @@ export class ViceblockRuntime3D {
       label.billboardMode = 7;
       label.isPickable = false;
     });
-    // The room sits high above the city so the street cannot see into it, but a
-    // camera pulled right back could still catch it hanging in the sky.
-    this.martMeshes = this.scene.meshes.filter((m) => m.name.startsWith("mart-"));
-    this.showInterior(false);
   }
 
   private showInterior(on: boolean): void {
-    for (const m of this.martMeshes) m.setEnabled(on);
+    const room = this.interiorMode ? this.rooms.get(this.interiorMode.id) : null;
+    if (!room) return;
+    for (const m of room.meshes) m.setEnabled(on);
   }
 
   /** Shared interior spots — discs, prompts, and E-actions must agree. */
-  private martSpots(): Array<{ x: number; z: number; r: number; color: string; tag: string; prompt: string; kind: "rob" | "meal" | "coffee" | "vest" | "leave" }> {
-    const room = this.martRoom;
-    if (!room) return [];
+  private spotsFor(id: string, room: { cx: number; cz: number; half: number }): InteriorSpot[] {
     const { cx, cz, half } = room;
+    if (id === "malibu-club") {
+      return [
+        { x: cx, z: cz - half + 92, r: 44, color: "#ff4aa8", tag: "TIP", prompt: `E  ·  TIP THE STAGE $${CLUB.tip}`, kind: "tip" },
+        { x: cx - half + 52, z: cz + 10, r: 40, color: "#4ad8c8", tag: "BAR", prompt: `E  ·  DRINK $${CLUB.drink} (+25 hp)`, kind: "bar" },
+        { x: cx + half - 56, z: cz + 52, r: 42, color: "#f0c040", tag: "VIP", prompt: `E  ·  VIP BOOTH $${CLUB.vip}`, kind: "vip" },
+        { x: cx, z: cz + 4, r: 46, color: "#a060ff", tag: "DANCE", prompt: "E  ·  GET ON THE FLOOR", kind: "dance" },
+        { x: cx, z: cz + half - 26, r: 40, color: "#f3e6d2", tag: "EXIT", prompt: "E  ·  LEAVE", kind: "leave" },
+      ];
+    }
     return [
       { x: cx + 34, z: cz - half + 56, r: 36, color: "#d84020", tag: "ROB", prompt: "E  ·  ROB THE TILL", kind: "rob" },
       { x: cx, z: cz - half + 56, r: 36, color: "#7aa874", tag: "MEAL", prompt: "E  ·  BUY MEAL $15 (+35 hp)", kind: "meal" },
@@ -1290,35 +1632,215 @@ export class ViceblockRuntime3D {
     ];
   }
 
-  private enterMart(): void {
-    if (!this.martRoom) return;
-    this.interiorMode = { id: "coral-mart", returnX: this.player.x, returnZ: this.player.z };
+  private activeRoom(): InteriorRoom | null {
+    return this.interiorMode ? (this.rooms.get(this.interiorMode.id) ?? null) : null;
+  }
+
+  private activeSpots(): InteriorSpot[] {
+    const room = this.activeRoom();
+    if (!room) return [];
+    return this.spotsFor(room.id, room);
+  }
+
+  /**
+   * The door of the Malibu. The bouncer takes a cover charge and turns away
+   * anyone the police are actively looking for — a club is not a hiding place.
+   */
+  private enterClub(): void {
+    if (this.heat.level >= 2) {
+      this.say("BOUNCER", "Sirens two streets away and you want a table? Walk on.");
+      this.audio.uiClick();
+      return;
+    }
+    if (this.player.cash < CLUB.cover) {
+      this.say("BOUNCER", `Cover is $${CLUB.cover}. Come back when the night's been kinder.`);
+      this.audio.uiClick();
+      return;
+    }
+    this.player.cash -= CLUB.cover;
+    this.audio.cash();
+    this.clubVisit = { tips: 0, vip: false };
+    this.danceT = 0;
+    this.enterInterior("malibu-club");
+    this.preClubStation = this.audio.station;
+    if (this.audio.station !== "off") this.audio.setStation("palm");
+    this.audio.setVenue(true);
+    this.flash(`MALIBU CLUB  ·  cover $${CLUB.cover}  ·  bar, stage, VIP booth`);
+    this.say("BOUNCER", "Hands to yourself, tip the stage, don't start anything.");
+  }
+
+  private leaveClub(): void {
+    this.audio.setVenue(false);
+    if (this.preClubStation && this.audio.station === "palm") this.audio.setStation(this.preClubStation);
+    this.preClubStation = null;
+    this.danceT = 0;
+    this.flash("MALIBU CLUB  ·  back out on the strip");
+  }
+
+  /** A small camera kick for moments that are felt rather than hit. */
+  private pulse(amount: number): void {
+    if (this.settings.shake) this.shake = Math.max(this.shake, amount);
+  }
+
+  private clubDrink(): void {
+    if (this.player.cash < CLUB.drink) {
+      this.say("BARTENDER", `House pour is $${CLUB.drink}, friend. Cash only.`);
+      return;
+    }
+    this.player.cash -= CLUB.drink;
+    this.player.health = Math.min(100, this.player.health + 25);
+    this.audio.cash();
+    this.flash(`HOUSE POUR  ·  +25 health  ·  $${CLUB.drink}`);
+  }
+
+  private clubTip(): void {
+    if (this.player.cash < CLUB.tip) {
+      this.say("DANCER", "Empty pockets don't get eye contact, sugar.");
+      return;
+    }
+    this.player.cash -= CLUB.tip;
+    this.audio.cash();
+    this.pulse(0.9);
+    // The room only respects the first few notes: after that you are a mark.
+    if (this.clubVisit.tips < CLUB.paidTips) {
+      this.clubVisit.tips += 1;
+      this.player.streetRep += CLUB.tipRep;
+      this.player.xp += 10;
+      this.flash(`TIPPED THE STAGE  ·  +${CLUB.tipRep} street rep  ·  $${CLUB.tip}`);
+    } else {
+      this.flash(`TIPPED THE STAGE  ·  $${CLUB.tip}  ·  the room has stopped counting`);
+    }
+  }
+
+  private clubVip(): void {
+    if (this.clubVisit.vip) {
+      this.say("HOST", "Your table is already open. Enjoy it.");
+      return;
+    }
+    if (this.player.cash < CLUB.vip) {
+      this.say("HOST", `The booth runs $${CLUB.vip}. The rail is free.`);
+      return;
+    }
+    this.player.cash -= CLUB.vip;
+    this.clubVisit.vip = true;
+    this.player.health = 100;
+    this.player.armor = Math.min(100, this.player.armor + 20);
+    this.player.streetRep += CLUB.vipRep;
+    this.player.xp += CLUB.vipXp;
+    this.audio.cash();
+    this.pulse(1.4);
+    this.flash(`VIP BOOTH  ·  +${CLUB.vipRep} rep  ·  +${CLUB.vipXp} xp  ·  $${CLUB.vip}`);
+    this.say("HOST", "Southside knows your face after tonight. Spend like that again.");
+  }
+
+  private clubDance(): void {
+    this.danceT = CLUB.danceSeconds;
+    if (this.clock - this.lastDance < CLUB.danceCooldown) {
+      this.flash("ON THE FLOOR  ·  the crowd has seen this one already");
+      return;
+    }
+    this.lastDance = this.clock;
+    this.player.xp += CLUB.danceXp;
+    this.pulse(0.8);
+    this.flash(`ON THE FLOOR  ·  +${CLUB.danceXp} xp  ·  the crowd opens up`);
+  }
+
+  /** Lights, bodies and the mirror ball — only ticked while you are inside. */
+  private updateClub(dt: number): void {
+    if (this.interiorMode?.id !== "malibu-club") return;
+    const t = this.clock;
+    for (const d of this.clubDancers) this.poseDance(d, t);
+    // The floor runs a four-colour chase locked to the same beat the dancers use.
+    const beat = Math.floor(t * 2.2);
+    const palette = ["#ff2f9a", "#4ad8c8", "#f0c040", "#8a4aff"];
+    for (const tile of this.clubTiles) {
+      const hex = palette[(beat + tile.phase) % palette.length] ?? "#ff2f9a";
+      const lift = 0.55 + 0.45 * Math.abs(Math.sin(t * 4.4 + tile.phase));
+      tile.mat.emissiveColor = Color3.FromHexString(hex).scale(lift);
+    }
+    for (const w of this.clubWashes) {
+      w.mat.alpha = 0.1 + 0.14 * Math.abs(Math.sin(t * 2.6 + w.phase));
+      w.mesh.rotation.y += dt * 0.9;
+    }
+    if (this.clubBall) this.clubBall.rotation.y += dt * 1.4;
+    if (this.danceT > 0) this.danceT = Math.max(0, this.danceT - dt);
+  }
+
+  /**
+   * Dancing is a bounce, a hip turn and arms that do not hang: enough motion
+   * that a room full of these reads as a full club and not a waxwork museum.
+   */
+  private poseDance(d: ClubDancer, t: number): void {
+    const meta = d.mesh.metadata as { armL?: Mesh; armR?: Mesh; legL?: Mesh; legR?: Mesh } | undefined;
+    if (!meta) return;
+    const beat = t * 3.6 + d.phase;
+    const s = Math.sin(beat);
+    const bounce = Math.abs(Math.sin(beat));
+    if (d.style === 3) {
+      // Behind a counter: a nod and a shoulder, nothing that leaves the spot.
+      d.mesh.position.y = d.baseY + bounce * 0.7;
+      d.mesh.rotation.y = d.baseRotY + s * 0.12;
+      if (meta.armL) meta.armL.rotation.x = s * 0.35;
+      if (meta.armR) meta.armR.rotation.x = -s * 0.35;
+      return;
+    }
+    d.mesh.position.y = d.baseY + bounce * (d.style === 0 ? 1.1 : 1.9);
+    // Style 0 works the pole and turns around it; the rest sway on the spot.
+    d.mesh.rotation.y = d.style === 0 ? d.baseRotY + t * 0.85 : d.baseRotY + s * 0.42;
+    if (meta.armL) {
+      meta.armL.rotation.z = (d.style === 0 ? 2.1 : 1.2) + s * 0.35;
+      meta.armL.rotation.x = s * 0.6;
+    }
+    if (meta.armR) {
+      meta.armR.rotation.z = (d.style === 0 ? -2.1 : -1.2) + s * 0.35;
+      meta.armR.rotation.x = -s * 0.6;
+    }
+    if (meta.legL) meta.legL.rotation.x = s * 0.3;
+    if (meta.legR) meta.legR.rotation.x = -s * 0.3;
+  }
+
+  private enterInterior(id: string): void {
+    const room = this.rooms.get(id);
+    if (!room) return;
+    this.interiorMode = { id, returnX: this.player.x, returnZ: this.player.z };
     this.showInterior(true);
-    this.player.x = this.martRoom.cx;
-    this.player.z = this.martRoom.cz + this.martRoom.half - 24;
+    this.player.x = room.cx;
+    this.player.z = room.cz + room.entryZ;
     this.player.vehicleId = null;
-    this.flash("CORAL MART  ·  counter buys food  ·  the till is a choice");
     this.audio.uiClick();
   }
 
   private exitInterior(): void {
     if (!this.interiorMode) return;
+    this.showInterior(false);
     this.player.x = this.interiorMode.returnX;
     this.player.z = this.interiorMode.returnZ;
+    if (this.interiorMode.id === "malibu-club") this.leaveClub();
     this.interiorMode = null;
-    this.showInterior(false);
     this.audio.uiClick();
   }
 
   /** Interior interactions resolve by proximity to the same spots the discs use. */
   private interactInterior(): void {
-    if (!this.interiorMode || !this.martRoom) return;
-    const spot = this.martSpots().find((s) => Math.hypot(this.player.x - s.x, this.player.z - s.z) < s.r);
+    if (!this.interiorMode) return;
+    const spot = this.activeSpots().find((s) => Math.hypot(this.player.x - s.x, this.player.z - s.z) < s.r);
     if (!spot) return;
     switch (spot.kind) {
       case "rob":
         this.robStore();
         this.exitInterior();
+        return;
+      case "bar":
+        this.clubDrink();
+        return;
+      case "tip":
+        this.clubTip();
+        return;
+      case "vip":
+        this.clubVip();
+        return;
+      case "dance":
+        this.clubDance();
         return;
       case "meal":
         if (this.player.cash >= 15) {
@@ -1363,8 +1885,8 @@ export class ViceblockRuntime3D {
   }
 
   private interiorPrompt(): string {
-    if (!this.interiorMode || !this.martRoom) return "";
-    for (const s of this.martSpots()) {
+    if (!this.interiorMode) return "";
+    for (const s of this.activeSpots()) {
       if (Math.hypot(this.player.x - s.x, this.player.z - s.z) < s.r) return s.prompt;
     }
     return "Walk onto a labeled disc";
@@ -1498,6 +2020,7 @@ export class ViceblockRuntime3D {
     }
 
     this.updateBeacon();
+    this.updateClub(dt);
     this.updatePlayer(dt);
     this.updateCars(dt);
     this.updateActors(dt);
@@ -1593,9 +2116,10 @@ export class ViceblockRuntime3D {
     if (mag > 0.05) {
       const nx = this.player.x + (mx / mag) * Math.min(1, mag) * speed * dt;
       const nz = this.player.z + (mz / mag) * Math.min(1, mag) * speed * dt;
-      if (this.interiorMode && this.martRoom) {
+      const inside = this.activeRoom();
+      if (inside) {
         // Interior collision is the room's walls, not the city grid.
-        const { cx, cz, half } = this.martRoom;
+        const { cx, cz, half } = inside;
         this.player.x = Math.max(cx - half + 12, Math.min(cx + half - 12, nx));
         this.player.z = Math.max(cz - half + 12, Math.min(cz + half - 12, nz));
       } else {
@@ -1634,9 +2158,15 @@ export class ViceblockRuntime3D {
     const bob = mag > 0.05 && this.player.grounded ? Math.abs(Math.sin(this.clock * (axis.sprint ? 14 : 9))) * 1.1 : 0;
     this.playerMesh.position.set(this.player.x, elev + this.player.y + bob, this.player.z);
     this.playerMesh.rotation.y = -this.player.heading;
-    this.poseWalk(this.playerMesh, mag > 0.05, axis.sprint);
-    if (this.armed()) this.poseAim(this.playerMesh, this.aiming || this.clock - this.lastFired < 0.7, this.recoil * 3);
-    else this.posePunch(this.playerMesh, this.clock - this.lastFired);
+    if (mag > 0.05) this.danceT = 0;
+    if (this.danceT > 0) {
+      // Standing still on the club floor after hitting E: dance, don't idle.
+      this.poseDance({ mesh: this.playerMesh, style: 1, phase: 0, baseY: elev, baseRotY: -this.player.heading }, this.clock);
+    } else {
+      this.poseWalk(this.playerMesh, mag > 0.05, axis.sprint);
+      if (this.armed()) this.poseAim(this.playerMesh, this.aiming || this.clock - this.lastFired < 0.7, this.recoil * 3);
+      else this.posePunch(this.playerMesh, this.clock - this.lastFired);
+    }
     this.separateFromBodies();
   }
 
@@ -1767,7 +2297,7 @@ export class ViceblockRuntime3D {
       z: this.player.z + backZ - Math.sin(yaw) * side,
       y: Math.max(elev + CAMERA.minHeight, elev + 26 + Math.sin(pitch) * dist),
     };
-    const room = this.interiorMode ? this.martRoom : null;
+    const room = this.activeRoom();
     if (room) {
       // Indoors the boom has to stay in the room, or it swings out through a
       // wall and films the shop hanging in mid-air over the city.
@@ -2984,7 +3514,12 @@ export class ViceblockRuntime3D {
       if (rico) this.talkTo(rico);
       return;
     }
-    if (mark.id === "coral-mart") return this.enterMart();
+    if (mark.id === "coral-mart") {
+      this.enterInterior("coral-mart");
+      this.flash("CORAL MART  ·  counter buys food  ·  the till is a choice");
+      return;
+    }
+    if (mark.id === "malibu-club") return this.enterClub();
     if (mark.id === "jewelry") return this.robJewelry();
     if (mark.id === "race-start") return this.startRace();
     if (mark.id === "warehouse") {
@@ -3725,7 +4260,7 @@ export class ViceblockRuntime3D {
       dialogue: this.dialogue ? { who: this.dialogue.who, line: this.dialogue.line } : null,
       toast: this.toast,
       phoneOpen: this.player.phone,
-      interior: this.interiorMode ? "Coral Mart" : null,
+      interior: this.activeRoom()?.name ?? null,
       username: this.username,
       others: this.remoteMeshes.size,
       lockpick: this.lockpick

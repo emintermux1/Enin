@@ -925,6 +925,8 @@ function landmarkHeight(lm: Landmark): number {
       return 52;
     case "bank":
       return 96;
+    case "club":
+      return 40;
     case "garage":
     case "gas":
       return 26;
@@ -970,6 +972,8 @@ function landmarkColor(kind: Landmark["kind"]): string {
       return "#7a4a58";
     case "bank":
       return "#3a4048";
+    case "club":
+      return "#2e1c34";
     default: {
       const _n: never = kind;
       return _n;
@@ -1003,6 +1007,8 @@ function trimColor(kind: Landmark["kind"]): string {
       return "#9070c0";
     case "bank":
       return "#c0c8d8";
+    case "club":
+      return "#ff4aa8";
     default: {
       const _n: never = kind;
       return _n;

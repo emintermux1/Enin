@@ -1241,6 +1241,8 @@ function buildingColor(kind: Landmark["kind"], t: number): string {
       return night ? "#4a3040" : "#7a4a58";
     case "bank":
       return "#3a4048";
+    case "club":
+      return night ? "#4a1c46" : "#2e1c34";
     default: {
       const _n: never = kind;
       return _n;

@@ -30,7 +30,8 @@ export interface Landmark {
     | "npc"
     | "secret"
     | "jewelry"
-    | "bank";
+    | "bank"
+    | "club";
   x: number;
   y: number;
   w: number;
@@ -145,6 +146,7 @@ export function buildSouthside(): WorldData {
     lm("race-start", "Midnight Line", "race", 48, 64, 6, 3, 50, 65, false, "normal"),
     lm("jewelry", "Sunset Cases", "jewelry", 40, 27, 8, 7, 43, 34, true, "normal"),
     lm("secret-bunker", "Painted Door", "secret", 12, 41, 8, 7, 13, 47, true, "normal"),
+    lm("malibu-club", "Malibu Club", "club", 40, 55, 8, 7, 43, 62, true, "normal"),
     lm("cupsey", "Cupsey's Corner", "npc", 26, 27, 3, 3, 27, 29, false, "normal"),
     lm("ansem", "Ansem's Mural", "npc", 68, 14, 10, 6, 72, 20, false, "normal"),
   ];

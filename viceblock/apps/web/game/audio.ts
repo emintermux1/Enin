@@ -80,6 +80,7 @@ export class GameAudio {
   sfxGain: GainNode | null = null;
   station: StationId = "nova-fm";
   inVehicle = false;
+  venue = false;
   unlocked = false;
   private timer: number | null = null;
   private step = 0;
@@ -155,6 +156,12 @@ export class GameAudio {
 
   setInVehicle(v: boolean): void {
     this.inVehicle = v;
+    this.applyLevels();
+  }
+
+  /** Inside a club the house system is the loudest thing in the room. */
+  setVenue(on: boolean): void {
+    this.venue = on;
     this.applyLevels();
   }
 
@@ -243,8 +250,9 @@ export class GameAudio {
   private applyLevels(): void {
     if (!this.master || !this.musicGain || !this.sfxGain) return;
     this.master.gain.value = this.levels.master;
-    const music = this.station === "off" ? 0 : this.inVehicle ? this.levels.radio : this.levels.music;
-    this.musicGain.gain.value = music * (this.inVehicle ? 0.95 : 0.72);
+    const onFoot = this.venue ? this.levels.radio : this.levels.music;
+    const music = this.station === "off" ? 0 : this.inVehicle ? this.levels.radio : onFoot;
+    this.musicGain.gain.value = music * (this.inVehicle ? 0.95 : this.venue ? 1.05 : 0.72);
     this.sfxGain.gain.value = this.levels.sfx;
   }
 
