@@ -35,10 +35,19 @@ export function createThrill(): ThrillState {
   return { combo: 0, timer: 0, pending: 0, best: 0 };
 }
 
-/** Combo multiplier: 1x at no combo, then +0.5x a step, capped. */
+/**
+ * What the `combo`-th stunt of a chain is worth: the first pays its face value,
+ * each one after it adds half again, capped.
+ *
+ * The argument is the length of the chain *including* the stunt being paid, so
+ * the figure this returns is the one that multiplied the cash — which is what
+ * the HUD prints beside the running total.
+ */
 export function comboMultiplier(combo: number): number {
-  if (combo <= 0) return 1;
-  return 1 + Math.min(combo, THRILL_CONFIG.maxCombo) * 0.5;
+  if (combo <= 1) return 1;
+  // The meter itself stops at `maxCombo`, so that is where the multiplier tops
+  // out: one step per stunt after the first.
+  return 1 + Math.min(combo - 1, THRILL_CONFIG.maxCombo - 1) * 0.5;
 }
 
 /** Cash for shaving past a car. Closer and faster both pay more. */
@@ -72,7 +81,11 @@ export function driftValue(seconds: number, heat = 0): number {
 export function scoreStunt(state: ThrillState, baseValue: number): { state: ThrillState; payout: number } {
   if (baseValue <= 0) return { state, payout: 0 };
   const combo = Math.min(THRILL_CONFIG.maxCombo, state.combo + 1);
-  const payout = Math.round(baseValue * comboMultiplier(state.combo));
+  // Pay for the chain this stunt just made, not the one before it. Scoring the
+  // previous length meant the meter always advertised the multiplier for the
+  // *next* trick while the cash underneath it had been worked out at the last
+  // one, so the number on screen never described the money beside it.
+  const payout = Math.round(baseValue * comboMultiplier(combo));
   return {
     state: {
       combo,

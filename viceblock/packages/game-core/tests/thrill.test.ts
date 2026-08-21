@@ -69,6 +69,22 @@ describe("combo meter", () => {
     expect(comboMultiplier(THRILL_CONFIG.maxCombo + 20)).toBe(comboMultiplier(THRILL_CONFIG.maxCombo));
   });
 
+  it("pays the multiplier the HUD is showing", () => {
+    // The readout prints `comboMultiplier(state.combo)` next to the cash banked
+    // so far. Scoring against the previous chain length made that figure a
+    // promise about the next stunt rather than a description of this one.
+    let s = createThrill();
+    for (let i = 0; i < THRILL_CONFIG.maxCombo + 2; i++) {
+      const r = scoreStunt(s, 100);
+      expect(r.payout).toBe(Math.round(100 * comboMultiplier(r.state.combo)));
+      s = r.state;
+    }
+  });
+
+  it("leaves a lone stunt at face value", () => {
+    expect(scoreStunt(createThrill(), 100).payout).toBe(100);
+  });
+
   it("keeps a zero-value stunt out of the meter", () => {
     const s = createThrill();
     const r = scoreStunt(s, 0);
