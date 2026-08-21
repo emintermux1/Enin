@@ -10,6 +10,7 @@ type ChatProps = {
   location: LocationId;
   messages: Message[];
   choices: Choice[];
+  waiting: boolean;
   onSend: (text: string) => void;
   onBack: () => void;
 };
@@ -21,11 +22,13 @@ export function Chat({
   location,
   messages,
   choices,
+  waiting,
   onSend,
   onBack,
 }: ChatProps) {
   const [draft, setDraft] = useState("");
   const scroller = useRef<HTMLDivElement>(null);
+  const input = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const node = scroller.current;
@@ -33,12 +36,18 @@ export function Chat({
       return;
     }
     node.scrollTop = node.scrollHeight;
-  }, [messages]);
+  }, [messages, waiting]);
+
+  useEffect(() => {
+    if (!waiting) {
+      input.current?.focus();
+    }
+  }, [waiting]);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const trimmed = draft.trim();
-    if (!trimmed) {
+    if (!trimmed || waiting) {
       return;
     }
     onSend(trimmed);
@@ -56,7 +65,7 @@ export function Chat({
           <div>
             <p className="who-name">{character.name}</p>
             <p className="who-sub">
-              {character.title} · {locationLabel(location)} · seninle
+              {waiting ? "yazıyor…" : `çevrimiçi · ${locationLabel(location)}`}
             </p>
           </div>
         </div>
@@ -68,11 +77,6 @@ export function Chat({
 
       <div className="heat-track" aria-hidden="true">
         <i style={{ width: `${heat}%` }} />
-      </div>
-
-      <div className="stage">
-        <Portrait id={character.id} large />
-        <p className="stage-line">{character.hook}</p>
       </div>
 
       <div className="thread" ref={scroller}>
@@ -88,12 +92,27 @@ export function Chat({
             )}
           </article>
         ))}
+        {waiting ? (
+          <article className="bubble them typing" aria-live="polite">
+            <span>{character.name}</span>
+            <p>
+              <i />
+              <i />
+              <i />
+            </p>
+          </article>
+        ) : null}
       </div>
 
       <div className="composer">
         <div className="choices">
           {choices.map((choice) => (
-            <button key={choice.label} type="button" onClick={() => onSend(choice.text)}>
+            <button
+              key={choice.label}
+              type="button"
+              disabled={waiting}
+              onClick={() => onSend(choice.text)}
+            >
               {choice.label}
             </button>
           ))}
@@ -104,13 +123,15 @@ export function Chat({
           </label>
           <input
             id="draft"
+            ref={input}
             autoFocus
+            disabled={waiting}
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
-            placeholder="Ona yaz. Ne istediğini söyle."
+            placeholder={waiting ? `${character.name} yazıyor…` : "Yaz, gönder. O cevaplar."}
             maxLength={280}
           />
-          <button type="submit" className="btn-primary" disabled={!draft.trim()}>
+          <button type="submit" className="btn-primary" disabled={!draft.trim() || waiting}>
             Gönder
           </button>
         </form>

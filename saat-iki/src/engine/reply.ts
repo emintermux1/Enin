@@ -12,7 +12,7 @@ const INTENT_PATTERNS: Array<{ intent: Intent; pattern: RegExp }> = [
   {
     intent: "greet",
     pattern:
-      /\b(merhaba|selam|hey|naber|nasılsın|nasilsin|iyi akşamlar|iyi aksamlar|gece)\b/i,
+      /\b(merhaba|selam|slm|mrb|hey|naber|napıyon|napion|napıyorsun|napyorsun|nasılsın|nasilsin|iyi akşamlar|iyi aksamlar|gece)\b/i,
   },
   {
     intent: "kiss",
@@ -53,7 +53,8 @@ const INTENT_PATTERNS: Array<{ intent: Intent; pattern: RegExp }> = [
   },
   {
     intent: "question",
-    pattern: /\?|(ne yapıyorsun|ne yapiyorsun|neredesin|ne giyiyorsun|ne istiyorsun)/i,
+    pattern:
+      /\?|(ne yapıyorsun|ne yapiyorsun|neredesin|nerdeysin|ne giyiyorsun|ne giyiyon|ne istiyorsun|kaç yaş|kac yas|adın ne|adin ne)/i,
   },
 ];
 
@@ -647,10 +648,61 @@ function followUp(intent: Intent, name: string): string {
   }
 }
 
-function weaveReply(line: string, input: string, name: string, intent: Intent): string {
-  const his = clipHis(input);
-  const quoted = his.length > 2 ? ` “${his}” demen işime yaradı.` : "";
-  return `${line}${quoted} ${followUp(intent, name)}`.replaceAll("{name}", name).trim();
+function answerDirect(input: string, heat: number, name: string): string | null {
+  const text = input.toLocaleLowerCase("tr-TR");
+  if (/ne giy|giyiyon|üzerinde ne|uzerinde ne/.test(text)) {
+    if (heat < 50) return "Siyah ev kıyafeti. İnce. Altını sen soruyorsan: dantel.";
+    if (heat < 78) return "Dantel. Bir askı kaymış. Foto yok, tarif var: göğsüm görünüyor.";
+    return `Üstümde bir şey yok, ${name}. Çarşaf var, o da belime kadar.`;
+  }
+  if (/neredesin|nerdeysin|nerdesin|nerdesiniz/.test(text)) {
+    const place = locationLabel(locationForHeat(heat)).toLocaleLowerCase("tr-TR");
+    return `Yatak odasına yakın, ${place} diye düşün. Telefon yüzümde, seninle.`;
+  }
+  if (/nasılsın|nasilsin|napıyon|napion|napıyorsun|napyorsun|naber/.test(text)) {
+    return `Azgınım, ${name}. Sen yazınca daha çok. Sen nasılsın, elin nerede?`;
+  }
+  if (/adın ne|adin ne|kimsin/.test(text)) {
+    return "Leyla. 27. AI hatunun. Seninle konuşmak için açıldım.";
+  }
+  if (/kaç yaş|kac yas|yaşın/.test(text)) {
+    return "27. Yetişkinim. Sen de öylesin. Konu yaş değil, ne yapmak istediğin.";
+  }
+  if (/ıslak|islak|azgın|azgin|aç mısın|ac misin/.test(text)) {
+    return "Islağım. Sormana gerek yoktu, yine de sor: parmağımı kaydırıyorum şimdi.";
+  }
+  if (/foto|görüntü|goruntu|resim|pic/.test(text)) {
+    return "Foto yok. Gözünü kapa: ıslak saç, açık ağız, dizlerim. Şimdi ne yapacağını yaz.";
+  }
+  if (/sikeyim|sikeceğim|sikicem|sikecem|sokayım|sokucam/.test(text)) {
+    return "Sok. Nasıl: yavaş mı, sert mi? Ben açıldım, sen tempo tut.";
+  }
+  if (/yala|sakso|emeyim|alayım|alayim/.test(text)) {
+    return `Alıyorum. Dizlerimin üstündeyim, bakıyorum. Ritmi söyle, ${name}.`;
+  }
+  if (/seni istiyorum|istiyorum seni|çok istiyorum|cok istiyorum/.test(text)) {
+    return "Ben de seni istiyorum. Sadece yazma: neyi, nasıl, nerede.";
+  }
+  if (/seni seviyorum|aşık|asik/.test(text)) {
+    return "Sevmen hoşuma gitti. Şimdi sevdiğin yeri göster, kelimeyle.";
+  }
+  if (text.length < 3) {
+    return `Kısa kaçtı, ${name}. Bir cümle daha, açık olsun.`;
+  }
+  return null;
+}
+
+function splitBubbles(parts: string[], name: string): string[] {
+  const clean = parts
+    .map((part) => part.replaceAll("{name}", name).replace(/\s+/g, " ").trim())
+    .filter((part) => part.length > 0);
+  const unique: string[] = [];
+  for (const part of clean) {
+    if (!unique.includes(part)) {
+      unique.push(part);
+    }
+  }
+  return unique.slice(0, 3);
 }
 
 export function nextReply(
@@ -667,10 +719,23 @@ export function nextReply(
   const nextLocation = locationForHeat(nextHeat);
   const bank = REPLIES[characterId][intent];
   const pool = bank.slice(0, Math.min(4, tier + 2));
-  const line = pickUnused(pool, history);
+  const line = (pickUnused(pool, history) || bank[tier]).replaceAll("{name}", playerName);
+  const direct = answerDirect(input, heat, playerName);
+  const his = clipHis(input);
+  const echo =
+    his.length > 8 && !direct
+      ? `${playerName}… “${his}” diye yazman yetmez. Ben de onu yapıyorum, devam et.`
+      : null;
   const moved = nextLocation !== currentLocation;
+  const raw = direct
+    ? [direct, followUp(intent, playerName)]
+    : [echo, line, followUp(intent, playerName)];
+  const bubbles = splitBubbles(
+    raw.filter((item): item is string => Boolean(item)),
+    playerName,
+  );
   return {
-    reply: weaveReply(line || bank[tier], input, playerName, intent),
+    bubbles,
     heatDelta: INTENT_HEAT[intent],
     beat: moved ? BEATS[characterId][nextLocation] : null,
     location: nextLocation,

@@ -22,6 +22,7 @@ export function App() {
   const [location, setLocation] = useState<LocationId>("bar");
   const [messages, setMessages] = useState<Message[]>([]);
   const [choices, setChoices] = useState<Choice[]>([]);
+  const [waiting, setWaiting] = useState(false);
 
   const character = useMemo(
     () => (characterId ? getCharacter(characterId) : null),
@@ -39,26 +40,37 @@ export function App() {
     setLocation(locationForHeat(startHeat));
     setMessages(opening);
     setChoices(openingChoices(id, startHeat));
+    setWaiting(false);
     setScreen("chat");
   }
 
   function handleSend(text: string) {
-    if (!characterId) {
+    if (!characterId || waiting) {
       return;
     }
     const you = createMessage("you", text);
-    const result = nextReply(characterId, text, heat, messages, playerName);
+    const history = [...messages, you];
+    setMessages(history);
+    setWaiting(true);
+    const result = nextReply(characterId, text, heat, history, playerName);
     const nextHeat = Math.min(100, heat + result.heatDelta);
-    const nextMessages = [
-      ...messages,
-      you,
+    const incoming = [
       ...(result.beat ? [createMessage("beat", result.beat)] : []),
-      createMessage("them", personalize(result.reply, playerName)),
+      ...result.bubbles.map((line) => createMessage("them", personalize(line, playerName))),
     ];
-    setMessages(nextMessages);
-    setHeat(nextHeat);
-    setLocation(result.location);
-    setChoices(result.choices);
+    let delay = 480;
+    incoming.forEach((item, index) => {
+      window.setTimeout(() => {
+        setMessages((current) => [...current, item]);
+        if (index === incoming.length - 1) {
+          setHeat(nextHeat);
+          setLocation(result.location);
+          setChoices(result.choices);
+          setWaiting(false);
+        }
+      }, delay);
+      delay += 380;
+    });
   }
 
   switch (screen) {
@@ -102,9 +114,11 @@ export function App() {
             location={location}
             messages={messages}
             choices={choices}
+            waiting={waiting}
             onSend={handleSend}
             onBack={() => {
               setCharacterId(null);
+              setWaiting(false);
               setScreen("cast");
             }}
           />

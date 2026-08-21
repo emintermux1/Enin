@@ -46,7 +46,7 @@ export type Character = {
 };
 
 export type EngineResult = {
-  reply: string;
+  bubbles: string[];
   heatDelta: number;
   beat: string | null;
   location: LocationId;

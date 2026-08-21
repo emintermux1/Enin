@@ -12,7 +12,7 @@ npm install
 npm run dev
 ```
 
-Tarayıcıda `http://localhost:4173` açılır. Yaş kapısı, adın, sonra Leyla hemen yazar.
+Tarayıcıda `http://localhost:4173` açılır. Yaş kapısı, adın, sonra Leyla yazar. Sen yazınca “yazıyor…” görünür, o senin cümline cevap verir.
 
 ## Kimler
 
