@@ -41,8 +41,10 @@ export const SPIDER_CONFIG = {
   launchLift: 200,
   /** Letting go at the bottom of an arc throws you up the far side. */
   releaseBoost: 120,
-  /** A held zip drags you toward the anchor at this speed. */
+  /** A zip winches you toward the anchor at this speed. */
   zipSpeed: 560,
+  /** How close to the anchor counts as having arrived. */
+  zipArrive: 20,
   /**
    * Ceiling on swing speed. Roughly three times what a car does, which is the
    * point of the web, but slow enough that a district still takes a few arcs
@@ -217,16 +219,26 @@ export function initialLength(px: number, py: number, pz: number, ax: number, ay
   return Math.max(SPIDER_CONFIG.minLength, Math.min(SPIDER_CONFIG.maxLength, d));
 }
 
-/** Velocity that drags the player along the line toward a zip target. */
-export function zipVelocity(px: number, py: number, pz: number, ax: number, ay: number, az: number): { vx: number; vy: number; vz: number } {
-  const dx = ax - px;
-  const dy = ay - py;
-  const dz = az - pz;
+/**
+ * One step of a zip. The line goes taut and winches you in at a fixed speed
+ * with gravity locked out, rather than throwing you at the anchor and hoping:
+ * a shot fired at a roof has to end on that roof, every time, or the whole
+ * move stops being a way up and becomes a coin toss.
+ */
+export function stepZip(state: SwingState, target: { x: number; y: number; z: number }, dt: number): { state: SwingState; arrived: boolean } {
+  const dx = target.x - state.x;
+  const dy = target.y - state.y;
+  const dz = target.z - state.z;
   const d = Math.hypot(dx, dy, dz) || 1;
+  const vx = (dx / d) * SPIDER_CONFIG.zipSpeed;
+  const vy = (dy / d) * SPIDER_CONFIG.zipSpeed;
+  const vz = (dz / d) * SPIDER_CONFIG.zipSpeed;
+  // Never travel past the anchor: the last step is only as long as the rope
+  // that is left.
+  const remaining = Math.max(0, d - SPIDER_CONFIG.zipArrive) / SPIDER_CONFIG.zipSpeed;
+  const step = Math.min(dt, remaining);
   return {
-    vx: (dx / d) * SPIDER_CONFIG.zipSpeed,
-    // Aim a little over the lip so a zip lands on the roof, not into the wall.
-    vy: (dy / d) * SPIDER_CONFIG.zipSpeed + 90,
-    vz: (dz / d) * SPIDER_CONFIG.zipSpeed,
+    state: { x: state.x + vx * step, y: state.y + vy * step, z: state.z + vz * step, vx, vy, vz },
+    arrived: remaining <= dt,
   };
 }

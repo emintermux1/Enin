@@ -8,7 +8,7 @@ import {
   releaseSwing,
   stepAirborne,
   stepSwing,
-  zipVelocity,
+  stepZip,
   type SwingState,
   type WebLine,
 } from "../src/spider";
@@ -129,9 +129,37 @@ describe("web swinging", () => {
     expect(initialLength(0, 0, 0, 0, 5000, 0)).toBe(SPIDER_CONFIG.maxLength);
   });
 
-  it("zips toward the anchor with a lift so you clear the lip", () => {
-    const v = zipVelocity(0, 0, 0, 0, 300, 0);
-    expect(v.vy).toBeGreaterThan(SPIDER_CONFIG.zipSpeed);
-    expect(Math.abs(v.vx)).toBeLessThan(0.001);
+  it("winches straight at the anchor rather than arcing at it", () => {
+    const out = stepZip(still(0, 0, 0), { x: 0, y: 300, z: 0 }, 0.1);
+    expect(out.arrived).toBe(false);
+    expect(out.state.vy).toBeCloseTo(SPIDER_CONFIG.zipSpeed, 3);
+    expect(Math.abs(out.state.vx)).toBeLessThan(0.001);
+    // No gravity while the line is hauling: a zip has to land where it aimed.
+    expect(out.state.y).toBeCloseTo(SPIDER_CONFIG.zipSpeed * 0.1, 3);
+  });
+
+  it("arrives at the anchor instead of overshooting through it", () => {
+    let s = still(0, 0, 0);
+    const target = { x: 0, y: 300, z: 0 };
+    let arrived = false;
+    for (let i = 0; i < 200 && !arrived; i++) {
+      const out = stepZip(s, target, 1 / 60);
+      s = out.state;
+      arrived = out.arrived;
+    }
+    expect(arrived).toBe(true);
+    expect(s.y).toBeLessThanOrEqual(300);
+    expect(300 - s.y).toBeLessThanOrEqual(SPIDER_CONFIG.zipArrive + 1);
+  });
+
+  it("reaches a roof across the street, which a thrown zip fell short of", () => {
+    let s = still(0, 0, 0);
+    const target = { x: 220, y: 290, z: 0 };
+    for (let i = 0; i < 300; i++) {
+      const out = stepZip(s, target, 1 / 60);
+      s = out.state;
+      if (out.arrived) break;
+    }
+    expect(Math.hypot(target.x - s.x, target.y - s.y, target.z - s.z)).toBeLessThanOrEqual(SPIDER_CONFIG.zipArrive + 1);
   });
 });

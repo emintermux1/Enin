@@ -63,6 +63,27 @@ const EMPTY: HudSnapshot = {
   airSpeed: 0,
 };
 
+function slingerLabel(web: HudSnapshot["web"]): string {
+  switch (web) {
+    case "swing":
+      return "ON THE LINE";
+    case "zip":
+      return "REELING IN";
+    case "wall":
+      return "ON THE WALL";
+    case "air":
+      return "FALLING";
+    case "aimed":
+      return "ANCHOR";
+    case "ready":
+      return "NO ANCHOR";
+    default: {
+      const never: never = web;
+      return never;
+    }
+  }
+}
+
 function xpPct(xp: number, level: number): number {
   // Mirrors the runtime's level curve: level = floor(1 + sqrt(xp / 180)).
   const base = 180 * (level - 1) ** 2;
@@ -461,7 +482,7 @@ export function GameShell() {
               </div>
               <div className={`slinger ${hud.web}`}>
                 <b>
-                  {hud.web === "swing" ? "ON THE LINE" : hud.web === "wall" ? "ON THE WALL" : hud.web === "air" ? "FALLING" : hud.web === "aimed" ? "ANCHOR" : "NO ANCHOR"}
+                  {slingerLabel(hud.web)}
                 </b>
                 <span>
                   {hud.altitude > 2 ? `${hud.altitude}m up · ` : ""}

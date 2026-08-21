@@ -64,7 +64,7 @@ import {
   releaseSwing,
   stepAirborne,
   stepSwing,
-  zipVelocity,
+  stepZip,
   speedCameraDistance,
   speedFov,
   speedoKmh,
@@ -395,6 +395,8 @@ export class ViceblockRuntime3D {
   private flight = { vx: 0, vy: 0, vz: 0 };
   /** Stuck to a wall: which way the wall lies, and how long you have hung there. */
   private cling: { dir: number; t: number } | null = null;
+  /** The anchor currently being winched toward, while a zip is in flight. */
+  private zipTo: { x: number; y: number; z: number } | null = null;
   private swingT = 0;
   private airT = 0;
   private webCooldown = 0;
@@ -2595,8 +2597,7 @@ export class ViceblockRuntime3D {
       this.audio.uiClick();
       return;
     }
-    const v = zipVelocity(this.player.x, this.player.y, this.player.z, a.x, a.y, a.z);
-    this.flight = v;
+    this.zipTo = a;
     this.web = null;
     this.cling = null;
     this.player.grounded = false;
@@ -2660,6 +2661,17 @@ export class ViceblockRuntime3D {
     const state: SwingState = { x: this.player.x, y: this.player.y, z: this.player.z, ...this.flight };
     const input = { lean: -axis.y, steer: axis.x, reel: axis.sprint };
     let next: SwingState;
+    if (this.zipTo) {
+      const out = stepZip(state, this.zipTo, dt);
+      if (out.arrived) this.zipTo = null;
+      this.airT += dt;
+      this.settleFlight(out.state);
+      // Hitting the wall or topping out ends the pull; otherwise you would be
+      // winched into the brickwork you are already holding.
+      if (this.cling || this.player.grounded) this.zipTo = null;
+      this.drawLine();
+      return true;
+    }
     if (this.web) {
       // Shorten an over-long line toward what the drop below it can take, so a
       // shot fired from the street climbs into an arc instead of ploughing one.
@@ -2786,7 +2798,7 @@ export class ViceblockRuntime3D {
       m.applyFog = false;
       this.webMesh = m;
     }
-    const line = this.web;
+    const line: { x: number; y: number; z: number } | null = this.web ?? this.zipTo;
     if (!line) {
       this.webMesh.setEnabled(false);
       return;
@@ -2802,7 +2814,7 @@ export class ViceblockRuntime3D {
 
   /** Ages the splat left by a zip, which otherwise sat on the wall forever. */
   private fadeSplat(dt: number): void {
-    if (this.web || !this.webSplat?.isEnabled()) return;
+    if (this.web || this.zipTo || !this.webSplat?.isEnabled()) return;
     this.splatT -= dt;
     if (this.splatT <= 0) this.webSplat.setEnabled(false);
   }
@@ -2826,6 +2838,7 @@ export class ViceblockRuntime3D {
   /** Drop everything: used by interiors, arrest and death. */
   private dropLine(): void {
     this.web = null;
+    this.zipTo = null;
     this.cling = null;
     this.flight = { vx: 0, vy: 0, vz: 0 };
     this.swingT = 0;
@@ -5082,15 +5095,17 @@ export class ViceblockRuntime3D {
       speed: drive ? speedoKmh(Math.hypot(drive.rt.vx, drive.rt.vy)) : 0,
       drifting: this.driftTime > 0,
       failure: this.failure,
-      web: this.web
-        ? "swing"
-        : this.cling
-          ? "wall"
-          : !this.player.grounded && !this.player.vehicleId
-            ? "air"
-            : this.anchorPreview && !this.player.vehicleId
-              ? "aimed"
-              : "ready",
+      web: this.zipTo
+        ? "zip"
+        : this.web
+          ? "swing"
+          : this.cling
+            ? "wall"
+            : !this.player.grounded && !this.player.vehicleId
+              ? "air"
+              : this.anchorPreview && !this.player.vehicleId
+                ? "aimed"
+                : "ready",
       altitude: this.player.vehicleId ? 0 : Math.round(this.player.y),
       airSpeed: this.player.grounded || this.player.vehicleId ? 0 : speedoKmh(Math.hypot(this.flight.vx, this.flight.vz)),
     };

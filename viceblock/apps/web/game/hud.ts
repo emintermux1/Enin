@@ -54,7 +54,7 @@ export interface HudSnapshot {
   /** Full-screen failure card shown briefly after dying or being arrested. */
   failure: "wasted" | "busted" | null;
   /** What the web-shooters are doing right now. */
-  web: "ready" | "aimed" | "swing" | "wall" | "air";
+  web: "ready" | "aimed" | "swing" | "zip" | "wall" | "air";
   /** Height above the street in world units, 0 on the pavement. */
   altitude: number;
   /** Airspeed while swinging, in km/h, so the arc has a number on it. */
