@@ -31,6 +31,13 @@ export const SPIDER_CONFIG = {
   /** An anchor must be at least this far above you, or the swing is a faceplant. */
   minAnchorRise: 40,
   /**
+   * Horizontal reach a swing anchor needs. A street is walled on both sides, so
+   * the nearest thing tall enough to catch is usually the brickwork at your
+   * elbow: taking it means the pendulum drives you into that wall before the
+   * arc has started. A swing has to reach past the block it starts on.
+   */
+  minSwingReach: 76,
+  /**
    * Rise over horizontal reach: how steep a line has to be to be worth firing.
    * A shallow one is still allowed to bite because `reelToCeiling` hauls it in
    * as the arc starts; only a genuine tow rope is refused.
@@ -199,14 +206,23 @@ export function reelToCeiling(line: WebLine, ceiling: number, dt: number): WebLi
   return { ...line, length: Math.max(ceiling, line.length - SPIDER_CONFIG.autoReel * dt) };
 }
 
+/** How picky a shot is about what it will catch on. */
+export interface AnchorLimits {
+  /** How far above the player the anchor has to sit. */
+  rise?: number;
+  /** How far out it has to sit. A zip is happy with a wall an arm away; a swing is not. */
+  minReach?: number;
+}
+
 /**
  * Whether a candidate anchor is worth firing at: high enough above the player
- * to swing under, and within reach.
+ * to swing under, far enough out to arc toward, and within reach.
  */
-export function anchorUsable(px: number, py: number, pz: number, ax: number, ay: number, az: number, rise: number = SPIDER_CONFIG.minAnchorRise): boolean {
+export function anchorUsable(px: number, py: number, pz: number, ax: number, ay: number, az: number, limits: AnchorLimits = {}): boolean {
   const up = ay - py;
-  if (up < rise) return false;
+  if (up < (limits.rise ?? SPIDER_CONFIG.minAnchorRise)) return false;
   const flat = Math.hypot(ax - px, az - pz);
+  if (flat < (limits.minReach ?? 0)) return false;
   // Too shallow and the line is a tow rope, not a pendulum: you get dragged
   // along the road instead of swinging under the anchor.
   if (up < flat * SPIDER_CONFIG.minSteepness) return false;

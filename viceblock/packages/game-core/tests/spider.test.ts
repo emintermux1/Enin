@@ -92,6 +92,20 @@ describe("web swinging", () => {
     expect(anchorUsable(0, 0, 0, 400, 180, 0)).toBe(true);
   });
 
+  it("refuses the wall at your elbow once a swing asks for room to arc", () => {
+    const wall = [0, 0, 0, 30, 90, 0] as const;
+    // A grapple is happy with it; a pendulum would drive you straight into it.
+    expect(anchorUsable(...wall)).toBe(true);
+    expect(anchorUsable(...wall, { minReach: SPIDER_CONFIG.minSwingReach })).toBe(false);
+    expect(anchorUsable(0, 0, 0, 200, 260, 0, { minReach: SPIDER_CONFIG.minSwingReach })).toBe(true);
+  });
+
+  it("still lets a zip catch something low that a swing would not", () => {
+    const ledge = [0, 0, 0, 40, 30, 0] as const;
+    expect(anchorUsable(...ledge)).toBe(false);
+    expect(anchorUsable(...ledge, { rise: 24 })).toBe(true);
+  });
+
   it("caps the line at what the drop below the anchor can take", () => {
     expect(lineCeiling(300, 0)).toBe(300 - SPIDER_CONFIG.groundClearance);
     expect(lineCeiling(300, 280)).toBe(SPIDER_CONFIG.minLength);

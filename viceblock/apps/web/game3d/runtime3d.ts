@@ -80,6 +80,7 @@ import {
   weaponById,
   witnessReport,
   WORLD_CONFIG,
+  type AnchorLimits,
   type ContractDef,
   type CrimeKind,
   type DirectorState,
@@ -162,6 +163,12 @@ const GUN_Y = 12;
 
 /** How far you can step up, and how far a ledge can be below your feet. */
 const LEDGE_STEP = 14;
+
+/** Where a web shot looks first: a fan across the front of the camera. */
+const ANCHOR_CONE = [0, 0.2, -0.2, 0.42, -0.42, 0.68, -0.68, 0.98, -0.98] as const;
+
+/** Where it looks when the front of the camera is empty sky. */
+const ANCHOR_SWEEP = [1.35, -1.35, 1.75, -1.75, 2.2, -2.2, 2.65, -2.65, Math.PI] as const;
 
 /**
  * How far the camera can be swung and how close it can be pulled. The old
@@ -2540,12 +2547,24 @@ export class ViceblockRuntime3D {
    * The nearest thing worth webbing, looking where the camera looks. A narrow
    * cone rather than a single ray, because a line that only attaches to what
    * is dead ahead makes the city feel like it is refusing you.
+   *
+   * When the cone comes back empty the search opens out behind the shoulder.
+   * A forward-only shot leaves whole stretches of the city — the edge of the
+   * map, the low blocks by the water — with nothing to catch, and a player who
+   * lands in one is stranded on foot with no way back up. Rear anchors carry a
+   * heavy enough penalty that they only win when there is genuinely nothing
+   * ahead.
    */
-  private findAnchor(rise: number = SPIDER_CONFIG.minAnchorRise): { x: number; y: number; z: number } | null {
+  private findAnchor(limits: AnchorLimits = {}): { x: number; y: number; z: number } | null {
     const base = headingFromCamera(this.player.camYaw);
+    return this.sweepForAnchor(base, ANCHOR_CONE, limits) ?? this.sweepForAnchor(base, ANCHOR_SWEEP, limits);
+  }
+
+  /** The best anchor along a fan of rays, or null if the fan catches nothing. */
+  private sweepForAnchor(base: number, offsets: readonly number[], limits: AnchorLimits): { x: number; y: number; z: number } | null {
     let best: { x: number; y: number; z: number } | null = null;
     let bestScore = Number.POSITIVE_INFINITY;
-    for (const off of [0, 0.2, -0.2, 0.42, -0.42, 0.68, -0.68, 0.98, -0.98]) {
+    for (const off of offsets) {
       const dir = base + off;
       const cos = Math.cos(dir);
       const sin = Math.sin(dir);
@@ -2562,7 +2581,7 @@ export class ViceblockRuntime3D {
         overShoulder = top;
         // Just under the parapet, so the line reads as caught on the edge.
         const y = top - 7;
-        if (!anchorUsable(this.player.x, this.player.y, this.player.z, x, y, z, rise)) continue;
+        if (!anchorUsable(this.player.x, this.player.y, this.player.z, x, y, z, limits)) continue;
         const score = d + Math.abs(off) * 260;
         if (score < bestScore) {
           bestScore = score;
@@ -2575,7 +2594,7 @@ export class ViceblockRuntime3D {
   }
 
   private fireWeb(): void {
-    const a = this.findAnchor();
+    const a = this.findAnchor({ minReach: SPIDER_CONFIG.minSwingReach });
     if (!a) {
       // The reticle and the readout already say there is nothing to catch, so
       // a toast in the middle of the screen only covers the city up.
@@ -2617,7 +2636,8 @@ export class ViceblockRuntime3D {
   /** A yank straight to whatever you are looking at: the way onto a roof. */
   private zipToAnchor(): void {
     if (this.interiorMode || this.player.vehicleId) return;
-    const a = this.findAnchor(24);
+    // A zip is a grapple, not an arc, so it is happy with the wall beside you.
+    const a = this.findAnchor({ rise: 24 });
     if (!a) {
       this.audio.uiClick();
       return;
@@ -2649,7 +2669,9 @@ export class ViceblockRuntime3D {
     }
     if (this.webCooldown > 0) this.webCooldown -= dt;
     this.fadeSplat(dt);
-    this.anchorPreview = this.findAnchor();
+    // Previewed with a swing's reach, so the reticle never promises an anchor
+    // that the shot itself would turn down.
+    this.anchorPreview = this.findAnchor({ minReach: SPIDER_CONFIG.minSwingReach });
 
     if (this.input.consumeZip()) this.zipToAnchor();
     const wantWeb = this.input.webbing();
