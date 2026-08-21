@@ -20,7 +20,14 @@ export class GameInput {
   radioQueued = false;
   assistQueued = false;
   surrenderQueued = false;
-  pointerLocked = false;
+  /**
+   * True while the mouse is captured. Free look then costs no button, which is
+   * the whole point: fire and look used to share the left button, so you could
+   * not turn your head without shooting or shoot without swinging the camera.
+   */
+  locked = false;
+  /** Set when the browser refuses the capture, so we fall back to drag-look. */
+  private lockRefused = false;
   stick: StickState = idleStick();
   aimStick: StickState = idleStick();
   mobile = false;
@@ -29,8 +36,6 @@ export class GameInput {
   reloadQueued = false;
   /** Right mouse / left trigger: aim down the sights. */
   aim = false;
-  /** Held: shoot a web at the skyline and hang off it. */
-  web = false;
   /** Tapped: yank yourself to whatever you are looking at. */
   zipQueued = false;
   /** Held on a touchscreen, where there is no Q key to hold. */
@@ -78,10 +83,15 @@ export class GameInput {
     const md = (e: PointerEvent): void => {
       // Touch on the canvas orbits the camera; anything else (mouse, pen,
       // synthetic events with an empty pointerType) fires on button 0.
+      if (e.pointerType !== "touch" && !this.mobile && !this.locked && !this.lockRefused) {
+        // The click that takes hold of the mouse must not also be a shot, or
+        // every time you press Escape and click back in you fire one off.
+        grabPointer();
+        return;
+      }
       syncButtons(e);
       if (e.pointerType !== "touch" && e.button === 0) this.fire = true;
       if (e.pointerType !== "touch" && e.button === 2) this.aim = true;
-      this.pointerLocked = true;
     };
     const mu = (e: PointerEvent): void => {
       // Guarded by pointer type so lifting a touch (e.g. the move stick)
@@ -108,6 +118,23 @@ export class GameInput {
     const paste = (e: ClipboardEvent): void => {
       e.preventDefault();
     };
+    const grabPointer = (): void => {
+      const req = canvas.requestPointerLock?.() as Promise<void> | undefined;
+      // Browsers that predate the promise signal failure through the error
+      // event below; the ones that return a promise reject instead. Either way
+      // a refusal has to leave drag-look working, or the mouse does nothing.
+      if (req && typeof req.then === "function") req.catch(() => (this.lockRefused = true));
+    };
+    const lockChanged = (): void => {
+      this.locked = document.pointerLockElement === canvas;
+      if (!this.locked) {
+        this.fire = false;
+        this.aim = false;
+      }
+    };
+    const lockFailed = (): void => {
+      this.lockRefused = true;
+    };
 
     window.addEventListener("keydown", down, { passive: false });
     window.addEventListener("keyup", up);
@@ -118,6 +145,8 @@ export class GameInput {
     canvas.addEventListener("pointermove", move);
     window.addEventListener("blur", blur);
     document.addEventListener("visibilitychange", vis);
+    document.addEventListener("pointerlockchange", lockChanged);
+    document.addEventListener("pointerlockerror", lockFailed);
     window.addEventListener("paste", paste, true);
     return () => {
       window.removeEventListener("keydown", down);
@@ -129,7 +158,10 @@ export class GameInput {
       canvas.removeEventListener("pointermove", move);
       window.removeEventListener("blur", blur);
       document.removeEventListener("visibilitychange", vis);
+      document.removeEventListener("pointerlockchange", lockChanged);
+      document.removeEventListener("pointerlockerror", lockFailed);
       window.removeEventListener("paste", paste, true);
+      if (document.pointerLockElement === canvas) document.exitPointerLock?.();
     };
   }
 
@@ -137,7 +169,6 @@ export class GameInput {
     this.keys.clear();
     this.fire = false;
     this.aim = false;
-    this.web = false;
     this.touchWeb = false;
     this.stick = releaseStick(this.stick);
     this.aimStick = releaseStick(this.aimStick);
@@ -218,7 +249,7 @@ export class GameInput {
 
   /** Q, the touch WEB pad, or LB: hold to stay on the line. */
   webbing(): boolean {
-    return this.web || this.touchWeb || this.padWeb || this.keys.has("KeyQ");
+    return this.touchWeb || this.padWeb || this.keys.has("KeyQ");
   }
 
   setTouchWeb(on: boolean): void {

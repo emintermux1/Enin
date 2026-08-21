@@ -546,6 +546,7 @@ export class ViceblockRuntime3D {
       // Mobile: any direct canvas touch orbits the camera (sticks are separate
       // elements) and a second finger turns the gesture into a pinch zoom.
       // Desktop: either button drags to orbit, wheel zooms.
+      if (this.input.locked) return;
       this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (this.pointers.size > 1) {
         this.dragYaw.active = false;
@@ -556,7 +557,20 @@ export class ViceblockRuntime3D {
         this.dragYaw = { active: true, id: e.pointerId, lastX: e.clientX, lastY: e.clientY };
       }
     };
+    const look = (dx: number, dy: number, gain: number): void => {
+      const sens = this.settings.lookSensitivity * this.aimSlowdown() * gain;
+      this.player.camYaw += dx * sens;
+      this.player.camPitch = clampPitch(this.player.camPitch + dy * sens * (this.settings.invertLook ? -1 : 1));
+      this.lookedAt = this.clock;
+    };
     const move = (e: PointerEvent): void => {
+      // Captured mouse: the pointer has no position any more, only motion, and
+      // that motion turns the camera on its own. No button held, so looking
+      // around and firing stop being the same action.
+      if (this.input.locked) {
+        look(e.movementX, e.movementY, 0.0022);
+        return;
+      }
       if (this.pointers.has(e.pointerId)) this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (this.pointers.size > 1) {
         const gap = this.pointerGap();
@@ -565,11 +579,7 @@ export class ViceblockRuntime3D {
         return;
       }
       if (!this.dragYaw.active || e.pointerId !== this.dragYaw.id) return;
-      const sens = this.settings.lookSensitivity * this.aimSlowdown();
-      this.player.camYaw += (e.clientX - this.dragYaw.lastX) * 0.005 * sens;
-      const dy = (e.clientY - this.dragYaw.lastY) * 0.005 * sens * (this.settings.invertLook ? -1 : 1);
-      this.player.camPitch = clampPitch(this.player.camPitch + dy);
-      this.lookedAt = this.clock;
+      look(e.clientX - this.dragYaw.lastX, e.clientY - this.dragYaw.lastY, 0.005);
       this.dragYaw.lastX = e.clientX;
       this.dragYaw.lastY = e.clientY;
     };

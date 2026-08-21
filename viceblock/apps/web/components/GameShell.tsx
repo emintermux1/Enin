@@ -112,6 +112,7 @@ export function GameShell() {
   const [cameraOpen, setCameraOpen] = useState(false);
   const [camera, setCamera] = useState({ sensitivity: DEFAULT_SETTINGS.lookSensitivity, zoom: 1, invert: DEFAULT_SETTINGS.invertLook });
   const [menuOpen, setMenuOpen] = useState(false);
+  const [mouseFree, setMouseFree] = useState(true);
   const [session, setSession] = useState<string>("");
   const [wallet, setWallet] = useState<{ address: string; sol: number; nfts: number; live: boolean } | null>(null);
 
@@ -138,10 +139,13 @@ export function GameShell() {
       if (g) g.player.phone = false;
     };
     window.addEventListener("keydown", onKey);
+    const onLock = (): void => setMouseFree(document.pointerLockElement !== canvasRef.current);
+    document.addEventListener("pointerlockchange", onLock);
     return () => {
       window.removeEventListener("resize", resize);
       document.removeEventListener("gesturestart", prevent as EventListener);
       window.removeEventListener("keydown", onKey);
+      document.removeEventListener("pointerlockchange", onLock);
     };
   }, [resize]);
 
@@ -399,13 +403,15 @@ export function GameShell() {
           <p className="hint">
             <strong>Hold Q to sling a web</strong> · C zips you to the rooftop · Space leaves a wall · WASD steers the arc · Shift reels the line in
             <br />
-            WASD walk · Shift sprint · Space jump/handbrake · E interact · G surrender · click shoot · right-click aim · R reload · drag camera · wheel zoom · V recentre · B radio · F phone · H assist
+            WASD walk · Shift sprint · Space jump/handbrake · E interact · G surrender · move mouse to look · click shoot · right-click aim · R reload · wheel zoom · V recentre · B radio · F phone · H assist · Esc frees the mouse
             <br />
             Touch: left stick walks (push far to sprint) · right stick aims &amp; fires · drag screen for camera · WEB button slings · E/G button acts
           </p>
           {bootError ? <p className="err">{sanitizeText(bootError, 80)}</p> : null}
         </div>
       )}
+
+      {started && mouseFree && !hud.phoneOpen ? <div className="grab-mouse">CLICK TO LOOK AROUND · ESC RELEASES THE MOUSE</div> : null}
 
       {started && (
         <>
@@ -953,6 +959,22 @@ export function GameShell() {
         }
         .err {
           color: #e07050;
+        }
+        .grab-mouse {
+          position: absolute;
+          left: 50%;
+          bottom: 16%;
+          transform: translateX(-50%);
+          padding: 10px 20px;
+          background: rgba(12, 10, 9, 0.72);
+          border: 1px solid rgba(196, 90, 50, 0.55);
+          border-radius: 3px;
+          font-size: 12px;
+          font-weight: 700;
+          letter-spacing: 0.12em;
+          color: #e8d8c4;
+          pointer-events: none;
+          z-index: 6;
         }
         .hud-tl {
           position: absolute;
