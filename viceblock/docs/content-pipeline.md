@@ -6,4 +6,5 @@ Add missions in `packages/game-core/src/missions.ts` using objective types:
 
 Add vehicles in `packages/game-core/src/vehicles.ts`.
 Add landmarks in `apps/web/game/world.ts`.
-Named NPCs (Rico, Maya, Cupsey, Ansem, Marcus) live in `ViceblockRuntime.seedWorld`.
+Named NPCs (Rico, Maya, Cupsey, Ansem, Marcus) live in `ViceblockRuntime3D.seedWorld`
+in `apps/web/game3d/runtime3d.ts`, which is the only runtime.
