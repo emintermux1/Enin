@@ -3,6 +3,7 @@ import { Vector3, Vector4 } from "@babylonjs/core/Maths/math.vector";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
+import { VertexBuffer } from "@babylonjs/core/Buffers/buffer";
 import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
 import type { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import type { Scene } from "@babylonjs/core/scene";
@@ -573,6 +574,51 @@ function skyTexture(scene: Scene): DynamicTexture {
   return tex;
 }
 
+/** How far a wall darkens the pavement it stands on, in world units. */
+const CONTACT_REACH = 16;
+
+/**
+ * A band of ground hugging one face of a building, dark where it meets the
+ * wall and clear at its outer edge. This is the ambient darkening that stops
+ * a box of a tower looking pasted onto the street: real shadow maps over a
+ * city of this many boxes cost more than the whole rest of the frame on the
+ * machines this has to run on.
+ *
+ * The ramp rides in the vertex colours rather than a texture, so it stays the
+ * same width whether the wall is one shopfront or a whole block long.
+ */
+function contactBand(scene: Scene, len: number, cx: number, cz: number, turn: number): Mesh {
+  const band = MeshBuilder.CreateGround("ao", { width: len, height: CONTACT_REACH }, scene);
+  const pos = band.getVerticesData("position") ?? [];
+  const colours = new Float32Array((pos.length / 3) * 4);
+  for (let v = 0; v < pos.length / 3; v++) {
+    // Local -Z faces the wall once the band is turned into place.
+    colours[v * 4 + 3] = pos[v * 3 + 2]! < 0 ? 0.55 : 0;
+  }
+  band.setVerticesData(VertexBuffer.ColorKind, colours);
+  band.hasVertexAlpha = true;
+  band.rotation.y = turn;
+  band.position = new Vector3(cx, GROUND_Y + 0.14, cz);
+  return band;
+}
+
+/** A radial falloff, for the pool a street lamp throws on the pavement. */
+function glowTexture(scene: Scene): DynamicTexture {
+  const px = 64;
+  const tex = new DynamicTexture("tex-glow", { width: px, height: px }, scene, false);
+  const ctx = canvas2d(tex.getContext());
+  ctx.clearRect(0, 0, px, px);
+  const g = ctx.createRadialGradient(px / 2, px / 2, 1, px / 2, px / 2, px / 2);
+  g.addColorStop(0, "rgba(255,226,168,0.9)");
+  g.addColorStop(0.35, "rgba(255,206,132,0.34)");
+  g.addColorStop(1, "rgba(255,190,110,0)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, px, px);
+  tex.hasAlpha = true;
+  tex.update();
+  return tex;
+}
+
 function shopMat(scene: Scene, name: string, tex: DynamicTexture, glow: Color3): StandardMaterial {
   const m = mat(scene, name, "#2a4050", 0.18);
   m.diffuseTexture = tex;
@@ -652,7 +698,18 @@ function roofDeck(
   deck: StandardMaterial,
   vent: StandardMaterial,
 ): Mesh {
-  const root = MeshBuilder.CreateBox(`${id}-deck`, { width: w, depth: d, height: 2.4 }, scene);
+  // Scaled to the deck's own size: at a fixed repeat count a block-wide roof
+  // stretched one tile of concrete across four hundred units and read as
+  // painted card, while a small one turned to moire.
+  const uw = Math.max(1, Math.round(w / 26));
+  const ud = Math.max(1, Math.round(d / 26));
+  const flat = new Vector4(0, 0, uw, ud);
+  const root = MeshBuilder.CreateBox(`${id}-deck`, {
+    width: w,
+    depth: d,
+    height: 2.4,
+    faceUV: [new Vector4(0, 0, uw, 1), new Vector4(0, 0, uw, 1), new Vector4(0, 0, ud, 1), new Vector4(0, 0, ud, 1), flat, flat],
+  }, scene);
   root.position = new Vector3(cx, height + 1.2, cz);
   root.material = deck;
   // A block-wide roof with one vent on it still reads as an empty grey sheet,
@@ -775,13 +832,33 @@ const FACADE_STYLES: readonly FacadeStyle[] = [
 export function buildCity(scene: Scene, world: WorldData, kit: TextureKit): CityMeshes {
   const disposables: Mesh[] = [];
   const textures: DynamicTexture[] = [];
+  /** Footprints wanting a contact shadow, and lamps wanting a light pool. */
+  const grounded: Array<[number, number, number, number]> = [];
+  const lamps: Array<[number, number]> = [];
+  /** Neon and signage, with the glow it burns after dark. */
+  const glowing: Array<[StandardMaterial, Color3]> = [];
   const landmarkTops = new Map<string, number>();
   const tops = new Float32Array(MAP_W * MAP_H);
 
   const dirt = dirtTexture(scene);
   textures.push(dirt);
+  // Open sea out to the horizon. The land used to stop dead at the last tile,
+  // so anyone who reached an edge saw the inside of the sky dome cutting a
+  // diagonal through the street; Southside is a waterfront district, so what
+  // lies beyond it is the bay.
+  const seaMat = mat(scene, "m-sea", "#20505e", 0.06);
+  seaMat.specularColor = new Color3(0.3, 0.34, 0.36);
+  seaMat.specularPower = 48;
+  const sea = MeshBuilder.CreateGround("sea", { width: MAP_W * TILE * 8, height: MAP_H * TILE * 8 }, scene);
+  sea.position = new Vector3((MAP_W * TILE) / 2, GROUND_Y - 2.4, (MAP_H * TILE) / 2);
+  sea.material = seaMat;
+  sea.isPickable = false;
+  sea.freezeWorldMatrix();
+  disposables.push(sea);
+
   const ground = MeshBuilder.CreateGround("ground", { width: MAP_W * TILE, height: MAP_H * TILE }, scene);
   ground.position = new Vector3((MAP_W * TILE) / 2, GROUND_Y, (MAP_H * TILE) / 2);
+  ground.isPickable = false;
   const groundMat = mat(scene, "m-ground", "#ffffff");
   groundMat.diffuseTexture = dirt;
   (dirt as Texture).uScale = MAP_W / 2;
@@ -901,7 +978,7 @@ export function buildCity(scene: Scene, world: WorldData, kit: TextureKit): City
   // Kerbs. Without a lip where the pavement meets the road the two surfaces
   // sit in the same plane and the street reads as a painted floor. One merged
   // mesh per axis keeps the whole city's kerbing down to two draws.
-  const kerbMat = mat(scene, "m-kerb", "#8d8477");
+  const kerbMat = mat(scene, "m-kerb", "#6e675d");
   const kerbs: Mesh[] = [];
   const kerbAt = (x: number, z: number, w: number, d: number): void => {
     const m = MeshBuilder.CreateBox("kerb", { width: w, depth: d, height: 2.2 }, scene);
@@ -936,12 +1013,12 @@ export function buildCity(scene: Scene, world: WorldData, kit: TextureKit): City
   // Two deck tones so a skyline of roofs is not one flat sheet of grey. The
   // texture has to repeat, or one block-wide roof stretches a single tile of
   // concrete across four hundred units and reads as painted card.
-  const roofMats = [kit.material("concrete", "#454039"), kit.material("concrete", "#585049")];
+  const roofMats = [kit.material("concrete", "#6d6659"), kit.material("concrete", "#7c7264")];
   for (const m of roofMats) {
     const tex = m.diffuseTexture as Texture | null;
     if (tex) {
-      tex.uScale = 7;
-      tex.vScale = 7;
+      tex.uScale = 1;
+      tex.vScale = 1;
       tex.wrapU = 1;
       tex.wrapV = 1;
     }
@@ -973,6 +1050,7 @@ export function buildCity(scene: Scene, world: WorldData, kit: TextureKit): City
     mat(scene, "m-neon-b", "#40c0d0", 0.7),
     mat(scene, "m-neon-c", "#e8c050", 0.7),
   ];
+  for (const m of [...neonMats, ...shopMats]) glowing.push([m, m.emissiveColor.clone()]);
   for (let y = 0; y < MAP_H; y++) {
     for (let x = 0; x < MAP_W; x++) {
       const idx = y * MAP_W + x;
@@ -1006,6 +1084,7 @@ export function buildCity(scene: Scene, world: WorldData, kit: TextureKit): City
       const cx = x * TILE + (w * TILE) / 2;
       const cz = y * TILE + (h * TILE) / 2;
       const style = facades[Math.floor(hash01(x * 5.9 + y * 43.1) * facades.length)] ?? facades[0];
+      grounded.push([cx, cz, bw, bd]);
       const box = MeshBuilder.CreateBox(`b-${x}-${y}`, { width: bw, depth: bd, height, faceUV: facadeUV(bw, bd, height) }, scene);
       box.position = new Vector3(cx, height / 2, cz);
       box.material = style.material;
@@ -1076,6 +1155,7 @@ export function buildCity(scene: Scene, world: WorldData, kit: TextureKit): City
     const box = MeshBuilder.CreateBox(`lm-${lm.id}`, { width: lbw, depth: lbd, height, faceUV: facadeUV(lbw, lbd, height) }, scene);
     box.position = new Vector3(lm.x * TILE + (lm.w * TILE) / 2, height / 2, lm.y * TILE + (lm.h * TILE) / 2);
     box.material = lmFace.material;
+    grounded.push([box.position.x, box.position.z, lbw, lbd]);
     box.freezeWorldMatrix();
     disposables.push(box);
 
@@ -1085,6 +1165,7 @@ export function buildCity(scene: Scene, world: WorldData, kit: TextureKit): City
     const lw = lm.w * TILE - 6;
     const ld = lm.h * TILE - 6;
     const trimMat = mat(scene, `mt-${lm.id}`, trimColor(lm.kind), 0.55);
+    glowing.push([trimMat, trimMat.emissiveColor.clone()]);
     const edges: Array<[number, number, number, number]> = [
       [lw, 3, 0, ld / 2 - 1.5],
       [lw, 3, 0, -ld / 2 + 1.5],
@@ -1249,7 +1330,58 @@ export function buildCity(scene: Scene, world: WorldData, kit: TextureKit): City
   }
 
   dressSpawnStreet(scene, kit, disposables, textures, lampMat, trunkMat, frondMat);
-  dressCityStreets(scene, kit, world, disposables, lampMat, lampHead, binMat, hydrantMat, benchMat, curbMat);
+  dressCityStreets(scene, kit, world, disposables, lampMat, lampHead, binMat, hydrantMat, benchMat, curbMat, lamps);
+
+  // Contact shadows and lamp pools, each merged into a single mesh. Both are
+  // transparent decals laid on the ground: a draw call apiece is affordable,
+  // several hundred is not.
+  const contactMat = new StandardMaterial("m-contact", scene);
+  contactMat.diffuseColor = Color3.Black();
+  contactMat.specularColor = Color3.Black();
+  contactMat.emissiveColor = Color3.Black();
+  contactMat.disableLighting = true;
+  contactMat.backFaceCulling = false;
+  const patches: Mesh[] = [];
+  const R = CONTACT_REACH;
+  for (const [cx, cz, w, d] of grounded) {
+    patches.push(contactBand(scene, w + R * 2, cx, cz + d / 2 + R / 2, 0));
+    patches.push(contactBand(scene, w + R * 2, cx, cz - d / 2 - R / 2, Math.PI));
+    patches.push(contactBand(scene, d + R * 2, cx + w / 2 + R / 2, cz, Math.PI / 2));
+    patches.push(contactBand(scene, d + R * 2, cx - w / 2 - R / 2, cz, -Math.PI / 2));
+  }
+  const contact = patches.length > 0 ? Mesh.MergeMeshes(patches, true, true) : null;
+  if (contact) {
+    contact.material = contactMat;
+    contact.hasVertexAlpha = true;
+    contact.isPickable = false;
+    contact.freezeWorldMatrix();
+    disposables.push(contact);
+  }
+
+  const glowTex = glowTexture(scene);
+  textures.push(glowTex);
+  const poolMat = new StandardMaterial("m-pool", scene);
+  poolMat.emissiveTexture = glowTex;
+  poolMat.opacityTexture = glowTex;
+  poolMat.diffuseColor = Color3.Black();
+  poolMat.specularColor = Color3.Black();
+  poolMat.emissiveColor = new Color3(1, 0.9, 0.72);
+  poolMat.disableLighting = true;
+  poolMat.backFaceCulling = false;
+  poolMat.alpha = 0;
+  const poolQuads: Mesh[] = [];
+  for (const [lx, lz] of lamps) {
+    const q = MeshBuilder.CreateGround("pool", { width: 46, height: 46 }, scene);
+    q.position = new Vector3(lx, GROUND_Y + 0.3, lz);
+    poolQuads.push(q);
+  }
+  const pools = poolQuads.length > 0 ? Mesh.MergeMeshes(poolQuads, true, true) : null;
+  if (pools) {
+    pools.material = poolMat;
+    pools.isPickable = false;
+    pools.freezeWorldMatrix();
+    disposables.push(pools);
+  }
 
   const boardMat = kit.material("plastic", "#c45a32", 0.2);
   const boards: Array<[number, number, number]> = [
@@ -1295,6 +1427,11 @@ export function buildCity(scene: Scene, world: WorldData, kit: TextureKit): City
     setNight: (k: number) => {
       const lit = Math.max(0, Math.min(1, k));
       for (const f of facades) f.material.emissiveColor.set(lit, lit * 0.94, lit * 0.86);
+      // Neon still reads in daylight, just as a painted sign rather than a lamp.
+      const glow = 0.3 + lit * 0.7;
+      for (const [m, base] of glowing) m.emissiveColor.copyFrom(base).scaleInPlace(glow);
+      poolMat.alpha = lit * 0.85;
+      if (pools) pools.setEnabled(lit > 0.02);
     },
     setHour: (hour, blackout) => {
       if (Math.abs(hour - paintedHour) > 0.12 || blackout !== paintedBlackout) {
@@ -1350,6 +1487,7 @@ function dressCityStreets(
   hydrantMat: StandardMaterial,
   benchMat: StandardMaterial,
   curbMat: StandardMaterial,
+  lamps: Array<[number, number]>,
 ): void {
   const carCols = [
     kit.material("carPaint", "#c45a32"),
@@ -1408,6 +1546,7 @@ function dressCityStreets(
         head.material = lampHead;
         head.freezeWorldMatrix();
         disposables.push(head);
+        lamps.push([px + 8, pz]);
       }
       n++;
     }

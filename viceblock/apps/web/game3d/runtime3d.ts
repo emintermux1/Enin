@@ -2388,21 +2388,25 @@ export class ViceblockRuntime3D {
     const day = Math.pow(Math.max(0, elev), 0.55);
     const lit = this.blackout ? 1 : Math.max(0, Math.min(1, 1 - elev * 2.6));
     this.city?.setNight(lit);
-    this.hemi.intensity = this.blackout ? 0.24 : 0.46 + day * 0.78;
-    this.sun.intensity = this.blackout ? 0.05 : 0.08 + day * 1.1;
-    // Low sun runs orange; overhead sun runs white. Skipping this is why noon
-    // and sunset lit every wall exactly the same.
+    this.hemi.intensity = this.blackout ? 0.18 : 0.3 + day * 0.94;
+    this.sun.intensity = this.blackout ? 0.04 : 0.06 + day * 1.12;
+    // Low sun runs orange, overhead sun white, and what is left after dark is
+    // sky-blue rather than white. Skipping this is why noon, sunset and
+    // midnight all lit every wall exactly the same.
     const warm = Math.max(0, 1 - day * 1.9);
     this.sun.diffuse.set(1, 0.93 - warm * 0.22, 0.82 - warm * 0.34);
-    this.hemi.diffuse.set(0.78 + day * 0.22, 0.8 + day * 0.2, 0.9 + day * 0.1);
-    this.hemi.groundColor.set(0.22 + day * 0.14, 0.2 + day * 0.14, 0.19 + day * 0.13);
+    this.hemi.diffuse.set(0.52 + day * 0.48, 0.6 + day * 0.4, 0.9 + day * 0.1);
+    this.hemi.groundColor.set(0.12 + day * 0.24, 0.12 + day * 0.22, 0.16 + day * 0.16);
     // The sun swings east to west over the day, so which side of a street is
     // in shade changes with it.
     const arc = ((t - 5.5) / 13) * Math.PI;
     this.sun.direction.set(-Math.cos(arc) * 0.75, -Math.max(0.3, Math.sin(arc)), -0.34).normalize();
     const horizon = this.city?.setHour(t, this.blackout) ?? new Color3(0.48, 0.68, 0.86);
     this.scene.clearColor = new Color4(horizon.r, horizon.g, horizon.b, 1);
-    const fog = this.weather === "fog" ? 0.00028 : this.weather === "rain" ? 0.00016 : 0.00009;
+    // Exp2 fog: at 0.00009 the haze only reached a tenth of a percent across
+    // the whole map, so the ground ran to a hard brown horizon under a clean
+    // sky. These wash the far edge out without hiding the skyline.
+    const fog = this.weather === "fog" ? 0.0013 : this.weather === "rain" ? 0.0008 : 0.00045;
     this.scene.fogMode = Scene.FOGMODE_EXP2;
     this.scene.fogDensity = fog;
     this.scene.fogColor = horizon;
