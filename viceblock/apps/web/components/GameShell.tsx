@@ -1393,23 +1393,23 @@ export function GameShell() {
         .crosshair i:nth-child(1),
         .crosshair i:nth-child(2) {
           width: 2px;
-          height: 9px;
+          height: 12px;
           left: -1px;
         }
         .crosshair i:nth-child(1) {
-          top: calc(-1 * var(--bloom) - 9px);
+          top: calc(-1 * var(--bloom) - 12px);
         }
         .crosshair i:nth-child(2) {
           top: var(--bloom);
         }
         .crosshair i:nth-child(3),
         .crosshair i:nth-child(4) {
-          width: 9px;
+          width: 12px;
           height: 2px;
           top: -1px;
         }
         .crosshair i:nth-child(3) {
-          left: calc(-1 * var(--bloom) - 9px);
+          left: calc(-1 * var(--bloom) - 12px);
         }
         .crosshair i:nth-child(4) {
           left: var(--bloom);
@@ -1418,16 +1418,20 @@ export function GameShell() {
           background: #ff8a3c;
           box-shadow: 0 0 0 1px rgba(26, 20, 16, 0.9);
         }
-        /* Aiming adds a centre pip, so the mode is unmistakable. */
-        .crosshair.aimed::after {
+        /* A centre pip keeps the aim point readable when the ticks bloom wide. */
+        .crosshair::after {
           content: "";
           position: absolute;
           left: -1.5px;
           top: -1.5px;
           width: 3px;
           height: 3px;
-          background: #ff8a3c;
+          background: #f3e6d2;
+          box-shadow: 0 0 0 1px rgba(26, 20, 16, 0.75);
           border-radius: 50%;
+        }
+        .crosshair.aimed::after {
+          background: #ff8a3c;
         }
         .crosshair u {
           position: absolute;

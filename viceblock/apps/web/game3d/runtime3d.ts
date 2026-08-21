@@ -1558,6 +1558,9 @@ export class ViceblockRuntime3D {
     if (this.player.vehicleId) {
       if (this.input.consumeInteract()) this.exitVehicle();
       this.playerMesh.setEnabled(false);
+      // Getting into a car with the sights up must not leave the camera stuck
+      // in the aimed pose for the rest of the drive.
+      this.aiming = false;
       return;
     }
     this.playerMesh.setEnabled(true);
@@ -1842,8 +1845,10 @@ export class ViceblockRuntime3D {
       : 1;
     // Sighting up pulls the camera in over the shoulder.
     let dist = (car ? speedCameraDistance(165, speed, topSpeed) : 175) * this.camZoom * (this.aiming ? AIM_CONFIG.zoomScale : 1);
-    // The lens opens as you wind the car out, so speed reads on screen.
-    const wantFov = car ? speedFov(this.baseFov, speed, topSpeed) : this.baseFov;
+    // The lens opens as you wind the car out, so speed reads on screen, and
+    // closes down over the sights, which is what selling "aiming" takes when
+    // the shoulder camera has a wall behind it and cannot pull in.
+    const wantFov = car ? speedFov(this.baseFov, speed, topSpeed) : this.baseFov * (this.aiming ? 0.76 : 1);
     this.camera.fov += (wantFov - this.camera.fov) * Math.min(1, dt * 2.5);
     if (this.input.consumeResetView()) this.resetCamera();
     const stick = this.input.look();
