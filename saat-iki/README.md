@@ -4,7 +4,11 @@
 
 Görsel seks sahnesi, porno model veya seks sesi yok.
 
-## Çalıştır
+## Canlı
+
+https://wispy-snow-8281.zerodeploy.app
+
+Geçici yayın (yaklaşık 72 saat). Yerelde:
 
 ```bash
 cd saat-iki
