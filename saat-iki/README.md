@@ -6,7 +6,7 @@ Görsel seks sahnesi, porno model veya seks sesi yok.
 
 ## Canlı
 
-https://red-shadow-5718.zerodeploy.app
+https://bold-resonance-1136.zerodeploy.app
 
 Geçici yayın (yaklaşık 72 saat). Yerelde:
 
