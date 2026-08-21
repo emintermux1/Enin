@@ -422,7 +422,7 @@ export function playScene(input: string, history: Message[], opts: PlayOpts): st
     return finish(moved, key, history, salt, opts, input);
   }
 
-  if (act === "ask") {
+  if (act === "ask" && who !== "asya" && who !== "kim") {
     const hit = ANSWERS.find((item) => item.pattern.test(input));
     if (
       hit &&
