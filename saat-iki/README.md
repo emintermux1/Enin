@@ -6,7 +6,7 @@ Görsel seks sahnesi, porno model veya seks sesi yok.
 
 ## Canlı
 
-https://wispy-snow-8281.zerodeploy.app
+https://restless-moon-4249.zerodeploy.app
 
 Geçici yayın (yaklaşık 72 saat). Yerelde:
 
