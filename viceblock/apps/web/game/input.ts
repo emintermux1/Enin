@@ -72,13 +72,18 @@ export class GameInput {
     /**
      * Pointer Events only fire `pointerdown` for the first button pressed: a
      * left click made while the right button is already held arrives as a
-     * `pointermove` with an updated button mask. Reading the mask everywhere
-     * is what makes "hold to aim, click to shoot" work at all.
+     * `pointermove` with an updated button mask, so the mask is how "hold to
+     * aim, click to shoot" works at all.
+     *
+     * It only ever presses buttons, never lifts them; `pointerup` does that.
+     * A captured mouse emits moves carrying an empty mask, and treating those
+     * as a release meant holding the trigger under pointer lock got you one
+     * round and then silence.
      */
     const syncButtons = (e: PointerEvent): void => {
       if (e.pointerType === "touch" || this.aimStick.active) return;
-      this.fire = (e.buttons & 1) !== 0;
-      this.aim = (e.buttons & 2) !== 0;
+      if ((e.buttons & 1) !== 0) this.fire = true;
+      if ((e.buttons & 2) !== 0) this.aim = true;
     };
     const md = (e: PointerEvent): void => {
       // Touch on the canvas orbits the camera; anything else (mouse, pen,
