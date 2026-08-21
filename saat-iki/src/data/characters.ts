@@ -13,7 +13,8 @@ export const CHARACTERS: Character[] = [
     hook: "Yaz bana. Ben kaçmam.",
     bio: "Senin için açılmış bir kadın. Erkekle konuşur, utanmaz, soru sorar, cevap bekler. Ne yazarsan ona göre ısınır.",
     opening: [
-      "Leyla. 27. Yatağımdayım, üstüm açık. Yaz ne yapalım — soru sormam, yaparım.",
+      "yatağımdayım. üstüm yok",
+      "yaz bakim ne istiyon. ben yapıcam",
     ],
     accent: "#b33a4a",
   },

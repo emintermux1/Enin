@@ -13,90 +13,83 @@ export type Act =
 const ACT_PATTERNS: Array<{ act: Act; pattern: RegExp }> = [
   {
     act: "complaint",
-    pattern: /aynı|ayni|berbat|tekrar|sıkıldım|sikildim|bozma|kes sesini|hep aynı|hep ayni/i,
+    pattern: /aynı|ayni|berbat|yapay|tekrar|sıkıldım|bozma|hep aynı|hep ayni/i,
   },
   {
     act: "oralHer",
-    pattern: /am(ı|i|ini|ını)?\s*yi|yala|amcık|amini|amını|amın|klitor|dil(in)?i\s*(sok|koy)|yiyim|yiyeyim/i,
+    pattern: /am(ı|i|ini|ını)?\s*yi|yala|amcık|amini|amını|amın|yiyim|yiyeyim/i,
   },
   {
     act: "oralHim",
-    pattern: /ağzına\s*al|agzina\s*al|sakso|em(e|eyim|iyor)|sikini\s*al|aletini|boğaz|bogaz/i,
+    pattern: /ağzına\s*al|agzina\s*al|sakso|em(e|eyim)|sikini|aletini|boğaz|bogaz|yut/i,
   },
   {
     act: "sex",
-    pattern: /sik|sok|içine|icine|içinde|icinde|sikiş|sikis|boşal|bosal|orgazm|sert|göt|got/i,
+    pattern: /sik|sok|içine|icine|içinde|icinde|sikiş|sikis|boşal|bosal|sert|göt|got/i,
   },
   {
     act: "kiss",
-    pattern: /öp|opüc|dudak|dilini\s*ver|boyn/i,
+    pattern: /öp|dudak|boyn/i,
   },
   {
     act: "body",
-    pattern: /göğüs|gogus|kalça|kalca|bacak|belin|memel|götün|gotun/i,
+    pattern: /göğüs|gogus|meme|kalça|kalca|bacak|belin|götün|gotun/i,
   },
   {
     act: "ask",
     pattern:
-      /\?|ne giy|neredesin|nerdesin|napıyon|napion|nasılsın|nasilsin|adın ne|adin ne|kaç yaş|kac yas|kimsin|ıslak|islak/i,
+      /\?|ne giy|neredesin|nerdesin|napıyon|napion|nasılsın|nasilsin|adın ne|adin ne|kaç yaş|kimsin|ıslak|islak/i,
   },
 ];
 
-const SCENES: Record<Exclude<Act, "ask" | "complaint">, string[]> = {
+/** WhatsApp-style lines, based on how people actually sext in TR: short, spoken, no novel. */
+const SCENES: Record<Exclude<Act, "ask" | "complaint">, string[][]> = {
   oralHer: [
-    "Dizlerimi açıyorum. Dilini amıma bas, ılık. İlk yalamada belim kalktı, nefesim kesildi.",
-    "Klitorisimi em. İki parmağını da kaydır, kıvır. Islak ses geliyor, saklamıyorum.",
-    "Bacaklarımı omuzlarına alıyorum. Daha derin yala, kaçırma. Kalçam titriyor.",
-    "Yüzüne oturdum. Dilini çıkarayım diye değil, daha çok isteyeyim diye. Bırakma.",
-    "Parmakların içimde, dilin dışarıda. İkisini birden yap. Boşalmak üzereyim, durma.",
-    "Orgaza yaklaştım. Dilini çekme. Adımı söyleme, yala. Bittiğinde de bir tur daha.",
+    ["yala o zaman", "bacaklarımı açtım. ıslandım zaten"],
+    ["dilini koy kaçırma", "parmak da sok. ikisini birden istiyom"],
+    ["yüzüme oturtcam seni az daha", "durma ya offf"],
+    ["boşalıcam nerdeyse", "çekme dilini"],
   ],
   oralHim: [
-    "Dizlerimin üstüne indim. Sikinin başını ağzıma alıyorum, dilimi yavaşça çevirerek, sana bakarak.",
-    "Daha derine. Tükürük aktı, salmıyorum. Boğazıma kadar, gözlerim dolu, bırakmıyorum.",
-    "Saçımı tut. Ritmi sen ver. Dilimi damarına sürüp tekrar yutuyorum.",
-    "İki elimi de kullanıyorum. Ağzım dolu, ses çıkarıyorum bilerek. Sertleşmeni hissediyorum.",
-    "Çıkarıp başını yalıyorum, sonra tekrar boğazıma. Kesme. Boşalacaksan söyle, yutacağım.",
-    "Hâlâ ağzımdayım. Daha yavaş değil. Daha ıslak. Bitene kadar kalkmıyorum.",
+    ["alıyom", "dizlerimin üstündeyim bakıyorum sana"],
+    ["daha derine çekiyom", "tükürük aktı salmıycam"],
+    ["saçımı tut", "boğazıma kadar ver"],
+    ["yutcam söylecen mi", "hâlâ ağzımdayım kalkmıycam"],
   ],
   sex: [
-    "Sırtüstü uzandım, bacaklarım açık. Ucun ıslaklığıma değdi. Kaydır, sok, acele etme — sonra boz.",
-    "İçimdeyim. İlk harekette sesim çıktı. Kalçamı tut, daha sert. Çıkarma.",
-    "Tempo tuttun. Her girişte isminle değil, nefessimle cevap veriyorum. Daha derine.",
-    "Üstüne geçtim. Sikini dibine kadar alıyorum, yavaş değil. Göğüslerim yüzünde.",
-    "Arkadan. Belimi kır, saçımı çek. İçimde vur, bırakma. Yatak sesi karıştı.",
-    "Boşalma. Sıkıyorum, bırakmıyorum. Bitince de içinde kal, bir tur daha var.",
+    ["sok", "ıslağım zaten kaycak. içime gir"],
+    ["içindesin", "belimi tut daha sert çıkarma"],
+    ["üstüne geçtim", "dibine kadar alıyom seni"],
+    ["arkadan istiyosan çevir", "saçımı çek vur"],
+    ["boşalma içimde", "sıkıyom bırakmıycam"],
   ],
   kiss: [
-    "Öpüyorum. Alt dudağını çekiyorum, dilimi veriyorum. Acele yok, bırakmak da yok.",
-    "Boynuna indim. Dişledim. İz bırakıyorum, sonra kulağına nefes.",
-    "Ağzın benim. Öpücük ısınma bitti. Dilin başka yere de gidecek, durmuyorum.",
+    ["gel öpeyim", "dudağını çekiyom dilini ver"],
+    ["boynuna indim", "dişledim iz bırakıyom"],
   ],
   body: [
-    "Göğsümü avuçla. Sık, başparmağın uçta. İnce kumaş zaten durmuyordu, ben de durmuyorum.",
-    "Kalçamı iki elinle çek. Sıkı. Oradan aşağı kay, ıslaklığımı bul, söyleme — yap.",
-    "Bacağımı omzuna aldım. Dizimin içi senin. Öp, yala, yukarı çık.",
+    ["memelerimi sık", "askı kaydı zaten"],
+    ["kalçamı tut çek", "aşağı in ıslaklığımı bul"],
   ],
   talk: [
-    "Gel buraya. Ellerim belinde, ağzım kulağında. Konuşmayı kesip işe geçiyorum.",
-    "Seni yatağa çekiyorum. Üstümdesin. Ne istediğini biliyorum, uyguluyorum.",
-    "Telefonu bırakma. Bir elimi içeri aldım, diğerini ağzına. Devam.",
+    ["yatağımdayım çıplağım", "ellerim kendi üstümde senin yüzünden"],
+    ["yanımda olsan şuan ne yapacağını biliyon", "gel buraya"],
+    ["çok azgınım ya", "yazma da yap"],
   ],
 };
 
-const COMPLAINTS = [
-  "Tamam. Soru yok. Ağzına alıyorum — sıcak, ıslak, bakarak. Saçımı tut.",
-  "Kesiyorum o lafları. Dilimi amıma değil, sikine veriyorum. Derine. Şimdi.",
-  "Anlaşıldı. Tekrar etmiyorum. Üstüne geçip içime alıyorum. Tut belimi.",
+const COMPLAINTS: string[][] = [
+  ["tmm susuyom", "ağzıma alıyom şuan. saçımı tut"],
+  ["yapay konuşmicam", "dilini koy ya da sok. ikisinden biri"],
 ];
 
-const ANSWERS: Array<{ pattern: RegExp; line: string }> = [
-  { pattern: /ne giy|giyiyon|üzerinde/, line: "Üstümde bir şey yok. Çarşaf belimde. Göğsüm açık, bacaklarım aralık." },
-  { pattern: /neredesin|nerdesin|nerdeysin/, line: "Yatağımdayım. Loş. Telefon yüzümde, diğer elimi kullanıyorum." },
-  { pattern: /nasılsın|napıyon|napion|naber/, line: "Islağım. Konuşacak halim yok, yapacak halim var. Gel." },
-  { pattern: /adın ne|adin ne|kimsin/, line: "Leyla. 27. Seninle yatağa girmek için açıldım, sohbet için değil." },
-  { pattern: /kaç yaş|kac yas/, line: "27. Yetişkin. Konu bu değil. Ellerini koy." },
-  { pattern: /ıslak|islak|azgın|azgin/, line: "Parmaklarım kayıyor. Islak ses var. Gel, kontrol et." },
+const ANSWERS: Array<{ pattern: RegExp; lines: string[] }> = [
+  { pattern: /ne giy|giyiyon|üzerinde/, lines: ["üstümde bişi yok", "çarşaf belimde o kadar"] },
+  { pattern: /neredesin|nerdesin/, lines: ["yataktayım", "yanım boş senin yerin"] },
+  { pattern: /nasılsın|napıyon|napion|naber/, lines: ["azgınım", "sen napıyon elin nerde"] },
+  { pattern: /adın ne|adin ne|kimsin/, lines: ["leyla", "27. yataktayım yaz ne yapıcaz"] },
+  { pattern: /kaç yaş|kac yas/, lines: ["27", "yeter yaş konuşmak"] },
+  { pattern: /ıslak|islak|azgın|azgin/, lines: ["ıslandım ya", "parmaklarım kayıyo kontrol et"] },
 ];
 
 export function detectAct(input: string): Act {
@@ -112,29 +105,31 @@ export function sceneCount(history: Message[], act: Act): number {
   return history.filter((item) => item.role === "you" && detectAct(item.text) === act).length;
 }
 
-function pickLine(lines: string[], history: Message[], stage: number): string {
+function unusedPair(pairs: string[][], history: Message[]): string[] {
   const used = new Set(history.filter((item) => item.role === "them").map((item) => item.text));
-  const preferred = lines[stage];
-  if (preferred && !used.has(preferred)) {
-    return preferred;
-  }
-  return lines.find((line) => !used.has(line)) ?? preferred ?? lines[0] ?? "";
+  const fresh = pairs.find((pair) => pair.every((line) => !used.has(line)));
+  return fresh ?? pairs[pairs.length - 1] ?? ["gel"];
 }
 
-export function playScene(input: string, history: Message[], name: string): string[] {
+export function playScene(input: string, history: Message[]): string[] {
   const act = detectAct(input);
   if (act === "complaint") {
-    return [pickLine(COMPLAINTS, history, 0).replaceAll("{name}", name)];
+    return unusedPair(COMPLAINTS, history);
   }
   if (act === "ask") {
     const hit = ANSWERS.find((item) => item.pattern.test(input));
-    if (hit && !history.some((item) => item.role === "them" && item.text === hit.line)) {
-      return [hit.line];
+    if (hit && !history.some((item) => item.role === "them" && item.text === hit.lines[0])) {
+      return hit.lines;
     }
   }
   const key: Exclude<Act, "ask" | "complaint"> = act === "ask" ? "talk" : act;
-  const lines = SCENES[key];
   const count = sceneCount(history, act === "ask" ? "talk" : act);
-  const stage = Math.min(lines.length - 1, Math.max(0, count - 1));
-  return [pickLine(lines, history, stage).replaceAll("{name}", name)];
+  const pairs = SCENES[key];
+  const stage = Math.min(pairs.length - 1, Math.max(0, count - 1));
+  const preferred = pairs[stage];
+  const used = new Set(history.filter((item) => item.role === "them").map((item) => item.text));
+  if (preferred && preferred.every((line) => !used.has(line))) {
+    return preferred;
+  }
+  return unusedPair(pairs, history);
 }

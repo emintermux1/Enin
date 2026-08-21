@@ -217,13 +217,13 @@ export function nextReply(
   input: string,
   heat: number,
   history: Message[],
-  playerName: string,
+  _playerName: string,
 ): EngineResult {
   const act = detectAct(input);
   const nextHeat = Math.min(100, heat + (act === "talk" || act === "ask" ? 8 : 16));
   const nextLocation = locationForHeat(nextHeat);
   return {
-    bubbles: playScene(input, history, playerName),
+    bubbles: playScene(input, history),
     heatDelta: nextHeat - heat,
     beat: null,
     location: nextLocation,
