@@ -116,9 +116,8 @@ export function echoReply(input: string, name: string, history: Message[], salt:
   const woven = dropRepeats(
     fillName(
       [
-        clip.length > 2 ? `öyle ${clip} de bana` : "duydum ya",
-        "tam onu istiyom bak",
-        "yap {name} çekme",
+        clip.length > 2 ? `öyle ${clip} istiyorum` : "duydum ya",
+        "tam onu yap bana {name}",
       ],
       name,
     ),

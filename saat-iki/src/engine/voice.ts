@@ -11,10 +11,10 @@ type Voice = {
 
 const VOICES: Record<CharacterId, Voice> = {
   asya: {
-    stretch: "heavy",
-    maxBubbles: 3,
-    endings: ["anlarsın ya", "offf"],
-    moan: ["offf", "mm offf", "ah yaa"],
+    stretch: "mid",
+    maxBubbles: 2,
+    endings: ["istiyorum", "offf"],
+    moan: ["offf", "🥺", "mm"],
   },
   elif: {
     stretch: "light",
@@ -50,8 +50,9 @@ function swapForVoice(line: string, id: CharacterId): string {
   switch (id) {
     case "asya":
       return line
-        .replaceAll("anlarsın ya", "seni delirtiyom")
-        .replaceAll("utanmıcam", "seni çıldırtıcam");
+        .replaceAll("anlarsın ya", "istiyorum")
+        .replaceAll("seni delirtiyom", "istiyorum")
+        .replaceAll("seni çıldırtıcam", "utanmıcam");
     case "elif":
       return line.replaceAll("yaaa", "hadi").replaceAll("lütfen", "hadi").replaceAll("anlarsın ya", "geç kalma");
     case "defne":
