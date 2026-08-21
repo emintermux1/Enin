@@ -6,7 +6,7 @@ Görsel seks sahnesi, porno model veya seks sesi yok.
 
 ## Canlı
 
-https://still-leaf-2390.zerodeploy.app
+https://summer-firefly-6344.zerodeploy.app
 
 Geçici yayın (yaklaşık 72 saat). Yerelde:
 
