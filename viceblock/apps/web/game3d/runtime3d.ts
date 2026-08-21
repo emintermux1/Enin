@@ -2765,6 +2765,16 @@ export class ViceblockRuntime3D {
     this.webWarned = false;
     this.web = { x: a.x, y: a.y, z: a.z, length: initialLength(this.player.x, this.player.y, this.player.z, a.x, a.y, a.z) };
     this.swingT = 0;
+    if (this.cling) {
+      // Kick off the brickwork on the way out. Dropping straight into the arc
+      // from a flat cling leaves you scraping down the same wall you were
+      // holding, which is indistinguishable from the line not having fired.
+      const away = this.cling.dir + Math.PI;
+      this.flight.vx += Math.cos(away) * SPIDER_CONFIG.wallJump * 0.55;
+      this.flight.vz += Math.sin(away) * SPIDER_CONFIG.wallJump * 0.55;
+      this.flight.vy = Math.max(this.flight.vy, SPIDER_CONFIG.wallJump * 0.45);
+      this.audio.foot(true, "concrete");
+    }
     if (this.player.grounded) {
       // Stepping off into the first swing needs a throw: from a standstill the
       // line has no arc to work with and just tips you over.
@@ -2833,9 +2843,14 @@ export class ViceblockRuntime3D {
     if (this.input.consumeZip()) this.zipToAnchor();
     const wantWeb = this.input.webbing();
     if (!wantWeb) this.webWarned = false;
-    // Not off a wall: a line fired the instant you land on one would peel you
-    // straight back off it, over and over. Space is how you leave a wall.
-    if (wantWeb && !this.web && !this.cling && this.webCooldown <= 0) this.fireWeb();
+    // A swing that starts on the street ends against the face of the building
+    // it was aimed at, which is where the wall grab takes over. Refusing to
+    // fire again from there — as this did — meant the first press of Q pinned
+    // you to some brickwork and the key went dead until you worked out that
+    // Space is the way off a wall. The short delay is only so a line cannot
+    // fire on the same step you land, which would peel you off before the grab
+    // ever reads as one.
+    if (wantWeb && !this.web && this.webCooldown <= 0 && (!this.cling || this.cling.t > 0.18)) this.fireWeb();
     else if (!wantWeb && this.web) this.releaseWeb();
 
     const jump = this.input.keys.has("Space");
