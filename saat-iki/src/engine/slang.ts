@@ -122,6 +122,21 @@ export function slangify(text: string, salt: number, index: number, total: numbe
   return stretchConsonantTail(next, extra);
 }
 
-export function humanize(lines: string[], salt: number): string[] {
-  return lines.map((line, index) => slangify(line, salt, index, lines.length));
+export function humanize(
+  lines: string[],
+  salt: number,
+  stretch: "heavy" | "mid" | "light" | "none" = "heavy",
+): string[] {
+  if (stretch === "none") {
+    return lines;
+  }
+  return lines.map((line, index) => {
+    if (stretch === "light" && index !== lines.length - 1) {
+      return line;
+    }
+    if (stretch === "mid" && index !== lines.length - 1 && salt % 2 === 0) {
+      return line;
+    }
+    return slangify(line, salt, index, lines.length);
+  });
 }

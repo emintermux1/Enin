@@ -1,7 +1,12 @@
-import type { Choice, Message } from "../types";
+import { getCharacter } from "../data/characters";
+import { getFantasy } from "../data/fantasies";
+import type { Choice, FantasyId, Message, PlayOpts } from "../types";
+import { memoryLine } from "./memory";
 import { choicesForMove, playMove } from "./moves";
+import { AFTERCARE, nightPhase, PHASE_TALK } from "./night";
 import { fillName, pickUnused, usedThem } from "./pool";
-import { humanize, normalizeSlang } from "./slang";
+import { normalizeSlang } from "./slang";
+import { applyVoice, voiceMoan } from "./voice";
 
 export type Act =
   | "complaint"
@@ -102,8 +107,8 @@ const ANSWERS: Array<{ pattern: RegExp; lines: string[] }> = [
   { pattern: /ne giy|giyiyon|üzerinde/, lines: ["hiçbişi yok ya", "külot bile kaydı", "ıslak tenim senin için"] },
   { pattern: /neredesin|nerdesin/, lines: ["yataktayım bacaklarım açık", "yanım boş offf", "senin sikin olsa şuan içimde"] },
   { pattern: /nasılsın|napıyon|napion|naber/, lines: ["azgınım sırılsıklam", "parmaklarım amımda", "sen napıyon söyleme göster"] },
-  { pattern: /adın ne|adin ne|kimsin/, lines: ["leyla", "27", "seni yatağımda siktirmek istiyom"] },
-  { pattern: /kaç yaş|kac yas/, lines: ["27", "yeter yaş", "amım konuşsun yaş değil"] },
+  { pattern: /adın ne|adin ne|kimsin/, lines: ["{who}", "{age}", "seni yatağımda siktirmek istiyom"] },
+  { pattern: /kaç yaş|kac yas/, lines: ["{age}", "yeter yaş", "amım konuşsun yaş değil"] },
   { pattern: /ıslak|islak|azgın|azgin/, lines: ["sırılsıklamım ya", "parmaklarım kayıyo offf", "dilini koysan akar"] },
   { pattern: /ne yap|napak|ne istiyon/, lines: ["önce yala sonra sok", "fantezim kirli", "seçme de sik"] },
 ];
@@ -287,17 +292,84 @@ export function nextChoices(input: string, history: Message[]): Choice[] {
   return fresh.length > 0 ? fresh : row;
 }
 
-export function playScene(input: string, history: Message[], heat = 50, name = ""): string[] {
+function finish(
+  raw: string[],
+  key: Exclude<Act, "ask" | "complaint">,
+  history: Message[],
+  salt: number,
+  opts: PlayOpts,
+): string[] {
+  const named = fillName(raw, opts.name).map((line) =>
+    line
+      .replaceAll("{who}", getCharacter(opts.characterId).name.toLocaleLowerCase("tr-TR"))
+      .replaceAll("{age}", String(getCharacter(opts.characterId).age)),
+  );
+  const hooked = withHook(named, key, history, salt);
+  const moaned = withMoan(hooked, salt, opts);
+  const recalled = withMemory(moaned, opts.recentMoves, salt);
+  const tinted = tintFantasy(recalled, opts.fantasy, salt);
+  return applyVoice(tinted, opts.characterId, salt, opts.name);
+}
+
+function withMemory(lines: string[], moves: string[], salt: number): string[] {
+  const extra = memoryLine(moves, salt);
+  if (!extra) {
+    return lines;
+  }
+  if (lines.some((line) => normalizeSlang(line) === normalizeSlang(extra))) {
+    return lines;
+  }
+  if (lines.length < 3) {
+    return [...lines, extra];
+  }
+  return [...lines.slice(0, 2), extra];
+}
+
+function tintFantasy(lines: string[], fantasy: FantasyId, salt: number): string[] {
+  if (fantasy === "free") {
+    return lines;
+  }
+  const setting = getFantasy(fantasy).setting;
+  if (setting.length === 0) {
+    return lines;
+  }
+  const line = setting[Math.abs(salt) % setting.length] ?? setting[0];
+  if (!line || lines.some((item) => normalizeSlang(item) === normalizeSlang(line))) {
+    return lines;
+  }
+  if (salt % 2 === 0) {
+    return [line, ...lines].slice(0, 3);
+  }
+  return [...lines.slice(0, Math.min(2, lines.length)), line].slice(0, 3);
+}
+
+function withMoan(lines: string[], salt: number, opts: PlayOpts): string[] {
+  if (lines.length === 0 || opts.heat < 35 || salt % 5 !== 0) {
+    return lines;
+  }
+  if (/^(off+|mm+|ah|hıh)/i.test(lines[0] ?? "")) {
+    return lines;
+  }
+  return [voiceMoan(opts.characterId, salt), ...lines].slice(0, 3);
+}
+
+export function playScene(input: string, history: Message[], opts: PlayOpts): string[] {
   const act = detectAct(input);
-  const salt = history.length + input.length + Math.floor(heat / 10);
+  const salt = history.length + input.length + Math.floor(opts.heat / 10);
+  const key = sceneKey(act);
+  const phase = nightPhase(opts.heat, opts.climaxCount);
+
   if (act === "complaint") {
-    return humanize(fillName(pickUnused(COMPLAINTS, history, salt), name), salt);
+    return finish(pickUnused(COMPLAINTS, history, salt), "talk", history, salt, opts);
+  }
+
+  if (phase === "after" && /boşal|bosal|bir daha|yanımda kal/.test(input)) {
+    return finish(pickUnused(AFTERCARE, history, salt), key, history, salt, opts);
   }
 
   const moved = playMove(input, history, salt);
   if (moved) {
-    const key = sceneKey(act);
-    return humanize(fillName(withMoan(withHook(moved, key, history, salt), salt, heat), name), salt);
+    return finish(moved, key, history, salt, opts);
   }
 
   if (act === "ask") {
@@ -308,13 +380,22 @@ export function playScene(input: string, history: Message[], heat = 50, name = "
         (item) => item.role === "them" && normalizeSlang(item.text) === normalizeSlang(hit.lines[0]),
       )
     ) {
-      return humanize(fillName(withMoan(hit.lines, salt, heat), name), salt);
+      return finish(hit.lines, "talk", history, salt, opts);
     }
   }
 
-  const key = sceneKey(act);
+  if (act === "talk" || act === "ask") {
+    const used = usedThem(history);
+    const freshPhase = PHASE_TALK[phase].find((pair) =>
+      pair.every((line) => !used.has(normalizeSlang(line))),
+    );
+    if (freshPhase) {
+      return finish(freshPhase, "talk", history, salt, opts);
+    }
+  }
+
   const count = sceneCount(history, key);
-  const boost = heat >= 80 ? 2 : heat >= 60 ? 1 : 0;
+  const boost = opts.heat >= 80 ? 2 : opts.heat >= 60 ? 1 : 0;
   const pairs = SCENES[key];
   const stage = Math.min(pairs.length - 1, Math.max(0, count - 1 + boost));
   const preferred = pairs[stage];
@@ -323,17 +404,5 @@ export function playScene(input: string, history: Message[], heat = 50, name = "
     preferred && preferred.every((line) => !used.has(normalizeSlang(line)))
       ? preferred
       : pickUnused(pairs, history, salt);
-  return humanize(fillName(withMoan(withHook(raw, key, history, salt), salt, heat), name), salt);
-}
-
-function withMoan(lines: string[], salt: number, heat: number): string[] {
-  if (lines.length === 0 || heat < 35 || salt % 5 !== 0) {
-    return lines;
-  }
-  if (/^(off+|mm+|ah)/i.test(lines[0] ?? "")) {
-    return lines;
-  }
-  const moans = ["offf", "mm offf", "ah yaa"];
-  const moan = moans[Math.abs(salt) % moans.length] ?? "offf";
-  return [moan, ...lines].slice(0, 3);
+  return finish(raw, key, history, salt, opts);
 }

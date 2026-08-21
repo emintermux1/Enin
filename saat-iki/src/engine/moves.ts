@@ -272,7 +272,7 @@ const MOVES: Move[] = [
   },
   {
     id: "shower",
-    pattern: /duş|dus|ıslak ten|sabah|uyan/,
+    pattern: /duş|dus|ıslak ten/,
     lines: [
       ["duşta sırılsıklamım", "cam buğu offf", "arkamdan gir suyun altında"],
       ["sabah uyanır uyanmaz istiyom", "ağzım yarı açık {name}", "önce sik sonra kahve"],

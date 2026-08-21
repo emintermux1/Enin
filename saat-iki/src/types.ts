@@ -1,4 +1,19 @@
-export type Screen = "gate" | "name" | "cast" | "chat";
+export type Screen = "gate" | "resume" | "name" | "cast" | "chat";
+
+export type FantasyId =
+  | "free"
+  | "window"
+  | "shower"
+  | "morning"
+  | "car"
+  | "jealous"
+  | "slow"
+  | "face"
+  | "inside";
+
+export type NightPhase = "tease" | "wet" | "peak" | "after";
+
+export type StretchMode = "heavy" | "mid" | "light" | "none";
 
 export type CharacterId = "leyla" | "elif" | "defne" | "yasemin" | "melis";
 
@@ -51,4 +66,27 @@ export type EngineResult = {
   beat: string | null;
   location: LocationId;
   choices: Choice[];
+  climax: boolean;
+  fantasy: FantasyId;
+};
+
+export type SavedNight = {
+  version: 1;
+  playerName: string;
+  characterId: CharacterId;
+  heat: number;
+  location: LocationId;
+  fantasy: FantasyId;
+  climaxCount: number;
+  moves: string[];
+  messages: Message[];
+};
+
+export type PlayOpts = {
+  heat: number;
+  name: string;
+  characterId: CharacterId;
+  fantasy: FantasyId;
+  climaxCount: number;
+  recentMoves: string[];
 };

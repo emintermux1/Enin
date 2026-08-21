@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { locationLabel, nightClock } from "../engine/reply";
-import type { Character, Choice, LocationId, Message } from "../types";
+import { FANTASIES, fantasyLabel } from "../data/fantasies";
+import { nightPhase, phaseLabel } from "../engine/night";
+import { nightClock } from "../engine/reply";
+import type { Character, Choice, FantasyId, LocationId, Message } from "../types";
 import { Portrait } from "./Portrait";
 
 type ChatProps = {
@@ -8,10 +10,13 @@ type ChatProps = {
   playerName: string;
   heat: number;
   location: LocationId;
+  fantasy: FantasyId;
+  climaxCount: number;
   messages: Message[];
   choices: Choice[];
   waiting: boolean;
   onSend: (text: string) => void;
+  onFantasy: (id: FantasyId) => void;
   onBack: () => void;
 };
 
@@ -20,15 +25,19 @@ export function Chat({
   playerName,
   heat,
   location,
+  fantasy,
+  climaxCount,
   messages,
   choices,
   waiting,
   onSend,
+  onFantasy,
   onBack,
 }: ChatProps) {
   const [draft, setDraft] = useState("");
   const scroller = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
+  const phase = nightPhase(heat, climaxCount);
 
   useEffect(() => {
     const node = scroller.current;
@@ -54,9 +63,13 @@ export function Chat({
     setDraft("");
   }
 
+  const status = waiting
+    ? "yazıyor…"
+    : `çevrimiçi · ${phaseLabel(phase)}${fantasy === "free" ? "" : ` · ${fantasyLabel(fantasy)}`}`;
+
   return (
     <section
-      className={`chat-shell loc-${location} tone-${character.id}`}
+      className={`chat-shell loc-${location} tone-${character.id} phase-${phase}`}
       style={{ ["--heat" as string]: String(heat / 100) }}
     >
       <p className="phone-bar">
@@ -71,9 +84,7 @@ export function Chat({
           <Portrait id={character.id} />
           <div>
             <p className="who-name">{character.name}</p>
-            <p className="who-sub">
-              {waiting ? "yazıyor…" : `çevrimiçi · ${locationLabel(location)}`}
-            </p>
+            <p className="who-sub">{status}</p>
           </div>
         </div>
         <div className="heat" aria-label={`Yakınlık ${heat}`}>
@@ -121,6 +132,19 @@ export function Chat({
       </div>
 
       <div className="composer">
+        <div className="chips" role="group" aria-label="Fantezi">
+          {FANTASIES.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className={`chip${fantasy === item.id ? " is-on" : ""}`}
+              disabled={waiting}
+              onClick={() => onFantasy(item.id)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
         <div className="choices">
           {choices.map((choice) => (
             <button

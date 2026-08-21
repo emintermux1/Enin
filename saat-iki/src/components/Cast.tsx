@@ -5,15 +5,21 @@ import { Portrait } from "./Portrait";
 type CastProps = {
   playerName: string;
   onPick: (id: CharacterId) => void;
+  onReturn?: () => void;
 };
 
-export function Cast({ playerName, onPick }: CastProps) {
+export function Cast({ playerName, onPick, onReturn }: CastProps) {
   return (
     <section className="cast">
       <header className="cast-head">
         <p className="eyebrow">{playerName}, seç</p>
         <h1>Başka hatun?</h1>
-        <p className="lede">Leyla bekliyor. İstersen başka biriyle yazış.</p>
+        <p className="lede">Leyla bekliyor. İstersen başka ağızla yazış. Her biri ayrı konuşur.</p>
+        {onReturn ? (
+          <button type="button" className="btn-ghost" onClick={onReturn}>
+            Bu geceye dön
+          </button>
+        ) : null}
       </header>
       <ul className="cast-grid">
         {CHARACTERS.map((person) => (

@@ -1,13 +1,18 @@
+import { detectFantasy } from "../data/fantasies";
 import type {
   CharacterId,
   Choice,
   EngineResult,
+  FantasyId,
   HeatTier,
   Intent,
   LocationId,
   Message,
 } from "../types";
+import { isClimax, recentMoveIds } from "./memory";
 import { detectAct, nextChoices, openingChoices as sceneOpening, playScene } from "./scene";
+
+export { nextChoices };
 
 const INTENT_PATTERNS: Array<{ intent: Intent; pattern: RegExp }> = [
   {
@@ -104,22 +109,34 @@ export function locationLabel(location: LocationId): string {
   }
 }
 
-export function nextReply(
-  _characterId: CharacterId,
-  input: string,
-  heat: number,
-  history: Message[],
-  playerName: string,
-): EngineResult {
-  const act = detectAct(input);
-  const nextHeat = Math.min(100, heat + (act === "talk" || act === "ask" ? 8 : 16));
-  const nextLocation = locationForHeat(nextHeat);
+export function nextReply(args: {
+  characterId: CharacterId;
+  input: string;
+  heat: number;
+  history: Message[];
+  playerName: string;
+  fantasy: FantasyId;
+  climaxCount: number;
+}): EngineResult {
+  const act = detectAct(args.input);
+  const nextHeat = Math.min(100, args.heat + (act === "talk" || act === "ask" ? 8 : 16));
+  const locked = detectFantasy(args.input) ?? args.fantasy;
+  const moves = recentMoveIds(args.history);
   return {
-    bubbles: playScene(input, history, heat, playerName),
-    heatDelta: nextHeat - heat,
+    bubbles: playScene(args.input, args.history, {
+      heat: args.heat,
+      name: args.playerName,
+      characterId: args.characterId,
+      fantasy: locked,
+      climaxCount: args.climaxCount,
+      recentMoves: moves,
+    }),
+    heatDelta: nextHeat - args.heat,
     beat: null,
-    location: nextLocation,
-    choices: nextChoices(input, history),
+    location: locationForHeat(nextHeat),
+    choices: nextChoices(args.input, args.history),
+    climax: isClimax(args.input),
+    fantasy: locked,
   };
 }
 
