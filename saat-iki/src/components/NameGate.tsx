@@ -37,7 +37,7 @@ export function NameGate({ onSubmit }: NameGateProps) {
           placeholder="Adın"
         />
         <button type="submit" className="btn-primary" disabled={name.trim().length < 2}>
-          Geceye geç
+          Hatunla konuş
         </button>
       </form>
     </section>

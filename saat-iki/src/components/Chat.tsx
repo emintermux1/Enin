@@ -49,14 +49,14 @@ export function Chat({
     <section className={`chat-shell loc-${location} tone-${character.id}`}>
       <header className="chat-top">
         <button type="button" className="back" onClick={onBack}>
-          Kast
+          Başka
         </button>
         <div className="who">
           <Portrait id={character.id} />
           <div>
             <p className="who-name">{character.name}</p>
             <p className="who-sub">
-              {character.title} · {locationLabel(location)}
+              {character.title} · {locationLabel(location)} · seninle
             </p>
           </div>
         </div>
@@ -104,9 +104,10 @@ export function Chat({
           </label>
           <input
             id="draft"
+            autoFocus
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
-            placeholder="Yaz. Utanma."
+            placeholder="Ona yaz. Ne istediğini söyle."
             maxLength={280}
           />
           <button type="submit" className="btn-primary" disabled={!draft.trim()}>

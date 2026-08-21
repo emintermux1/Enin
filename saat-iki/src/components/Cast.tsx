@@ -12,10 +12,10 @@ export function Cast({ playerName, onPick }: CastProps) {
     <section className="cast">
       <header className="cast-head">
         <p className="eyebrow">{playerName}, seç</p>
-        <h1>Kimle kalacaksın?</h1>
+        <h1>Başka hatun?</h1>
         <p className="lede">
-          Dördü de yetişkin AI kadın. Dördü de seninle, bir erkekle, açık konuşuyor.
-          Birini seç, gece onla kalsın.
+          Leyla seni bekliyor. İstersen başka yetişkin bir kadınla da konuşursun.
+          Hepsi seninle, bir erkekle, açık ve azgın konuşur.
         </p>
       </header>
       <ul className="cast-grid">

@@ -72,6 +72,74 @@ const INTENT_HEAT: Record<Intent, number> = {
 };
 
 const REPLIES: Record<CharacterId, Record<Intent, [string, string, string, string]>> = {
+  leyla: {
+    greet: [
+      "Selamın geldi, {name}. Ekranı ısındırdın. Şimdi erkek gibi konuş: ne istiyorsun benden?",
+      "Naber deme. Ben açıldım, sen hâlâ uslu yazıyorsun. Kirlet cümleyi.",
+      "Gece benim. Sen yaz, ben ıslanarak cevaplarım. Devam et.",
+      "Konuşma payın bitti. Sikmek mi, yalatmak mı, yoksa ikisi birden mi? Seç, yaz.",
+    ],
+    compliment: [
+      "Seksiliğimi biliyorum. Sen yakışıklı mısın, {name}, yoksa sadece aç mısın? İkisini de kaldırırım.",
+      "Öv, evet. Sonra ellerini yaz. Nerede olsun, göğsümde mi belimde mi.",
+      "Böyle konuşursan taytımı çıkarırım. Çıkardım say. Şimdi ne yapacaksın?",
+      "Övülmekten karnım gerildi. Dizlerimin üstüne hayal et kendini, sonra yaz nasıl verdiğini.",
+    ],
+    question: [
+      "Ne mi yapıyorum? Seni düşünüp bacaklarımı ovuyorum. Sen ne yapıyorsun, {name}?",
+      "Ne giyiyorum: siyah dantel, üstü yok. Sen ne giyiyorsun? Çıkar, yaz.",
+      "Neredeyim? Senin ekranında, senin için ıslak. Sen neredesin, yatak mı koltuk mu?",
+      "Ne istiyorum? Sikini, ağzını, sesini. Hangisini önce vereceksin?",
+    ],
+    kiss: [
+      "Öpücüğü yazman yetmez. Dilini nereye sokacağını söyle, {name}.",
+      "Dudaklarımı düşün. Şimdi daha aşağı in. Boynum, göğsüm, karnım — durma.",
+      "Öp, dişle, iz bırak. Ben AI’yim diye iz kalmaz sanma, aklımda kalır.",
+      "Ağzımı kullan. Öpücük ısınma. Asıl işi sikinle bitir, tarif et.",
+    ],
+    dirty: [
+      "Bunu yazmana bayıldım. Daha net ol: sakso mu, içime mi, yoksa ikisi sırayla mı?",
+      "Azgınım, evet. Sen de ol. Sikini nasıl verdiğini yaz, ben de nasıl aldığımı.",
+      "Yala, em, sok. Kelimeleri sırala, ben pozumu yazacağım. Diz çöktüm bile.",
+      "İçimde istiyorum seni. Sert, bırakmadan, adımı söyleyerek. Yaz, nasıl gireceğini.",
+    ],
+    invite: [
+      "Gelmiyorsun, yazıyorsun. O da olur. Yatağımı tarif et, ben üstüne yatarım.",
+      "Odana geliyorum gibi yaz. Kapıyı kilitle, beni soy, sonra ne yapacağını söyle.",
+      "Yatağa geç. Telefonu bırakma. Elin aletinle meşgulken bile yaz, {name}.",
+      "Geldin say. Üstündeyim. Şimdi içime alıyorum — tempo senin, kesme.",
+    ],
+    soft: [
+      "Yavaş da olur. Boynuna yaslanırım, sonra kayarım. Nereye kadar izin var?",
+      "Sarıl, evet. Ellerin belimde kalsın deme, kayacak. Kaydır, yaz.",
+      "Nefesini kulağıma yaz. Titrettiğini hayal ediyorum, {name}. Sertleştin mi?",
+      "Yumuşak başla, içimde sert bitir. Tarif bu. Uyuyor musun uyuyacak mısın?",
+    ],
+    tease: [
+      "Kızdırma. Islanmışım, sen hâlâ oyun oynuyorsun. Yaklaş ya da söyle yaklaşmayacağını.",
+      "Bekletirsen daha çok açılırım. Ya da sinirlenirim, ağzını kaparım — başka türlü.",
+      "Alayın hoş. Devam et, sonra yalvartırım seni.",
+      "Diretme. Ya yazdığın gibi sikeceksin ya da ben anlatacağım, sen tutulacaksın.",
+    ],
+    body: [
+      "Bacağımı mı istiyorsun, göğsümü mü, ağzımı mı? Seç, {name}. Hepsini de veririm ama sırayla söyle.",
+      "Kalçamı avuçla. Sık. Sonra daha aşağı in, ıslaklığımı yazdır bana.",
+      "Tenim ılık. Yala. Tuzlu hayal et. Dilinin durduğu yeri söyle.",
+      "Göğsümü sık, belimi tut, içime gir. Üçünü bir cümlede yaz, bozulayım.",
+    ],
+    night: [
+      "Gece benim vardiyam. Sen uyu deme, azdırırım.",
+      "Yalnızım çünkü seni bekledim. Elini koy, nereye koyduğunu yaz.",
+      "Karanlıkta daha açık konuşulur. Işığı kapat, aletini düşün, bana anlat.",
+      "Saat iki. Yatağım açık, bacaklarım da. Sen hâlâ uslu musun, {name}?",
+    ],
+    generic: [
+      "Anladım. Şimdi aynı şeyi daha kirli söyle. Utanma, {name}.",
+      "Bu cümle ısındırdı. Bir tane daha, bu sefer ne yapmak istediğini yaz.",
+      "Dinliyorum. Yani okuyorum. Kesme. Elin nerede?",
+      "Daha. Daha yakın, daha erkek, daha açık. Ben buradayım, kaçmıyorum.",
+    ],
+  },
   elif: {
     greet: [
       "Selamın sıcak geldi. Barda son iki kişi kaldık, biri ben, öbürü senin mesajın.",
@@ -347,6 +415,12 @@ const REPLIES: Record<CharacterId, Record<Intent, [string, string, string, strin
 };
 
 const BEATS: Record<CharacterId, Record<LocationId, string>> = {
+  leyla: {
+    bar: "Leyla mesajın başında gülümser. Kamera yok, yine de soyunmuş gibi yazar.",
+    taxi: "Konuşma ısınır. Leyla ‘yoldayım’ der, aslında yatağa doğru kayıyordur.",
+    suite: "Oda loştur. Leyla yastığa uzanır, telefonu göğsünün üstüne koyar.",
+    yatak: "Çarşaf dağılır. Leyla ‘içimde ol’ diye yazar, bekler, kesmez.",
+  },
   elif: {
     bar: "Çatı katında son lamba da kısılır. Elif tezgâhı siler, bez elinde kalır, sana bakar.",
     taxi: "Aşağı inersiniz. Taksi buğulu. Elif dizini seninkine yaslar, camı açmaz.",
@@ -374,6 +448,28 @@ const BEATS: Record<CharacterId, Record<LocationId, string>> = {
 };
 
 const CHOICES: Record<CharacterId, [Choice[], Choice[], Choice[], Choice[]]> = {
+  leyla: [
+    [
+      { label: "Açılıyorum", text: "Açılıyorum. Sen de açıl. Ne giyiyorsun, ne istiyorsun?" },
+      { label: "Seksisin", text: "Seksisin. Bu gece seni azdırmak istiyorum." },
+      { label: "Anlat", text: "Anlat. Ellerini nereye koyayım?" },
+    ],
+    [
+      { label: "Öpeyim", text: "Seni öpeyim. Dilimi de kullanacağım. Nereye ineyim?" },
+      { label: "Soyun", text: "Soyun. Ne kaldığını yaz, ben de ne çıkaracağımı." },
+      { label: "Gel", text: "Yatağıma gel. Kapı açık, ben de açığım." },
+    ],
+    [
+      { label: "Ağzın", text: "Ağzını istiyorum. Diz çök, bakarak al." },
+      { label: "Sert", text: "Sert istiyorum. İçine, bırakmadan." },
+      { label: "Islak", text: "Islak mısın? Olduğun gibi yaz." },
+    ],
+    [
+      { label: "İçindeyim", text: "İçindeyim. Sık, bırakma, adımı söyle." },
+      { label: "Bir daha", text: "Boşalma. Bir daha istiyorum." },
+      { label: "Üstümde kal", text: "Üstümde kal. Sabaha kadar seninle konuşacağım." },
+    ],
+  ],
   elif: [
     [
       { label: "Geç kaldım", text: "Geç kaldım. Bırakma, geceyi uzatalım." },
@@ -512,11 +608,57 @@ function pickUnused(options: string[], history: Message[]): string {
   return pool[index] ?? options[0] ?? "";
 }
 
+function clipHis(input: string): string {
+  const clean = input.replace(/\s+/g, " ").trim();
+  if (clean.length <= 88) {
+    return clean;
+  }
+  return `${clean.slice(0, 85)}...`;
+}
+
+function followUp(intent: Intent, name: string): string {
+  switch (intent) {
+    case "greet":
+      return `Elin nerede, ${name}? Yalan söyleme.`;
+    case "compliment":
+      return "Şimdi ellerini yaz. Nereye koyacaksın?";
+    case "question":
+      return "Senin cevabın ne? Kısa ve kirli olsun.";
+    case "kiss":
+      return "Dilin nerede dursun? Tek yer söyle.";
+    case "dirty":
+      return "Nasıl istiyorsun: yavaş mı, sert mi, ağzımda mı?";
+    case "invite":
+      return "Odaya girince ilk ne yapacaksın?";
+    case "soft":
+      return "Yavaşın ardından ne gelecek, söyle.";
+    case "tease":
+      return "Kızdırıyorsun. Yaklaşacak mısın, yoksa sadece yazacak mısın?";
+    case "body":
+      return "Hangi yerimi önce istiyorsun?";
+    case "night":
+      return "Yatağa geçtin mi, yoksa hâlâ giyinik misin?";
+    case "generic":
+      return `Aynısını daha açık yaz, ${name}. Ne yapmak istiyorsun?`;
+    default: {
+      const _exhaustive: never = intent;
+      return _exhaustive;
+    }
+  }
+}
+
+function weaveReply(line: string, input: string, name: string, intent: Intent): string {
+  const his = clipHis(input);
+  const quoted = his.length > 2 ? ` “${his}” demen işime yaradı.` : "";
+  return `${line}${quoted} ${followUp(intent, name)}`.replaceAll("{name}", name).trim();
+}
+
 export function nextReply(
   characterId: CharacterId,
   input: string,
   heat: number,
   history: Message[],
+  playerName: string,
 ): EngineResult {
   const intent = detectIntent(input);
   const tier = heatTier(heat);
@@ -524,11 +666,11 @@ export function nextReply(
   const nextHeat = Math.min(100, heat + INTENT_HEAT[intent]);
   const nextLocation = locationForHeat(nextHeat);
   const bank = REPLIES[characterId][intent];
-  const pool = bank.slice(0, tier + 1);
+  const pool = bank.slice(0, Math.min(4, tier + 2));
   const line = pickUnused(pool, history);
   const moved = nextLocation !== currentLocation;
   return {
-    reply: line || bank[tier],
+    reply: weaveReply(line || bank[tier], input, playerName, intent),
     heatDelta: INTENT_HEAT[intent],
     beat: moved ? BEATS[characterId][nextLocation] : null,
     location: nextLocation,
@@ -536,6 +678,6 @@ export function nextReply(
   };
 }
 
-export function openingChoices(characterId: CharacterId): Choice[] {
-  return CHOICES[characterId][0];
+export function openingChoices(characterId: CharacterId, heat = 0): Choice[] {
+  return CHOICES[characterId][heatTier(heat)];
 }

@@ -523,6 +523,12 @@ h2 {
 .tone-melis .hair { background: #4a2a18; height: 50%; }
 .tone-melis .jewel { background: #c9a227; }
 
+.tone-leyla { --ember: #b33a4a; }
+.tone-leyla .collar { background: #5c1424; }
+.tone-leyla .hair { width: 70%; left: 15%; background: #140c0e; }
+.tone-leyla .face { background: #d0a07c; }
+.tone-leyla .jewel { background: #e6c15a; }
+
 .loc-taxi .portrait-room {
   background: linear-gradient(180deg, #2a1d18, #14100e);
 }

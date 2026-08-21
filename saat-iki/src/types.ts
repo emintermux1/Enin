@@ -1,6 +1,6 @@
 export type Screen = "gate" | "name" | "cast" | "chat";
 
-export type CharacterId = "elif" | "defne" | "yasemin" | "melis";
+export type CharacterId = "leyla" | "elif" | "defne" | "yasemin" | "melis";
 
 export type HeatTier = 0 | 1 | 2 | 3;
 

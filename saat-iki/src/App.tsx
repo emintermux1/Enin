@@ -3,8 +3,8 @@ import { AgeGate } from "./components/AgeGate";
 import { Cast } from "./components/Cast";
 import { Chat } from "./components/Chat";
 import { NameGate } from "./components/NameGate";
-import { getCharacter } from "./data/characters";
-import { nextReply, openingChoices } from "./engine/reply";
+import { DEFAULT_COMPANION, getCharacter } from "./data/characters";
+import { locationForHeat, nextReply, openingChoices } from "./engine/reply";
 import type { CharacterId, Choice, LocationId, Message, Screen } from "./types";
 
 let messageSerial = 0;
@@ -28,16 +28,17 @@ export function App() {
     [characterId],
   );
 
-  function startWith(id: CharacterId) {
+  function startWith(id: CharacterId, name = playerName) {
     const person = getCharacter(id);
+    const startHeat = id === "leyla" ? 46 : 22;
     const opening = person.opening.map((line) =>
-      createMessage("them", personalize(line, playerName)),
+      createMessage("them", personalize(line, name)),
     );
     setCharacterId(id);
-    setHeat(12);
-    setLocation("bar");
+    setHeat(startHeat);
+    setLocation(locationForHeat(startHeat));
     setMessages(opening);
-    setChoices(openingChoices(id));
+    setChoices(openingChoices(id, startHeat));
     setScreen("chat");
   }
 
@@ -46,7 +47,7 @@ export function App() {
       return;
     }
     const you = createMessage("you", text);
-    const result = nextReply(characterId, text, heat, messages);
+    const result = nextReply(characterId, text, heat, messages, playerName);
     const nextHeat = Math.min(100, heat + result.heatDelta);
     const nextMessages = [
       ...messages,
@@ -73,7 +74,7 @@ export function App() {
           <NameGate
             onSubmit={(name) => {
               setPlayerName(name);
-              setScreen("cast");
+              startWith(DEFAULT_COMPANION, name);
             }}
           />
         </main>
