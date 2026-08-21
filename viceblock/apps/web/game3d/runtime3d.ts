@@ -2,7 +2,7 @@ import { Engine } from "@babylonjs/core/Engines/engine";
 import { HemisphericLight } from "@babylonjs/core/Lights/hemisphericLight";
 import { DirectionalLight } from "@babylonjs/core/Lights/directionalLight";
 import { Color3, Color4 } from "@babylonjs/core/Maths/math.color";
-import { Quaternion, Vector3 } from "@babylonjs/core/Maths/math.vector";
+import { Quaternion, Vector3, Vector4 } from "@babylonjs/core/Maths/math.vector";
 import { FreeCamera } from "@babylonjs/core/Cameras/freeCamera";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import type { Mesh } from "@babylonjs/core/Meshes/mesh";
@@ -1489,7 +1489,21 @@ export class ViceblockRuntime3D {
     height = 90,
     lit = 0.3,
   ): void {
-    const floor = MeshBuilder.CreateBox(`${prefix}floor`, { width: half * 2, depth: half * 2, height: 2 }, this.scene);
+    // Rooms are hundreds of units across, and a surface texture stretched
+    // once over that is a flat colour — which is what these walls used to be.
+    // A tile every twenty-odd units puts the plaster and the concrete back.
+    const tiles = (a: number, b: number): Vector4[] => {
+      const u = Math.max(1, Math.round(a / 22));
+      const v = Math.max(1, Math.round(b / 22));
+      const face = new Vector4(0, 0, u, v);
+      return [face, face, face, face, face, face];
+    };
+    const floor = MeshBuilder.CreateBox(`${prefix}floor`, {
+      width: half * 2,
+      depth: half * 2,
+      height: 2,
+      faceUV: tiles(half * 2, half * 2),
+    }, this.scene);
     floor.material = this.surface("concrete", floorHex, lit * 0.8);
     floor.position = new Vector3(cx, INTERIOR_Y - 1, cz);
     const wallMat = this.surface("plaster", wallHex, lit);
@@ -1500,12 +1514,22 @@ export class ViceblockRuntime3D {
       [cx + half, cz, 6, half * 2],
     ];
     walls.forEach(([x, z, w, d], i) => {
-      const wall = MeshBuilder.CreateBox(`${prefix}wall-${i}`, { width: w, depth: d, height }, this.scene);
+      const wall = MeshBuilder.CreateBox(`${prefix}wall-${i}`, {
+        width: w,
+        depth: d,
+        height,
+        faceUV: tiles(Math.max(w, d), height),
+      }, this.scene);
       wall.material = wallMat;
       wall.position = new Vector3(x, INTERIOR_Y + height / 2, z);
     });
     // Without a lid the room reads as a doll's house floating over the city.
-    const ceiling = MeshBuilder.CreateBox(`${prefix}ceiling`, { width: half * 2, depth: half * 2, height: 3 }, this.scene);
+    const ceiling = MeshBuilder.CreateBox(`${prefix}ceiling`, {
+      width: half * 2,
+      depth: half * 2,
+      height: 3,
+      faceUV: tiles(half * 2, half * 2),
+    }, this.scene);
     ceiling.material = this.surface("plaster", ceilingHex, lit * 0.6);
     ceiling.position = new Vector3(cx, INTERIOR_Y + height, cz);
   }
