@@ -119,7 +119,7 @@ export function nextReply(args: {
   climaxCount: number;
 }): EngineResult {
   const act = detectAct(args.input);
-  const nextHeat = Math.min(100, args.heat + (act === "talk" || act === "ask" ? 8 : 16));
+  const nextHeat = Math.min(100, args.heat + (act === "talk" || act === "ask" ? 12 : 22));
   const locked = resolveFantasy(args.input, args.fantasy);
   const moves = recentMoveIds(args.history);
   return {

@@ -32,8 +32,8 @@ export function phaseLabel(phase: NightPhase): string {
 
 export const PHASE_TALK: Record<NightPhase, string[][]> = {
   tease: [
-    ["yavaş yaklaş ya", "ellerin mini eteğimde gezsin", "kirli düşün söyle ne yapıcan"],
-    ["külotum duruyo daha", "kucağına oturayım sürtüneyim", "rujum bitsin sende"],
+    ["külotum yok amım açık", "parmaklarım kayıyo gel sok"],
+    ["azgınım utanç yok {name}", "hayvan gibi başla"],
   ],
   wet: [
     ["kendime dokunuyom şuan", "parmaklarım kayıyo offf", "artık oyalama fışkırt"],
