@@ -22,7 +22,7 @@ function calledByName(input: string, person: Character): boolean {
 function nameCloser(id: CharacterId): string {
   switch (id) {
     case "asya":
-      return "asya benim {name} söyle ne yapıcan";
+      return "asya benim {name} gel içime hayvan gibi";
     case "kim":
       return "cutie kim benim utansam da ıslanıyom";
     case "elif":

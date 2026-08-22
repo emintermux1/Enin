@@ -6,7 +6,7 @@ Görsel seks sahnesi, porno model veya seks sesi yok.
 
 ## Canlı
 
-https://summer-firefly-6344.zerodeploy.app
+https://rough-shadow-4386.zerodeploy.app
 
 Geçici yayın (yaklaşık 72 saat). Yerelde:
 

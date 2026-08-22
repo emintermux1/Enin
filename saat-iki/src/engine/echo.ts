@@ -81,7 +81,7 @@ const ACK: Array<{ pattern: RegExp; lines: string[][] }> = [
     ],
   },
   {
-    pattern: /herkes|duysun/,
+    pattern: /herkes|duysun/i,
     lines: [
       ["sesimi kesme", "herkes duysun istiyom", "daha sert"],
     ],

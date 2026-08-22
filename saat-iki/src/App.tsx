@@ -88,7 +88,7 @@ export function App() {
 
   function startWith(id: CharacterId, name = playerName) {
     const person = getCharacter(id);
-    const startHeat = id === "asya" ? 62 : id === "kim" ? 52 : 34;
+    const startHeat = id === "asya" ? 86 : id === "kim" ? 74 : 58;
     messageSerial = 0;
     const opening = person.opening.map((line) =>
       createMessage("them", personalize(line, name)),

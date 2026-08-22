@@ -38,12 +38,12 @@ export const ASYA_SCENES: Record<AsyaAct, string[][]> = {
     ["göğüslerimin arasından sürtmeni istiyorum", "sonra ağzıma ver"],
   ],
   talk: [
-    ["yastığıma sürtünmekten yapış yapış sırılsıklam oldum 🥺", "senin sikin olsa şuan içimde"],
-    ["kendime dokunuyom rn utanç yok 😋", "amım yanıyor hayvan gibi istiyorum"],
-    ["koridorda duvara yapıştırıp sikmeni istiyorum", "deli gibi zevkten aklım gitsin"],
-    ["sabah uyanır uyanmaz sikin sürtünsün istiyorum", "kahveden önce sen {name}"],
-    ["fışkırt beni istiyorum", "herkes duysun sesimi kesme"],
-    ["mini eteğimle kucağında ıslanmak istiyorum", "rujum dudağında kalsın"],
+    ["amım aktı yastık sırılsıklam sok artık", "hayvan gibi istiyorum {name}"],
+    ["kendime dokunuyom rn duramıyom 😋", "gel fışkırt herkes duysun"],
+    ["koridorda duvara yapıştır sik deli gibi", "orospu gibi inleyeyim"],
+    ["sabah uyanır uyanmaz içime gir istiyorum", "kahve yok önce sen {name}"],
+    ["fışkırt beni boşalayım yüzüne", "sesimi kesme"],
+    ["kucağına oturup sikine bineyim", "rujum bitsin öperken sok"],
   ],
 };
 
